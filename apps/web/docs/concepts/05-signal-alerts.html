@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DeepSearch 概念图 - 信号提示</title>
+  <link rel="stylesheet" href="./styles/tokens.css" />
+  <link rel="stylesheet" href="./styles/layout.css" />
+  <link rel="stylesheet" href="./styles/annotations.css" />
+  <style>
+    .signal-grid {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 320px;
+      gap: var(--space-4);
+    }
+
+    .alert-card {
+      border: 1px solid var(--line-soft);
+      border-left: 4px solid var(--line-mid);
+      border-radius: 10px;
+      background: #fff;
+      padding: 12px 14px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .alert-card.strong {
+      border-left-color: var(--danger-600);
+      background: linear-gradient(180deg, #fff, #fff7f8);
+    }
+
+    .alert-card.medium {
+      border-left-color: var(--warning-600);
+      background: linear-gradient(180deg, #fff, #fffaf1);
+    }
+
+    .alert-card.weak {
+      border-left-color: var(--brand-500);
+      background: linear-gradient(180deg, #fff, #f7fbff);
+    }
+
+    .alert-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .alert-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .alert-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .settings-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .settings-item {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .settings-item strong {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text-primary);
+    }
+
+    .mapping-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .mapping-list li {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    @media (max-width: 1320px) {
+      .signal-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="top-nav">
+      <div class="brand">DeepSearch <small>概念图评审版</small></div>
+      <div class="nav-links">
+        <a class="nav-link" href="./01-overview.html">总览</a>
+        <a class="nav-link" href="./02-market-watch.html">看盘</a>
+        <a class="nav-link" href="./03-diagnosis.html">诊断</a>
+        <a class="nav-link" href="./04-stock-picking.html">选股中心</a>
+        <a class="nav-link active" href="./05-signal-alerts.html">信号提示</a>
+      </div>
+    </nav>
+
+    <header class="page-header">
+      <div class="page-title-group">
+        <h1>信号提示中心</h1>
+        <p>目标：按强弱分级提示“建议动作 + 风险说明”，不做自动执行。</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost" data-demo-action="进入静默时段配置">提醒配置</button>
+        <button class="btn primary" data-demo-action="标记已读全部提示">全部标记已读</button>
+      </div>
+    </header>
+
+    <section class="status-bar">
+      <div class="status-chip">
+        <div class="k">未处理信号</div>
+        <div class="v mono text-danger">9</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">强信号</div>
+        <div class="v mono text-danger">3</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">中信号</div>
+        <div class="v mono text-warning">4</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">弱信号</div>
+        <div class="v mono">2</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">最近刷新</div>
+        <div class="v mono" data-now data-now-offset="-1"></div>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <main class="canvas stack">
+        <section id="s1" class="card annotation-target">
+          <span class="anno-id">1</span>
+          <div class="card-header">
+            <h2 class="card-title">信号分级总览</h2>
+            <span class="card-subtitle">首屏先明确处理优先级</span>
+          </div>
+          <div class="kpi-grid">
+            <article class="kpi-item">
+              <div class="label">强信号平均置信度</div>
+              <div class="value down mono">83%</div>
+              <div class="meta">建议优先人工确认</div>
+            </article>
+            <article class="kpi-item">
+              <div class="label">中信号平均置信度</div>
+              <div class="value mono">68%</div>
+              <div class="meta">适合放入重点观察</div>
+            </article>
+            <article class="kpi-item">
+              <div class="label">弱信号噪声比</div>
+              <div class="value neutral mono">31%</div>
+              <div class="meta">建议减少提醒频率</div>
+            </article>
+            <article class="kpi-item">
+              <div class="label">今日已确认</div>
+              <div class="value up mono">22</div>
+              <div class="meta">已忽略 6，仍待确认 9</div>
+            </article>
+          </div>
+        </section>
+
+        <section id="s6" class="card annotation-target">
+          <span class="anno-id">6</span>
+          <div class="card-header">
+            <h2 class="card-title">信号类型与数据源能力映射</h2>
+            <span class="card-subtitle">按能力决定“能否产生某类信号”</span>
+          </div>
+          <ul class="mapping-list">
+            <li>
+              <div class="row-between">
+                <strong>强信号（盘中增强）</strong>
+                <span class="tag danger">依赖 realtime_quote + capital_pulse</span>
+              </div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">AmazingData</span>
+                <span class="source-chip fallback">MiniQMT</span>
+                <span class="source-chip off">AkShare（不支持实时推流）</span>
+              </div>
+            </li>
+            <li>
+              <div class="row-between">
+                <strong>中信号（趋势延续）</strong>
+                <span class="tag warn">依赖 5m/15m kline + snapshot</span>
+              </div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">AmazingData</span>
+                <span class="source-chip">MiniQMT</span>
+                <span class="source-chip fallback">AkShare（盘后回补）</span>
+              </div>
+            </li>
+            <li>
+              <div class="row-between">
+                <strong>弱信号（观察提醒）</strong>
+                <span class="tag info">依赖 daily kline + stock_list</span>
+              </div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">AkShare</span>
+                <span class="source-chip">AmazingData</span>
+                <span class="source-chip">MiniQMT</span>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="signal-grid">
+          <article id="s2" class="card annotation-target">
+            <span class="anno-id">2</span>
+            <div class="card-header">
+              <h2 class="card-title">筛选与队列</h2>
+              <span class="card-subtitle">先缩小处理范围</span>
+            </div>
+            <div class="stack">
+              <div>
+                <div class="muted" style="margin-bottom:8px;">信号等级</div>
+                <div class="segmented" data-toggle-group>
+                  <button class="seg-btn active">全部</button>
+                  <button class="seg-btn">强</button>
+                  <button class="seg-btn">中</button>
+                  <button class="seg-btn">弱</button>
+                </div>
+              </div>
+              <div>
+                <div class="muted" style="margin-bottom:8px;">处理状态</div>
+                <div class="segmented" data-toggle-group>
+                  <button class="seg-btn active">未处理</button>
+                  <button class="seg-btn">已确认</button>
+                  <button class="seg-btn">已忽略</button>
+                </div>
+              </div>
+              <div>
+                <div class="muted" style="margin-bottom:8px;">来源模式</div>
+                <div class="segmented" data-toggle-group>
+                  <button class="seg-btn active">自动</button>
+                  <button class="seg-btn">主源</button>
+                  <button class="seg-btn">兜底</button>
+                </div>
+              </div>
+              <ul class="stat-list">
+                <li class="row-between">
+                  <span>高优先级队列</span>
+                  <strong class="mono text-danger">3</strong>
+                </li>
+                <li class="row-between">
+                  <span>建议 10 分钟内处理</span>
+                  <strong class="mono">5</strong>
+                </li>
+                <li class="row-between">
+                  <span>可后置处理</span>
+                  <strong class="mono">1</strong>
+                </li>
+              </ul>
+            </div>
+          </article>
+
+          <article id="s3" class="card annotation-target">
+            <span class="anno-id">3</span>
+            <div class="card-header">
+              <h2 class="card-title">分级告警卡片</h2>
+              <span class="card-subtitle">每条包含：触发原因 + 建议动作 + 风险说明</span>
+            </div>
+            <div class="stack">
+              <article class="alert-card strong">
+                <div class="alert-head">
+                  <div class="alert-title">示例科技（300XXX）信号增强</div>
+                  <span class="tag danger">强信号</span>
+                </div>
+                <div class="alert-meta">
+                  <span>触发时间：<span class="mono" data-now data-now-offset="-3"></span></span>
+                  <span>置信度：<strong class="mono">88%</strong></span>
+                  <span>来源：AmazingData（主源）</span>
+                </div>
+                <div>触发原因：资金脉冲连续 3 窗口提升，量价结构保持同向。</div>
+                <div>建议动作：加入重点观察并等待下一窗口确认。</div>
+                <div class="text-warning">风险说明：若板块共振减弱，信号可能快速失效。</div>
+              </article>
+
+              <article class="alert-card medium">
+                <div class="alert-head">
+                  <div class="alert-title">示例电气（002XXX）趋势延续</div>
+                  <span class="tag warn">中信号</span>
+                </div>
+                <div class="alert-meta">
+                  <span>触发时间：<span class="mono" data-now data-now-offset="-7"></span></span>
+                  <span>置信度：<strong class="mono">72%</strong></span>
+                  <span>来源：MiniQMT（主源备选）</span>
+                </div>
+                <div>触发原因：资金回流 + 波动受控，趋势斜率小幅走高。</div>
+                <div>建议动作：纳入普通观察，等待成交量再确认。</div>
+                <div class="text-warning">风险说明：若量能跟进不足，可能回落至震荡。</div>
+              </article>
+
+              <article class="alert-card weak">
+                <div class="alert-head">
+                  <div class="alert-title">示例能源（600XXX）异动提醒</div>
+                  <span class="tag info">弱信号</span>
+                </div>
+                <div class="alert-meta">
+                  <span>触发时间：<span class="mono" data-now data-now-offset="-11"></span></span>
+                  <span>置信度：<strong class="mono">57%</strong></span>
+                  <span>来源：AkShare（盘后兜底）</span>
+                </div>
+                <div>触发原因：短时资金抬升但趋势一致性不足。</div>
+                <div>建议动作：保留关注，不建议优先处理。</div>
+                <div class="muted">风险说明：噪声概率较高，避免过度解读。</div>
+              </article>
+            </div>
+          </article>
+
+          <article id="s4" class="card annotation-target">
+            <span class="anno-id">4</span>
+            <div class="card-header">
+              <h2 class="card-title">提醒策略</h2>
+              <span class="card-subtitle">控制提示节奏，避免信息轰炸</span>
+            </div>
+            <div class="settings-grid">
+              <div class="settings-item">
+                <strong>提醒频率</strong>
+                <span>强信号实时；中信号 3 分钟聚合；弱信号 10 分钟汇总。</span>
+              </div>
+              <div class="settings-item">
+                <strong>静默时段</strong>
+                <span>11:30 - 13:00 仅保留强信号提醒。</span>
+              </div>
+              <div class="settings-item">
+                <strong>提醒渠道</strong>
+                <span>站内提示 + Webhook（强信号专用）。</span>
+              </div>
+              <div class="settings-item">
+                <strong>自动降噪规则</strong>
+                <span>同标的 5 分钟内重复信号合并为 1 条。</span>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section id="s5" class="card annotation-target">
+          <span class="anno-id">5</span>
+          <div class="card-header">
+            <h2 class="card-title">处理记录</h2>
+            <span class="card-subtitle">支持复盘“为何确认/忽略”</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>标的</th>
+                  <th>信号等级</th>
+                  <th>处理结果</th>
+                  <th>处理备注</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono" data-now data-now-offset="-14"></td>
+                  <td>示例科技</td>
+                  <td><span class="tag danger">强</span></td>
+                  <td>已确认</td>
+                  <td>等待下一窗口验证</td>
+                </tr>
+                <tr>
+                  <td class="mono" data-now data-now-offset="-26"></td>
+                  <td>示例电气</td>
+                  <td><span class="tag warn">中</span></td>
+                  <td>已确认</td>
+                  <td>暂列重点观察</td>
+                </tr>
+                <tr>
+                  <td class="mono" data-now data-now-offset="-33"></td>
+                  <td>示例能源</td>
+                  <td><span class="tag info">弱</span></td>
+                  <td>已忽略</td>
+                  <td>噪声偏高，等待复现</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <aside class="annotation-panel">
+        <h2>标注说明</h2>
+        <p>页面编号：05（信号提示）</p>
+        <ol class="annotation-list">
+          <li class="annotation-item">
+            <a href="#s1"><span class="num">1</span>分级总览卡</a>
+            <div class="desc">确认哪些指标应放首屏，哪些可下沉。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#s2"><span class="num">2</span>筛选与队列</a>
+            <div class="desc">评估筛选项是否足够支撑日常使用。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#s3"><span class="num">3</span>告警卡片结构</a>
+            <div class="desc">确认“建议动作 + 风险说明”是否足够清晰。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#s4"><span class="num">4</span>提醒策略区</a>
+            <div class="desc">可指定你希望的默认提醒节奏。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#s5"><span class="num">5</span>处理记录表</a>
+            <div class="desc">确认复盘时需要保留的最小字段集。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#s6"><span class="num">6</span>能力映射卡</a>
+            <div class="desc">确认“强中弱信号”的能力依赖与数据源是否准确。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#s2"><span class="num">7</span>左栏宽度与信息量</a>
+            <div class="desc">判断是否改为可折叠抽屉形式。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#s5"><span class="num">8</span>闭环可追踪性</a>
+            <div class="desc">是否需要“负责人/状态流转”字段。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#s3"><span class="num">9</span>卡片分级颜色</a>
+            <div class="desc">可调整强中弱的视觉对比强度。</div>
+          </li>
+        </ol>
+        <div class="annotation-footer">反馈示例：05 + 3 + 风险说明应高亮到标题区 + P0</div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="demo-toast" data-demo-toast></div>
+  <script src="./assets/mock-data.js"></script>
+</body>
+</html>

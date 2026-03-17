@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DeepSearch 概念图 - 诊断</title>
+  <link rel="stylesheet" href="./styles/tokens.css" />
+  <link rel="stylesheet" href="./styles/layout.css" />
+  <link rel="stylesheet" href="./styles/annotations.css" />
+  <style>
+    .health-matrix td:first-child {
+      font-weight: 600;
+    }
+
+    .cache-chain {
+      display: grid;
+      gap: 10px;
+    }
+
+    .cache-step {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    .sparkline {
+      height: 92px;
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background:
+        linear-gradient(180deg, rgba(63, 120, 195, 0.18), rgba(63, 120, 195, 0.01)),
+        repeating-linear-gradient(
+          to right,
+          rgba(130, 154, 188, 0.12) 0,
+          rgba(130, 154, 188, 0.12) 1px,
+          transparent 1px,
+          transparent 36px
+        );
+      position: relative;
+      overflow: hidden;
+    }
+
+    .sparkline::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 20px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent 0, var(--brand-500) 12%, var(--warning-600) 48%, var(--brand-500) 82%, transparent 100%);
+    }
+
+    .playbook {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .playbook li {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    .playbook strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .mismatch-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .mismatch-list li {
+      border: 1px solid var(--line-soft);
+      border-left: 4px solid var(--line-mid);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    .mismatch-list li.warn {
+      border-left-color: var(--warning-600);
+      background: linear-gradient(180deg, #fff, #fffaf1);
+    }
+
+    .mismatch-list li.error {
+      border-left-color: var(--danger-600);
+      background: linear-gradient(180deg, #fff, #fff7f8);
+    }
+
+    .diag-m23-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.95fr) minmax(0, 2.25fr);
+      gap: var(--space-4);
+      align-items: start;
+    }
+
+    .health-matrix.compact th,
+    .health-matrix.compact td {
+      padding: 8px 10px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .screener-layout {
+      display: grid;
+      grid-template-columns: minmax(260px, 0.95fr) minmax(0, 1.25fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .screener-row {
+      cursor: pointer;
+      transition: background var(--transition-fast), box-shadow var(--transition-fast);
+    }
+
+    .screener-row:hover {
+      background: #eef5ff;
+    }
+
+    .screener-row.is-active {
+      background: #eaf3ff;
+      box-shadow: inset 3px 0 0 0 var(--brand-500);
+    }
+
+    .screener-row:focus-visible {
+      outline: 2px solid rgba(61, 135, 222, 0.45);
+      outline-offset: -2px;
+    }
+
+    .screener-preview {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .code-preview {
+      margin: 0;
+      border: 1px solid #1f2b40;
+      border-radius: 10px;
+      background: #0f1728;
+      color: #cfdaef;
+      font-size: 12px;
+      line-height: 1.42;
+      padding: 10px 12px;
+      overflow: auto;
+      white-space: pre;
+      max-height: 260px;
+    }
+
+    @media (max-width: 1320px) {
+      .diag-m23-layout,
+      .screener-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="top-nav">
+      <div class="brand">DeepSearch <small>概念图评审版</small></div>
+      <div class="nav-links">
+        <a class="nav-link" href="./01-overview.html">总览</a>
+        <a class="nav-link" href="./02-market-watch.html">看盘</a>
+        <a class="nav-link active" href="./03-diagnosis.html">诊断</a>
+        <a class="nav-link" href="./04-stock-picking.html">选股中心</a>
+        <a class="nav-link" href="./05-signal-alerts.html">信号提示</a>
+      </div>
+    </nav>
+
+    <header class="page-header">
+      <div class="page-title-group">
+        <h1>系统诊断台</h1>
+        <p>目标：快速定位“数据延迟、异常告警、缓存回源”根因并给出排查顺序。</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost" data-demo-action="导出诊断快照">导出快照</button>
+        <button class="btn primary" data-demo-action="触发全链路健康检查">健康检查</button>
+      </div>
+    </header>
+
+    <section class="status-bar">
+      <div class="status-chip">
+        <div class="k">当前诊断态</div>
+        <div class="v"><span class="tag warn">存在 1 条中风险告警</span></div>
+      </div>
+      <div class="status-chip">
+        <div class="k">主数据源可用率</div>
+        <div class="v mono">99.3%</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">最近回源次数</div>
+        <div class="v mono text-warning">18 次/30m</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">最近刷新</div>
+        <div class="v mono" data-now data-now-offset="-2"></div>
+      </div>
+      <div class="status-chip">
+        <div class="k">排查建议</div>
+        <div class="v">先看数据源，再看缓存层</div>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <main class="canvas stack">
+        <section id="d1" class="card annotation-target">
+          <span class="anno-id">1</span>
+          <div class="card-header">
+            <h2 class="card-title">诊断概览指标</h2>
+            <span class="card-subtitle">优先展示可驱动动作的指标</span>
+          </div>
+          <div class="kpi-grid">
+            <article class="kpi-item">
+              <div class="label">告警总数</div>
+              <div class="value down mono">5</div>
+              <div class="meta">P1:0 / P2:1 / P3:4</div>
+            </article>
+            <article class="kpi-item">
+              <div class="label">平均端到端延迟</div>
+              <div class="value mono">421ms</div>
+              <div class="meta">阈值 500ms，当前可接受</div>
+            </article>
+            <article class="kpi-item">
+              <div class="label">缓存命中率</div>
+              <div class="value up mono">87.4%</div>
+              <div class="meta">较上一时段 +1.8%</div>
+            </article>
+            <article class="kpi-item">
+              <div class="label">组件在线数</div>
+              <div class="value mono">24/25</div>
+              <div class="meta">异常组件：备用采集器</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="diag-m23-layout">
+          <article id="d2" class="card annotation-target">
+            <span class="anno-id">2</span>
+            <div class="card-header">
+              <h2 class="card-title">M2 数据源健康矩阵（窄栏）</h2>
+              <span class="card-subtitle">保留核心健康字段，给 M3 留出主工作区</span>
+            </div>
+            <div class="table-wrap">
+              <table class="health-matrix compact">
+                <thead>
+                  <tr>
+                    <th>数据源</th>
+                    <th>状态</th>
+                    <th>P95</th>
+                    <th>路由角色</th>
+                    <th>动作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>AmazingData</td>
+                    <td><span class="dot live"></span> 在线</td>
+                    <td class="mono">220ms</td>
+                    <td>主源（盘中）</td>
+                    <td><span class="tag success">保持主链路</span></td>
+                  </tr>
+                  <tr>
+                    <td>MiniQMT</td>
+                    <td><span class="dot live"></span> 在线</td>
+                    <td class="mono">340ms</td>
+                    <td>备份（实时）</td>
+                    <td><span class="tag info">继续观测</span></td>
+                  </tr>
+                  <tr>
+                    <td>AkShare</td>
+                    <td><span class="dot delay"></span> 延迟偏高</td>
+                    <td class="mono text-warning">1210ms</td>
+                    <td>日线/快照</td>
+                    <td><span class="tag warn">限流回退</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="footnote">窄栏仅保留“能否用 + 该怎么切换”的判断字段，详细排查放到下方卡片。</div>
+          </article>
+
+          <article id="d3" class="card annotation-target">
+            <span class="anno-id">3</span>
+            <div class="card-header">
+              <h2 class="card-title">M3 选股逻辑配置（代码映射）</h2>
+              <span class="card-subtitle">对齐 /api/strategy-center/strategies、composites、screener</span>
+            </div>
+            <div class="screener-layout">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>配置模板</th>
+                      <th>入口</th>
+                      <th>股票池</th>
+                      <th>策略数</th>
+                      <th>状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr class="screener-row is-active" data-screener-key="batch_balanced" tabindex="0" role="button" aria-label="切换到 批量均衡模板">
+                      <td><strong>批量均衡</strong></td>
+                      <td class="mono">/screener/batch</td>
+                      <td>hs300 + zz500</td>
+                      <td class="mono">3</td>
+                      <td><span class="tag success">可执行</span></td>
+                    </tr>
+                    <tr class="screener-row" data-screener-key="quick_intraday" tabindex="0" role="button" aria-label="切换到 快速盘中模板">
+                      <td>快速盘中</td>
+                      <td class="mono">/screener/quick</td>
+                      <td>custom</td>
+                      <td class="mono">1</td>
+                      <td><span class="tag info">快速筛选</span></td>
+                    </tr>
+                    <tr class="screener-row" data-screener-key="composite_growth" tabindex="0" role="button" aria-label="切换到 组合增强模板">
+                      <td>组合增强</td>
+                      <td class="mono">/screener</td>
+                      <td>all</td>
+                      <td class="mono">auto</td>
+                      <td><span class="tag warn">依赖组合配置</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <aside class="screener-preview">
+                <div class="row-between">
+                  <strong data-screener-title>模板：批量均衡（3 策略加权）</strong>
+                  <span class="tag info" data-screener-endpoint>POST /api/strategy-center/screener/batch</span>
+                </div>
+                <div class="state-note">字段来自现有代码：`strategy_ids`、`weights`、`stock_pool`、`limit`、`composite_id`、`params`。</div>
+                <div class="source-badges" data-screener-chips>
+                  <span class="source-chip primary">股票池：hs300 + zz500</span>
+                  <span class="source-chip">聚合：weighted_avg</span>
+                  <span class="source-chip">limit=50</span>
+                </div>
+                <pre class="code-preview mono" data-screener-payload>{
+  "strategy_ids": ["ma_crossover", "mean_reversion_rsi", "volume_price"],
+  "weights": {
+    "ma_crossover": 0.45,
+    "mean_reversion_rsi": 0.35,
+    "volume_price": 0.20
+  },
+  "stock_pool": ["hs300", "zz500"],
+  "signal_threshold": 0.42,
+  "limit": 50
+}</pre>
+                <ul class="key-value">
+                  <li>
+                    <span class="k">返回重点</span>
+                    <span class="v">`results[].score` / `direction` / `component_signals` / `rank`。</span>
+                  </li>
+                  <li>
+                    <span class="k">后端状态</span>
+                    <span class="v" data-screener-backend-note>weights 已生效；`signal_threshold` 与 `params` 在当前实现中仍是预留字段。</span>
+                  </li>
+                  <li>
+                    <span class="k">配置来源</span>
+                    <span class="v">`stock_pools.yaml` + `composites/*.yaml` + `/strategies/{id}/params`。</span>
+                  </li>
+                </ul>
+                <button class="btn" data-screener-run-btn data-demo-action="调用 /api/strategy-center/screener/batch（演示）">调用 /api/strategy-center/screener/batch（演示）</button>
+              </aside>
+            </div>
+          </article>
+        </section>
+
+        <section id="d7" class="card annotation-target">
+          <span class="anno-id">7</span>
+          <div class="card-header">
+            <h2 class="card-title">能力匹配诊断</h2>
+            <span class="card-subtitle">排查“模块要求”与“数据源能力”是否冲突</span>
+          </div>
+          <ul class="mismatch-list">
+            <li class="error">
+              <div class="row-between">
+                <strong>冲突：盘中主图被手动切到 AkShare</strong>
+                <span class="tag danger">能力不满足</span>
+              </div>
+              <div class="state-note" style="margin-top:6px;">原因：AkShare 不支持实时推流与 1m/5m 连续刷新，仅适合快照/日线。</div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip off">当前：AkShare</span>
+                <span class="source-chip primary">建议：AmazingData</span>
+                <span class="source-chip fallback">备选：MiniQMT</span>
+              </div>
+            </li>
+            <li class="warn">
+              <div class="row-between">
+                <strong>告警：strength 模块进入休市兜底</strong>
+                <span class="tag warn">可降级运行</span>
+              </div>
+              <div class="state-note" style="margin-top:6px;">命中规则：`phase_state=off_day`，自动从 AmazingData 切换到 AkShare 快照。</div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">主源：AmazingData</span>
+                <span class="source-chip fallback">兜底：AkShare（TTL 90s）</span>
+              </div>
+            </li>
+            <li>
+              <div class="row-between">
+                <strong>提示：选股日线链路可优先走 AkShare</strong>
+                <span class="tag info">能力满足</span>
+              </div>
+              <div class="state-note" style="margin-top:6px;">日线历史与股票列表能力覆盖较完整，且请求成本更低。</div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">自动：AkShare</span>
+                <span class="source-chip">备选：AmazingData</span>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="grid-2">
+          <article id="d4" class="card annotation-target">
+            <span class="anno-id">4</span>
+            <div class="card-header">
+              <h2 class="card-title">延迟趋势（30 分钟）</h2>
+              <span class="card-subtitle">用于判断是否瞬时抖动</span>
+            </div>
+            <div class="sparkline"></div>
+            <div class="row-between" style="margin-top:10px;">
+              <span class="muted">峰值</span>
+              <strong class="mono text-warning">1280ms</strong>
+            </div>
+            <div class="row-between" style="margin-top:8px;">
+              <span class="muted">当前</span>
+              <strong class="mono">421ms</strong>
+            </div>
+          </article>
+
+          <article id="d8" class="card annotation-target">
+            <span class="anno-id">8</span>
+            <div class="card-header">
+              <h2 class="card-title">缓存链路状态</h2>
+              <span class="card-subtitle">L1 → L2 → L3 命中与回源</span>
+            </div>
+            <div class="cache-chain">
+              <div class="cache-step">
+                <strong>L1 内存</strong>
+                <div class="bar-track"><div class="bar-fill" style="width:89%"></div></div>
+                <span class="mono">89%</span>
+              </div>
+              <div class="cache-step">
+                <strong>L2 Redis</strong>
+                <div class="bar-track"><div class="bar-fill" style="width:73%"></div></div>
+                <span class="mono">73%</span>
+              </div>
+              <div class="cache-step">
+                <strong>L3 PostgreSQL</strong>
+                <div class="bar-track"><div class="bar-fill" style="width:38%"></div></div>
+                <span class="mono">38%</span>
+              </div>
+            </div>
+            <div class="footnote">建议：当 L2 命中率低于 65% 时触发缓存策略检查。</div>
+          </article>
+        </section>
+
+        <section class="grid-2">
+          <article id="d5" class="card annotation-target">
+            <span class="anno-id">5</span>
+            <div class="card-header">
+              <h2 class="card-title">告警队列</h2>
+              <span class="card-subtitle">按严重度 + 影响范围排序</span>
+            </div>
+            <ul class="event-list">
+              <li class="event medium">
+                <div class="time mono" data-now data-now-offset="-6"></div>
+                <div class="title">AkShare 响应连续超时</div>
+                <div class="desc">影响：备份链路可用性，主链路暂未受影响。</div>
+              </li>
+              <li class="event low">
+                <div class="time mono" data-now data-now-offset="-11"></div>
+                <div class="title">板块资金流接口短抖动</div>
+                <div class="desc">影响：看盘页局部刷新延迟 2~3 秒。</div>
+              </li>
+              <li class="event low">
+                <div class="time mono" data-now data-now-offset="-21"></div>
+                <div class="title">日志写入队列积压</div>
+                <div class="desc">影响：不影响交易相关提示，仅影响排查时效。</div>
+              </li>
+            </ul>
+          </article>
+
+          <article id="d6" class="card annotation-target">
+            <span class="anno-id">6</span>
+            <div class="card-header">
+              <h2 class="card-title">排查建议清单</h2>
+              <span class="card-subtitle">把诊断结论转化成动作</span>
+            </div>
+            <ol class="playbook">
+              <li>
+                <strong>步骤 1：先做能力匹配检查</strong>
+                <span class="muted">确认当前模块所需能力（realtime_quote / capital_pulse / board_universe）与数据源支持是否一致。</span>
+              </li>
+              <li>
+                <strong>步骤 2：再检查主备路由与阶段条件</strong>
+                <span class="muted">核对 `market_data.modules.*` 的 primary/fallback 与当前 `phase_state` 是否匹配。</span>
+              </li>
+              <li>
+                <strong>步骤 3：最后再看缓存与阈值</strong>
+                <span class="muted">在能力与路由正确后，再调 L2 TTL、超时阈值与重试策略。</span>
+              </li>
+            </ol>
+          </article>
+        </section>
+      </main>
+
+      <aside class="annotation-panel">
+        <h2>标注说明</h2>
+        <p>页面编号：03（诊断）</p>
+        <ol class="annotation-list">
+          <li class="annotation-item">
+            <a href="#d1"><span class="num">1</span>诊断指标四件套</a>
+            <div class="desc">确认是否需要新增“重试次数”等指标。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#d2"><span class="num">2</span>健康矩阵字段</a>
+            <div class="desc">当前作为 M2 窄栏，确认字段是否足够支持快速判断。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#d3"><span class="num">3</span>选股逻辑配置主区</a>
+            <div class="desc">确认 `/strategies`、`/composites`、`/screener` 字段映射是否完整。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#d4"><span class="num">4</span>延迟趋势位</a>
+            <div class="desc">判断是否需要拆分主链路/备份链路。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#d5"><span class="num">5</span>告警列表排序规则</a>
+            <div class="desc">可指定你偏好的排序优先级。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#d6"><span class="num">6</span>建议清单表达</a>
+            <div class="desc">确认是否需要“负责人/截止时间”字段。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#d7"><span class="num">7</span>能力匹配诊断</a>
+            <div class="desc">确认“能力不满足/可降级/能力满足”分层是否清晰。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#d8"><span class="num">8</span>缓存链路可视化</a>
+            <div class="desc">评估是否需要把 L1/L2/L3 命中改为趋势小图。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#d6"><span class="num">9</span>动作可追踪性</a>
+            <div class="desc">是否需要加“已执行/待执行”状态。</div>
+          </li>
+        </ol>
+        <div class="annotation-footer">反馈示例：03 + 2 + 错误率换成近5分钟失败次数 + P0</div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="demo-toast" data-demo-toast></div>
+  <script src="./assets/mock-data.js"></script>
+</body>
+</html>

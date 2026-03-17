@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DeepSearch 概念图 - 选股中心</title>
+  <link rel="stylesheet" href="./styles/tokens.css" />
+  <link rel="stylesheet" href="./styles/layout.css" />
+  <link rel="stylesheet" href="./styles/annotations.css" />
+  <style>
+    .pick-grid {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 320px;
+      gap: var(--space-4);
+    }
+
+    .filter-block {
+      border: 1px solid var(--line-soft);
+      background: #fff;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .filter-block h4 {
+      margin: 0 0 10px;
+      font-size: 13px;
+    }
+
+    .check-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .check-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot-input {
+      width: 12px;
+      height: 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 3px;
+      background: #fff;
+      display: inline-block;
+    }
+
+    .dot-input.checked {
+      border-color: var(--brand-600);
+      background: linear-gradient(135deg, var(--brand-700), var(--brand-500));
+      box-shadow: inset 0 0 0 2px #fff;
+    }
+
+    .score {
+      display: inline-flex;
+      min-width: 38px;
+      justify-content: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      border: 1px solid var(--line-mid);
+      background: #f8fbff;
+    }
+
+    .reason-card {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .route-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .route-list li {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    @media (max-width: 1320px) {
+      .pick-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="top-nav">
+      <div class="brand">DeepSearch <small>概念图评审版</small></div>
+      <div class="nav-links">
+        <a class="nav-link" href="./01-overview.html">总览</a>
+        <a class="nav-link" href="./02-market-watch.html">看盘</a>
+        <a class="nav-link" href="./03-diagnosis.html">诊断</a>
+        <a class="nav-link active" href="./04-stock-picking.html">选股中心</a>
+        <a class="nav-link" href="./05-signal-alerts.html">信号提示</a>
+      </div>
+    </nav>
+
+    <header class="page-header">
+      <div class="page-title-group">
+        <h1>选股中心</h1>
+        <p>目标：将“条件筛选 → 候选池 → 入选理由”压缩到单页闭环。</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost" data-demo-action="保存筛选方案 B">保存方案</button>
+        <button class="btn primary" data-demo-action="运行选股筛选">运行筛选</button>
+      </div>
+    </header>
+
+    <section class="status-bar">
+      <div class="status-chip">
+        <div class="k">当前方案</div>
+        <div class="v"><span class="tag info">趋势增强-稳健版</span></div>
+      </div>
+      <div class="status-chip">
+        <div class="k">候选总数</div>
+        <div class="v mono">42</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">高置信候选</div>
+        <div class="v mono text-up">11</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">最近计算</div>
+        <div class="v mono" data-now data-now-offset="-3"></div>
+      </div>
+      <div class="status-chip">
+        <div class="k">风险偏好</div>
+        <div class="v"><span class="tag warn">中性偏进取</span></div>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <main class="canvas stack">
+        <section id="p1" class="card annotation-target">
+          <span class="anno-id">1</span>
+          <div class="card-header">
+            <h2 class="card-title">筛选方案与模式</h2>
+            <span class="card-subtitle">支持方案复用，避免重复配置</span>
+          </div>
+          <div class="grid-3">
+            <div>
+              <div class="muted" style="margin-bottom:8px;">方案模板</div>
+              <div class="segmented" data-toggle-group>
+                <button class="seg-btn active">方案 A</button>
+                <button class="seg-btn">方案 B</button>
+                <button class="seg-btn">方案 C</button>
+              </div>
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:8px;">选股模式</div>
+              <div class="segmented" data-toggle-group>
+                <button class="seg-btn active">盘中强化</button>
+                <button class="seg-btn">低波稳健</button>
+                <button class="seg-btn">热点跟踪</button>
+              </div>
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:8px;">排序策略</div>
+              <div class="segmented" data-toggle-group>
+                <button class="seg-btn active">综合评分</button>
+                <button class="seg-btn">资金驱动</button>
+                <button class="seg-btn">趋势强度</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="p6" class="card annotation-target">
+          <span class="anno-id">6</span>
+          <div class="card-header">
+            <h2 class="card-title">选股链路的数据源能力映射</h2>
+            <span class="card-subtitle">不同数据任务使用不同源，避免“一个源做所有事”</span>
+          </div>
+          <ul class="route-list">
+            <li>
+              <div class="row-between">
+                <strong>盘中候选刷新</strong>
+                <span class="tag info">能力：realtime_quote + 1m kline</span>
+              </div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">自动：AmazingData</span>
+                <span class="source-chip fallback">备选：MiniQMT</span>
+                <span class="source-chip off">AkShare（不支持盘中实时）</span>
+              </div>
+            </li>
+            <li>
+              <div class="row-between">
+                <strong>日线因子与历史回补</strong>
+                <span class="tag info">能力：stock_kline(daily)</span>
+              </div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">自动：AkShare</span>
+                <span class="source-chip">AmazingData</span>
+                <span class="source-chip">MiniQMT（90 天）</span>
+              </div>
+            </li>
+            <li>
+              <div class="row-between">
+                <strong>财务与股东因子</strong>
+                <span class="tag info">能力：income / balance / cashflow / holders</span>
+              </div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">自动：AmazingData</span>
+                <span class="source-chip fallback">备选：MiniQMT（部分）</span>
+                <span class="source-chip off">AkShare（字段一致性不足）</span>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="pick-grid">
+          <article id="p2" class="card annotation-target">
+            <span class="anno-id">2</span>
+            <div class="card-header">
+              <h2 class="card-title">筛选条件</h2>
+              <span class="card-subtitle">左栏固定，减少来回滚动</span>
+            </div>
+            <div class="stack">
+              <div class="filter-block">
+                <h4>市场范围</h4>
+                <ul class="check-list">
+                  <li><span class="dot-input checked"></span> 主板</li>
+                  <li><span class="dot-input checked"></span> 创业板</li>
+                  <li><span class="dot-input"></span> 科创板</li>
+                </ul>
+              </div>
+              <div class="filter-block">
+                <h4>核心因子</h4>
+                <ul class="check-list">
+                  <li><span class="dot-input checked"></span> 量价趋势一致</li>
+                  <li><span class="dot-input checked"></span> 资金净流入增强</li>
+                  <li><span class="dot-input checked"></span> 波动率低于阈值</li>
+                  <li><span class="dot-input"></span> 筹码集中度提升</li>
+                </ul>
+              </div>
+              <div class="filter-block">
+                <h4>风险门槛</h4>
+                <ul class="check-list">
+                  <li><span class="dot-input checked"></span> 回撤风险 &lt; 4%</li>
+                  <li><span class="dot-input checked"></span> 近 5 日无异常停牌</li>
+                  <li><span class="dot-input checked"></span> 流动性评级 B 以上</li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article id="p3" class="card annotation-target">
+            <span class="anno-id">3</span>
+            <div class="card-header">
+              <h2 class="card-title">候选池列表</h2>
+              <span class="card-subtitle">中区作为主工作区</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>代码</th>
+                    <th>名称</th>
+                    <th>综合评分</th>
+                    <th>趋势</th>
+                    <th>波动率</th>
+                    <th>流动性</th>
+                    <th>数据源</th>
+                    <th>信号数</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="mono">300XXX</td>
+                    <td>示例科技</td>
+                    <td><span class="score">86</span></td>
+                    <td class="text-up">上行</td>
+                    <td class="mono">2.7%</td>
+                    <td>A</td>
+                    <td>AmazingData</td>
+                    <td class="mono">4</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">002XXX</td>
+                    <td>示例电气</td>
+                    <td><span class="score">82</span></td>
+                    <td class="text-up">上行</td>
+                    <td class="mono">3.1%</td>
+                    <td>A-</td>
+                    <td>MiniQMT</td>
+                    <td class="mono">3</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">600XXX</td>
+                    <td>示例能源</td>
+                    <td><span class="score">77</span></td>
+                    <td class="muted">震荡</td>
+                    <td class="mono">2.2%</td>
+                    <td>B+</td>
+                    <td>AkShare</td>
+                    <td class="mono">2</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">688XXX</td>
+                    <td>示例设备</td>
+                    <td><span class="score">71</span></td>
+                    <td class="text-warning">分歧</td>
+                    <td class="mono">4.0%</td>
+                    <td>B</td>
+                    <td>AmazingData</td>
+                    <td class="mono">1</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article id="p4" class="card annotation-target">
+            <span class="anno-id">4</span>
+            <div class="card-header">
+              <h2 class="card-title">入选理由与风险</h2>
+              <span class="card-subtitle">右栏用于快速决策参考</span>
+            </div>
+            <div class="stack">
+              <div class="reason-card">
+                <strong>示例科技（300XXX）</strong>
+                <div>入选理由：趋势斜率提升 + 资金脉冲连续 3 个窗口增强。</div>
+                <div>风险提示：盘中波动在 11:00 后可能放大，建议控制观察仓位。</div>
+                <div>数据链路：实时来自 AmazingData，日线回补来自 AkShare。</div>
+                <div class="pill-list">
+                  <span class="pill">趋势强</span>
+                  <span class="pill">量能配合</span>
+                  <span class="pill">信号质量 A</span>
+                </div>
+              </div>
+              <div class="reason-card">
+                <strong>建议动作</strong>
+                <div>1. 加入重点观察清单</div>
+                <div>2. 关注下一根 5 分钟确认信号</div>
+                <div>3. 若出现背离则降级为普通观察</div>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        <section id="p5" class="card annotation-target">
+          <span class="anno-id">5</span>
+          <div class="card-header">
+            <h2 class="card-title">方案对比与复用</h2>
+            <span class="card-subtitle">帮助你快速迭代筛选参数</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>方案</th>
+                  <th>候选数量</th>
+                  <th>高置信比例</th>
+                  <th>风险等级</th>
+                  <th>更新人</th>
+                  <th>更新时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>方案 A（稳健）</td>
+                  <td class="mono">28</td>
+                  <td class="mono">39%</td>
+                  <td><span class="tag success">低</span></td>
+                  <td>研究组</td>
+                  <td class="mono" data-now data-now-offset="-37"></td>
+                </tr>
+                <tr>
+                  <td>方案 B（均衡）</td>
+                  <td class="mono">42</td>
+                  <td class="mono">26%</td>
+                  <td><span class="tag warn">中</span></td>
+                  <td>研究组</td>
+                  <td class="mono" data-now data-now-offset="-21"></td>
+                </tr>
+                <tr>
+                  <td>方案 C（进攻）</td>
+                  <td class="mono">56</td>
+                  <td class="mono">19%</td>
+                  <td><span class="tag danger">中高</span></td>
+                  <td>策略组</td>
+                  <td class="mono" data-now data-now-offset="-8"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <aside class="annotation-panel">
+        <h2>标注说明</h2>
+        <p>页面编号：04（选股中心）</p>
+        <ol class="annotation-list">
+          <li class="annotation-item">
+            <a href="#p1"><span class="num">1</span>方案入口位置</a>
+            <div class="desc">确认方案切换放顶部是否符合操作习惯。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#p2"><span class="num">2</span>筛选栏字段</a>
+            <div class="desc">指出你希望保留/删除/新增的条件项。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#p3"><span class="num">3</span>候选池主表</a>
+            <div class="desc">评估列顺序是否贴合人工判断流程。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#p4"><span class="num">4</span>理由卡结构</a>
+            <div class="desc">确认风险提示是否需要更显著的视觉层级。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#p5"><span class="num">5</span>方案对比表</a>
+            <div class="desc">判断是否需要“历史命中率”字段。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#p6"><span class="num">6</span>能力映射卡</a>
+            <div class="desc">确认每类因子对应的数据源组合是否合理。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#p4"><span class="num">7</span>右栏深度</a>
+            <div class="desc">可改为抽屉或浮层，减少常驻占位。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#p3"><span class="num">8</span>选股到信号链路</a>
+            <div class="desc">确认是否需要直接跳转到信号页过滤视图。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#p2"><span class="num">9</span>左栏宽度</a>
+            <div class="desc">可直接给出希望的像素宽度区间。</div>
+          </li>
+        </ol>
+        <div class="annotation-footer">反馈示例：04 + 2 + 新增“近3日换手率”筛选 + P0</div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="demo-toast" data-demo-toast></div>
+  <script src="./assets/mock-data.js"></script>
+</body>
+</html>

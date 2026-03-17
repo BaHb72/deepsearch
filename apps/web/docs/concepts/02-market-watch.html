@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DeepSearch 概念图 - 看盘</title>
+  <link rel="stylesheet" href="./styles/tokens.css" />
+  <link rel="stylesheet" href="./styles/layout.css" />
+  <link rel="stylesheet" href="./styles/annotations.css" />
+  <style>
+    .rank-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .rank-item {
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: #fff;
+    }
+
+    .rank-num {
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: #eff5fd;
+      color: var(--brand-700);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .market-note {
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .option-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+    }
+
+    .option-list li {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    .market-m23-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 1.05fr) minmax(0, 2.55fr);
+      gap: var(--space-4);
+      align-items: start;
+    }
+
+    .summary-merge {
+      display: grid;
+      gap: 12px;
+    }
+
+    .summary-block {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+      display: grid;
+      gap: 10px;
+    }
+
+    .summary-block h3 {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .index-compare-shell {
+      border: 1px solid #27334d;
+      background: linear-gradient(180deg, #101a30, #0a1224);
+      border-radius: 12px;
+      padding: 10px 12px;
+      color: #d6e0f6;
+    }
+
+    .index-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: #93a7ce;
+    }
+
+    .index-switches {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .index-toggle {
+      display: inline-grid;
+      grid-template-columns: 8px auto;
+      align-items: center;
+      column-gap: 6px;
+      row-gap: 2px;
+      border: 1px solid #2d3d61;
+      border-radius: 10px;
+      padding: 4px 8px;
+      min-width: 116px;
+      background: rgba(22, 36, 64, 0.72);
+      color: #d6e0f6;
+      cursor: pointer;
+      text-align: left;
+      transition: all var(--transition-fast);
+    }
+
+    .index-toggle .name {
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .index-toggle small {
+      grid-column: 2 / 3;
+      font-size: 11px;
+      color: #8ea2c8;
+      line-height: 1.2;
+    }
+
+    .index-toggle.is-active,
+    .index-toggle[aria-pressed="true"] {
+      border-color: rgba(76, 182, 255, 0.58);
+      background: rgba(39, 70, 118, 0.52);
+      box-shadow: 0 0 0 1px rgba(76, 182, 255, 0.2) inset;
+    }
+
+    .index-toggle[aria-pressed="false"] {
+      opacity: 0.62;
+    }
+
+    .index-toggle:focus-visible {
+      outline: 2px solid rgba(76, 182, 255, 0.62);
+      outline-offset: 1px;
+    }
+
+    .legend-dark {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid #2d3d61;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: rgba(22, 36, 64, 0.78);
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .legend-dot.sse {
+      background: #f5a623;
+    }
+
+    .legend-dot.hsi {
+      background: #4cb6ff;
+    }
+
+    .legend-dot.dxy {
+      background: #00c48c;
+    }
+
+    .index-svg-wrap {
+      border: 1px solid #243553;
+      border-radius: 10px;
+      background: #0a1224;
+      overflow: hidden;
+    }
+
+    .index-chart-svg {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .index-source-note {
+      margin-bottom: 10px;
+      font-size: 12px;
+      color: #8ea2c8;
+    }
+
+    .chart-meta-dark {
+      margin-top: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: #9fb3d8;
+    }
+
+    .chart-meta-dark strong {
+      color: #dce7ff;
+    }
+
+    .chart-meta-dark [data-index-meta-item].is-off {
+      opacity: 0.48;
+      text-decoration: line-through;
+    }
+
+    .board-stock-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .concept-panel {
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      background: #fff;
+      padding: 10px 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .concept-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .concept-head strong {
+      font-size: 14px;
+    }
+
+    .concept-note {
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .mini-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .mini-table th {
+      text-align: left;
+      color: var(--text-muted);
+      font-weight: 500;
+      border-bottom: 1px solid var(--line-soft);
+      padding: 7px 4px;
+    }
+
+    .mini-table td {
+      border-bottom: 1px dashed var(--line-soft);
+      padding: 7px 4px;
+      white-space: nowrap;
+    }
+
+    .mini-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .link-chip {
+      border: 1px solid var(--line-mid);
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: #f8fbff;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    @media (max-width: 1320px) {
+      .market-m23-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .board-stock-layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .index-toolbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="top-nav">
+      <div class="brand">DeepSearch <small>概念图评审版</small></div>
+      <div class="nav-links">
+        <a class="nav-link" href="./01-overview.html">总览</a>
+        <a class="nav-link active" href="./02-market-watch.html">看盘</a>
+        <a class="nav-link" href="./03-diagnosis.html">诊断</a>
+        <a class="nav-link" href="./04-stock-picking.html">选股中心</a>
+        <a class="nav-link" href="./05-signal-alerts.html">信号提示</a>
+      </div>
+    </nav>
+
+    <header class="page-header">
+      <div class="page-title-group">
+        <h1>看盘工作台</h1>
+        <p>目标：在同一视图内完成“盘面确认 + 板块强弱判断 + 候选观察”。</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn ghost" data-demo-action="切换自动刷新">自动刷新：开</button>
+        <button class="btn primary" data-demo-action="立即拉取实时行情">立即刷新行情</button>
+      </div>
+    </header>
+
+    <section class="status-bar">
+      <div class="status-chip">
+        <div class="k">交易阶段</div>
+        <div class="v"><span class="tag success">连续竞价</span></div>
+      </div>
+      <div class="status-chip">
+        <div class="k">主指数温度</div>
+        <div class="v text-up">偏强（+0.86%）</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">板块轮动速度</div>
+        <div class="v text-warning">中高</div>
+      </div>
+      <div class="status-chip">
+        <div class="k">最近刷新</div>
+        <div class="v mono" data-now data-now-offset="-1"></div>
+      </div>
+      <div class="status-chip">
+        <div class="k">数据源状态</div>
+        <div class="v"><span class="dot live"></span> 主链路稳定</div>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <main class="canvas stack">
+        <section id="m1" class="card annotation-target">
+          <span class="anno-id">1</span>
+          <div class="card-header">
+            <h2 class="card-title">看盘上下文控制</h2>
+            <span class="card-subtitle">建议固定在首屏，减少参数寻找成本</span>
+          </div>
+          <div class="grid-3">
+            <div>
+              <div class="muted" style="margin-bottom:8px;">市场范围</div>
+              <div class="segmented" data-toggle-group>
+                <button class="seg-btn active">全市场</button>
+                <button class="seg-btn">主板</button>
+                <button class="seg-btn">创业板</button>
+              </div>
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:8px;">观察窗口</div>
+              <div class="segmented" data-toggle-group>
+                <button class="seg-btn active">5 分钟</button>
+                <button class="seg-btn">15 分钟</button>
+                <button class="seg-btn">30 分钟</button>
+              </div>
+            </div>
+            <div>
+              <div class="muted" style="margin-bottom:8px;">板块类型</div>
+              <div class="segmented" data-toggle-group>
+                <button class="seg-btn active">概念板块</button>
+                <button class="seg-btn">行业板块</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="m7" class="card annotation-target">
+          <span class="anno-id">7</span>
+          <div class="card-header">
+            <h2 class="card-title">模块级数据源能力约束</h2>
+            <span class="card-subtitle">只展示“该模块真能用”的数据源选项</span>
+          </div>
+          <ul class="option-list">
+            <li>
+              <div class="row-between">
+                <strong>主图分时 / 盘中走势</strong>
+                <span class="tag info">能力：realtime_quote + 1m kline</span>
+              </div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">自动：AmazingData</span>
+                <span class="source-chip fallback">备选：MiniQMT</span>
+                <span class="source-chip off">AkShare（仅快照/日线）</span>
+              </div>
+              <div class="state-note" style="margin-top:6px;">交易时段禁止切到 AkShare，避免把盘中视图降级成静态快照。</div>
+            </li>
+            <li>
+              <div class="row-between">
+                <strong>资金脉冲（strength）</strong>
+                <span class="tag info">能力：capital_pulse</span>
+              </div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">自动：AmazingData</span>
+                <span class="source-chip fallback">休市兜底：AkShare</span>
+                <span class="source-chip off">MiniQMT（当前未接入该模块）</span>
+              </div>
+            </li>
+            <li>
+              <div class="row-between">
+                <strong>板块概览（board_overview）</strong>
+                <span class="tag info">能力：board_universe + pulse</span>
+              </div>
+              <div class="source-badges" style="margin-top:8px;">
+                <span class="source-chip primary">自动：AmazingData</span>
+                <span class="source-chip fallback">休市兜底：AkShare</span>
+                <span class="source-chip off">MiniQMT（无板块回补链路）</span>
+              </div>
+            </li>
+          </ul>
+        </section>
+
+        <section class="market-m23-layout">
+          <article id="m2" class="card annotation-target">
+            <span class="anno-id">2</span>
+            <div class="card-header">
+              <h2 class="card-title">盘面摘要 + 热点榜单</h2>
+              <span class="card-subtitle">合并 m2/m4，左栏聚焦判断信号，释放 m3 主图空间</span>
+            </div>
+            <div class="summary-merge">
+              <div class="summary-block">
+                <h3>盘面摘要</h3>
+                <ul class="stat-list">
+                  <li class="row-between">
+                    <span>上涨家数 / 下跌家数</span>
+                    <strong class="mono text-up">3198 / 1610</strong>
+                  </li>
+                  <li class="row-between">
+                    <span>涨停 / 跌停</span>
+                    <strong class="mono">53 / 6</strong>
+                  </li>
+                  <li class="row-between">
+                    <span>北向净流入</span>
+                    <strong class="mono text-up">+28.4 亿</strong>
+                  </li>
+                  <li class="row-between">
+                    <span>情绪温度</span>
+                    <span class="tag warn">偏热</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div id="m4" class="summary-block annotation-target">
+                <div class="row-between">
+                  <h3>热点榜单</h3>
+                  <span class="tag info">TOP 4</span>
+                </div>
+                <ul class="rank-list">
+                  <li class="rank-item">
+                    <span class="rank-num">1</span>
+                    <div>算力租赁</div>
+                    <strong class="text-up mono">+3.8%</strong>
+                  </li>
+                  <li class="rank-item">
+                    <span class="rank-num">2</span>
+                    <div>液冷服务器</div>
+                    <strong class="text-up mono">+2.6%</strong>
+                  </li>
+                  <li class="rank-item">
+                    <span class="rank-num">3</span>
+                    <div>特高压设备</div>
+                    <strong class="text-up mono">+2.2%</strong>
+                  </li>
+                  <li class="rank-item">
+                    <span class="rank-num">4</span>
+                    <div>贵金属</div>
+                    <strong class="text-down mono">-0.7%</strong>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </article>
+
+          <article id="m3" class="card annotation-target">
+            <span class="anno-id">3</span>
+            <div class="card-header">
+              <h2 class="card-title">指数叠加对比图（上证/恒生/美指）</h2>
+              <span class="card-subtitle">用于观察跨市场资金流向与风险偏好切换</span>
+            </div>
+            <div class="index-compare-shell">
+              <div class="index-toolbar">
+                <div class="index-switches" role="group" aria-label="指数叠加开关">
+                  <button type="button" class="index-toggle is-active" data-index-toggle data-index-key="sse" aria-pressed="true">
+                    <span class="legend-dot sse"></span>
+                    <span class="name">上证指数</span>
+                    <small>AmazingData 实时 1m</small>
+                  </button>
+                  <button type="button" class="index-toggle is-active" data-index-toggle data-index-key="hsi" aria-pressed="true">
+                    <span class="legend-dot hsi"></span>
+                    <span class="name">恒生指数</span>
+                    <small>AmazingData 实时 1m</small>
+                  </button>
+                  <button type="button" class="index-toggle is-active" data-index-toggle data-index-key="dxy" aria-pressed="true">
+                    <span class="legend-dot dxy"></span>
+                    <span class="name">美元指数</span>
+                    <small>AkShare 兜底 5m</small>
+                  </button>
+                </div>
+                <div>区间：09:30 - 15:00（归一化对比）</div>
+              </div>
+              <div class="index-source-note" data-index-source-note>当前叠加：上证/恒生来自 AmazingData 实时，美指来自 AkShare 5m 兜底快照。</div>
+              <div class="index-svg-wrap">
+                <svg class="index-chart-svg" viewBox="0 0 860 290" xmlns="http://www.w3.org/2000/svg" aria-label="指数叠加对比图">
+                  <defs>
+                    <pattern id="gridX" width="86" height="1" patternUnits="userSpaceOnUse">
+                      <line x1="0" y1="0" x2="86" y2="0" stroke="#21314f" stroke-width="1"/>
+                    </pattern>
+                    <pattern id="gridY" width="1" height="48" patternUnits="userSpaceOnUse">
+                      <line x1="0" y1="0" x2="0" y2="48" stroke="#21314f" stroke-width="1"/>
+                    </pattern>
+                    <linearGradient id="sseFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="#f5a623" stop-opacity="0.35"/>
+                      <stop offset="100%" stop-color="#f5a623" stop-opacity="0.02"/>
+                    </linearGradient>
+                  </defs>
+                  <rect x="54" y="18" width="764" height="216" fill="url(#gridX)"/>
+                  <rect x="54" y="18" width="764" height="216" fill="url(#gridY)"/>
+                  <line x1="54" y1="126" x2="818" y2="126" stroke="#2a3a5b" stroke-width="1.2" stroke-dasharray="5 4"/>
+
+                  <text x="16" y="34" fill="#7f95bc" font-size="11">+1.5%</text>
+                  <text x="18" y="82" fill="#7f95bc" font-size="11">+0.8%</text>
+                  <text x="22" y="130" fill="#7f95bc" font-size="11">0.0%</text>
+                  <text x="18" y="178" fill="#7f95bc" font-size="11">-0.8%</text>
+                  <text x="16" y="226" fill="#7f95bc" font-size="11">-1.5%</text>
+
+                  <text x="54" y="254" fill="#7f95bc" font-size="11">09:30</text>
+                  <text x="245" y="254" fill="#7f95bc" font-size="11">10:30</text>
+                  <text x="436" y="254" fill="#7f95bc" font-size="11">11:30</text>
+                  <text x="642" y="254" fill="#7f95bc" font-size="11">14:00</text>
+                  <text x="794" y="254" fill="#7f95bc" font-size="11">15:00</text>
+
+                  <g data-index-lines></g>
+                </svg>
+              </div>
+              <div class="chart-meta-dark" data-index-meta>
+                <span data-index-meta-item="sse">上证：<strong class="mono" data-index-meta-value="sse">--</strong></span>
+                <span data-index-meta-item="hsi">恒生：<strong class="mono" data-index-meta-value="hsi">--</strong></span>
+                <span data-index-meta-item="dxy">美指：<strong class="mono" data-index-meta-value="dxy">--</strong></span>
+                <span data-index-meta-item="spread">A/H 背离：<strong class="mono" data-index-meta-value="spread">--</strong></span>
+                <span>解读：<strong data-index-insight>--</strong></span>
+              </div>
+            </div>
+            <div class="footnote">支持叠加上证/恒生/美指，按数据源能力区分实时与兜底快照，重点观察背离与共振。</div>
+          </article>
+
+        </section>
+
+        <section id="m5" class="card annotation-target">
+          <span class="anno-id">5</span>
+          <div class="card-header">
+            <h2 class="card-title">板块概览 + 对应概念股联动</h2>
+            <span class="card-subtitle">左侧看板块强弱，右侧直观看到该板块对应概念股</span>
+          </div>
+          <div class="board-stock-layout">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>板块</th>
+                    <th>涨跌幅</th>
+                    <th>资金流速</th>
+                    <th>异动次数</th>
+                    <th>候选数</th>
+                    <th>当前来源</th>
+                    <th>模式</th>
+                    <th>代表概念股</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    class="board-row is-active"
+                    data-board-key="ai_app"
+                    tabindex="0"
+                    role="button"
+                    aria-label="切换到 AI 应用概念股"
+                  >
+                    <td><strong>AI 应用</strong></td>
+                    <td class="text-up mono">+3.12%</td>
+                    <td class="text-up mono">+5.7 亿/5m</td>
+                    <td class="mono">9</td>
+                    <td class="mono">12</td>
+                    <td>AmazingData</td>
+                    <td><span class="tag success">实时</span></td>
+                    <td>寒武纪、景嘉微、中科曙光</td>
+                  </tr>
+                  <tr
+                    class="board-row"
+                    data-board-key="power_grid"
+                    tabindex="0"
+                    role="button"
+                    aria-label="切换到 电网设备概念股"
+                  >
+                    <td>电网设备</td>
+                    <td class="text-up mono">+2.43%</td>
+                    <td class="text-up mono">+3.1 亿/5m</td>
+                    <td class="mono">7</td>
+                    <td class="mono">8</td>
+                    <td>AmazingData</td>
+                    <td><span class="tag success">实时</span></td>
+                    <td>许继电气、平高电气、国电南瑞</td>
+                  </tr>
+                  <tr
+                    class="board-row"
+                    data-board-key="brokerage"
+                    tabindex="0"
+                    role="button"
+                    aria-label="切换到 券商概念股"
+                  >
+                    <td>券商</td>
+                    <td class="text-down mono">-0.34%</td>
+                    <td class="text-down mono">-1.4 亿/5m</td>
+                    <td class="mono">2</td>
+                    <td class="mono">3</td>
+                    <td>AkShare</td>
+                    <td><span class="tag warn">兜底快照</span></td>
+                    <td>中信证券、华泰证券、东方财富</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <aside class="concept-panel">
+              <div class="concept-head">
+                <strong data-board-title>当前选中板块：AI 应用</strong>
+                <span class="tag info">概念股快览</span>
+              </div>
+              <div class="concept-note">用于直观看该板块对应个股强弱与资金方向，可直接跳转到选股页继续筛选。</div>
+              <div class="source-badges">
+                <span class="source-chip primary" data-board-source>来源：AmazingData（实时）</span>
+                <span class="source-chip">更新时间：<span class="mono" data-board-updated data-now data-now-offset="-1"></span></span>
+              </div>
+              <table class="mini-table">
+                <thead>
+                  <tr>
+                    <th>代码</th>
+                    <th>名称</th>
+                    <th>涨跌</th>
+                    <th>净流入</th>
+                  </tr>
+                </thead>
+                <tbody data-board-stocks>
+                  <tr>
+                    <td class="mono">688256</td>
+                    <td>寒武纪</td>
+                    <td class="text-up mono">+6.31%</td>
+                    <td class="text-up mono">+8.4亿</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">300474</td>
+                    <td>景嘉微</td>
+                    <td class="text-up mono">+4.72%</td>
+                    <td class="text-up mono">+3.2亿</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">603019</td>
+                    <td>中科曙光</td>
+                    <td class="text-up mono">+3.95%</td>
+                    <td class="text-up mono">+2.7亿</td>
+                  </tr>
+                  <tr>
+                    <td class="mono">600588</td>
+                    <td>用友网络</td>
+                    <td class="text-down mono">-0.84%</td>
+                    <td class="text-down mono">-0.6亿</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="source-badges" data-board-tags>
+                <span class="link-chip">服务器链</span>
+                <span class="link-chip">算力租赁</span>
+                <span class="link-chip">国产算力</span>
+                <span class="link-chip">AIGC 应用</span>
+              </div>
+              <button class="btn" data-board-detail-btn data-demo-action="进入 AI 应用概念股详情">进入 AI 应用概念股详情</button>
+            </aside>
+          </div>
+        </section>
+
+        <section id="m6" class="card annotation-target">
+          <span class="anno-id">6</span>
+          <div class="card-header">
+            <h2 class="card-title">当前盘面建议</h2>
+            <span class="card-subtitle">将判断结果转化为“可执行观察动作”</span>
+          </div>
+          <div class="market-note">
+            <div class="hero-note">建议优先跟踪“算力租赁、电网设备”两个方向，当前资金一致性较高。</div>
+            <div class="hero-note">对于“高换手 + 高波动”标的，建议在信号页查看风险提示后再决定是否跟踪。</div>
+            <div class="hero-note">若板块轮动速度继续升高，建议下调候选评分阈值，避免错过中继机会。</div>
+          </div>
+        </section>
+      </main>
+
+      <aside class="annotation-panel">
+        <h2>标注说明</h2>
+        <p>页面编号：02（看盘）</p>
+        <ol class="annotation-list">
+          <li class="annotation-item">
+            <a href="#m1"><span class="num">1</span>参数区位置</a>
+            <div class="desc">确认参数是否应固定在首屏顶部。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#m2"><span class="num">2</span>盘面摘要字段</a>
+            <div class="desc">评估是否还需加入“主力净流入”等字段。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#m3"><span class="num">3</span>指数叠加对比图</a>
+            <div class="desc">确认上证/恒生/美指叠加是否满足资金流向判断需求。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#m4"><span class="num">4</span>榜单展示方式</a>
+            <div class="desc">可改成双榜、热度条、或折叠列表。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#m5"><span class="num">5</span>板块与概念股联动</a>
+            <div class="desc">确认“板块 -> 概念股快览”是否足够直观。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#m6"><span class="num">6</span>建议文案区</a>
+            <div class="desc">判断是否需要更结构化的建议模板。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#m7"><span class="num">7</span>能力约束矩阵</a>
+            <div class="desc">确认每个模块可选源和禁用源是否准确。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#m5"><span class="num">8</span>候选入口链路</a>
+            <div class="desc">验证从看盘到选股的跳转是否顺手。</div>
+          </li>
+          <li class="annotation-item">
+            <a href="#m3"><span class="num">9</span>主次信息层级</a>
+            <div class="desc">确保用户不会被次要信息分散注意力。</div>
+          </li>
+        </ol>
+        <div class="annotation-footer">反馈示例：02 + 3 + 主图区高度再加 80px + P1</div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="demo-toast" data-demo-toast></div>
+  <script src="./assets/mock-data.js"></script>
+</body>
+</html>
