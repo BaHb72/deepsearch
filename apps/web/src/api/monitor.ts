@@ -175,6 +175,8 @@ export interface MonitorEventsSummary {
 
 export interface EventSystemOverviewResponse {
   timestamp: string
+  status?: 'ok' | 'no_data' | string
+  message?: string
   eventMetrics: {
     produceRate: number
     consumeRate: number
@@ -210,6 +212,11 @@ export interface EventSystemOverviewResponse {
     message: string
   }>
   alerts: MonitorAlertInfo[]
+  diagnostics?: {
+    historyRecordCount?: number
+    hasLatestRecord?: boolean
+    [key: string]: unknown
+  }
 }
 export const monitorAPI = {
   getDashboard: (period: string = '1h') =>

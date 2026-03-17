@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useState} from 'react'
 import {
+    Alert,
     Button,
     type GlobalToken,
     message,
@@ -369,6 +370,10 @@ const EventSystem = () => {
     const {token} = theme.useToken()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+    const [overviewError, setOverviewError] = useState<string>('')
+    const [overviewStatus, setOverviewStatus] = useState<string>('no_data')
+    const [overviewMessage, setOverviewMessage] = useState<string>('事件监控尚未采集到有效记录')
+    const [overviewDiagnostics, setOverviewDiagnostics] = useState<Record<string, unknown> | null>(null)
     const [eventMetrics, setEventMetrics] =
         useState<EventSystemOverviewResponse['eventMetrics'] | null>(null)
     const [eventTypes, setEventTypes] = useState<EventSystemOverviewResponse['eventTypes']>([])
@@ -397,6 +402,18 @@ const EventSystem = () => {
                 setMessageBuses(data.messageBuses ?? [])
                 setEventHandlers(data.eventHandlers ?? [])
                 setEventStream(data.eventStream ?? [])
+                setOverviewStatus(String(data.status ?? 'ok'))
+                setOverviewMessage(
+                    typeof data.message === 'string' && data.message.trim().length > 0
+                        ? data.message
+                        : '事件监控运行中'
+                )
+                setOverviewDiagnostics(
+                    data.diagnostics && typeof data.diagnostics === 'object'
+                        ? (data.diagnostics as Record<string, unknown>)
+                        : null
+                )
+                setOverviewError('')
 
                 if (options.showSuccess) {
                     message.success('数据刷新成功')
@@ -405,6 +422,7 @@ const EventSystem = () => {
             } catch (error) {
                 const errorMessage = error instanceof Error ? error.message : String(error)
                 message.error(`获取事件系统数据失败：${errorMessage}`)
+                setOverviewError(errorMessage)
                 return false
             } finally {
                 setLoading(false)
@@ -428,6 +446,12 @@ const EventSystem = () => {
       setRefreshing(false)
   }
 
+    const hasNoEventData =
+        eventTypes.length === 0 &&
+        eventHandlers.length === 0 &&
+        eventStream.length === 0 &&
+        Number(eventMetrics?.queueDepth ?? 0) === 0
+
   return (
       <PageContainer
           header={{
@@ -447,6 +471,24 @@ const EventSystem = () => {
           }}
       >
           <Space direction="vertical" size={48} style={{width: '100%'}}>
+              {overviewError ? (
+                  <Alert
+                      type="error"
+                      showIcon
+                      message="事件系统接口不可用"
+                      description={overviewError}
+                  />
+              ) : null}
+
+              {(overviewStatus !== 'ok' || hasNoEventData) && (
+                  <Alert
+                      type="info"
+                      showIcon
+                      message={overviewMessage}
+                      description={`最近1小时采样记录: ${Number(overviewDiagnostics?.historyRecordCount ?? 0)} 条`}
+                  />
+              )}
+
               {/* 事件流量监控 - 独占一行 */}
               <EventFlowCard
                   metrics={eventMetrics}

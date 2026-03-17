@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ColumnsType } from 'antd/es/table'
-import { Empty, Segmented, Tooltip, message, Table, Tag, Tabs, Typography } from 'antd'
+import { Alert, Empty, Segmented, Tooltip, message, Table, Tag, Tabs, Typography } from 'antd'
 import { PageContainer, ProCard } from '@ant-design/pro-components'
 import { DatabaseOutlined, FireOutlined, WarningOutlined } from '@ant-design/icons'
 import request from '@/api/request'
@@ -55,6 +55,9 @@ interface ConceptFlowPayload {
   data_source?: string
   stale?: boolean
   retrieved_at?: string
+  detail?: Record<string, unknown>
+  period?: string
+  count?: number
 }
 
 const PERIOD_OPTIONS: { label: string; value: ConceptFlowPeriod }[] = [
@@ -218,6 +221,58 @@ function getTrendColor(value: number | null): string {
   return value > 0 ? '#cf1322' : '#389e0d'
 }
 
+function buildConceptFlowDiagnosis(
+  payload: ConceptFlowPayload | null,
+  rows: ConceptFlowItem[],
+  period: ConceptFlowPeriod,
+): string {
+  if (!payload) {
+    return ''
+  }
+  const detail = payload.detail
+  if (!detail || typeof detail !== 'object') {
+    if (rows.length === 0) {
+      return period === 'realtime'
+        ? '实时概念资金流暂无数据。'
+        : `${period === 'today' ? '今日' : '周'}概念资金流暂无数据。`
+    }
+    return ''
+  }
+
+  const code = typeof detail.code === 'string' ? detail.code : ''
+  const message = typeof detail.message === 'string' ? detail.message : ''
+  const reason = typeof detail.reason === 'string' ? detail.reason : ''
+  const fallback = detail.fallback
+
+  const parts: string[] = []
+  if (message) {
+    parts.push(message)
+  }
+  if (reason) {
+    parts.push(`原因: ${reason}`)
+  }
+  if (fallback && typeof fallback === 'object') {
+    const fallbackFrom =
+      typeof (fallback as Record<string, unknown>).from === 'string'
+        ? String((fallback as Record<string, unknown>).from)
+        : ''
+    const fallbackTo =
+      typeof (fallback as Record<string, unknown>).to === 'string'
+        ? String((fallback as Record<string, unknown>).to)
+        : ''
+    if (fallbackFrom || fallbackTo) {
+      parts.push(`回退链路: ${fallbackFrom || '-'} -> ${fallbackTo || '-'}`)
+    }
+  }
+  if (!parts.length && rows.length === 0) {
+    parts.push('概念资金流接口返回空结果。')
+  }
+  if (code) {
+    parts.push(`状态码: ${code}`)
+  }
+  return parts.join('；')
+}
+
 type RefreshState = 'idle' | 'refreshing' | 'success' | 'error'
 
 const ZTPoolTable = () => {
@@ -270,6 +325,7 @@ const ConceptFlowPanel = () => {
   const [stale, setStale] = useState(false)
   const [refreshState, setRefreshState] = useState<RefreshState>('idle')
   const [refreshError, setRefreshError] = useState('')
+  const [diagnosis, setDiagnosis] = useState('')
 
   const fetchData = async (selectedPeriod: ConceptFlowPeriod, silent = false) => {
     const useRefreshMode = silent || data.length > 0
@@ -281,16 +337,19 @@ const ConceptFlowPanel = () => {
     setRefreshState('refreshing')
     try {
       const payload = (await marketAPI.getConceptFlow({ period: selectedPeriod, limit: 50 })) as ConceptFlowPayload
-      setData(normalizeConceptFlow(payload))
+      const normalized = normalizeConceptFlow(payload)
+      setData(normalized)
       setDataSource(String(payload?.data_source ?? ''))
       setRetrievedAt(String(payload?.retrieved_at ?? ''))
       setStale(Boolean(payload?.stale))
+      setDiagnosis(buildConceptFlowDiagnosis(payload, normalized, selectedPeriod))
       setRefreshError('')
       setRefreshState('success')
     } catch (error) {
       const text = error instanceof Error ? error.message : '获取概念资金流失败'
       setRefreshState('error')
       setRefreshError(text)
+      setDiagnosis(text)
       if (!silent) {
         message.error('获取概念资金流失败')
       }
@@ -415,6 +474,15 @@ const ConceptFlowPanel = () => {
           <Text type="secondary">实时口径当前未返回净流入占比，日/周口径可查看该字段。</Text>
         </div>
       ) : null}
+      {diagnosis ? (
+        <Alert
+          type={stale ? 'warning' : 'info'}
+          showIcon
+          style={{ marginBottom: 8 }}
+          message="数据说明"
+          description={diagnosis}
+        />
+      ) : null}
       <Table
         dataSource={data}
         columns={columns}
@@ -431,6 +499,7 @@ const ConceptFlowPanel = () => {
 const AnomaliesList = () => {
   const [data, setData] = useState<AnomalyItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [hint, setHint] = useState('')
 
   const fetchData = async () => {
     setLoading(true)
@@ -438,16 +507,26 @@ const AnomaliesList = () => {
       const res = await marketAPI.getAnomalies()
       if (Array.isArray(res)) {
         setData(res)
+        setHint(
+          res.length === 0
+            ? '当前未检测到异动记录，可能是市场平稳，或上游数据源暂未返回该指标。'
+            : ''
+        )
       }
     } catch {
       message.error('获取异动监控失败')
+      setHint('异动数据获取失败，请稍后重试。')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchData()
+    void fetchData()
+    const timer = window.setInterval(() => {
+      void fetchData()
+    }, 30000)
+    return () => window.clearInterval(timer)
   }, [])
 
   const columns: ColumnsType<AnomalyItem> = [
@@ -471,13 +550,25 @@ const AnomaliesList = () => {
   ]
 
   return (
-    <Table
-      dataSource={data}
-      columns={columns}
-      loading={loading}
-      rowKey={(r: AnomalyItem) => `${r.symbol}-${r.timestamp}`}
-      size="small"
-    />
+    <>
+      {hint ? (
+        <Alert
+          type={data.length === 0 ? 'info' : 'warning'}
+          showIcon
+          style={{ marginBottom: 8 }}
+          message="异动监控说明"
+          description={hint}
+        />
+      ) : null}
+      <Table
+        dataSource={data}
+        columns={columns}
+        loading={loading}
+        rowKey={(r: AnomalyItem) => `${r.symbol}-${r.timestamp}`}
+        locale={{ emptyText: <Empty description={hint || '暂无异动监控数据'} /> }}
+        size="small"
+      />
+    </>
   )
 }
 
