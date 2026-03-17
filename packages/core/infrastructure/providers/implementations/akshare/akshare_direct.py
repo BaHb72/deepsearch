@@ -33,6 +33,7 @@ from core.infrastructure.providers.protocols.lifecycle import (
 # 导入监控装饰器
 from core.infrastructure.providers.unified_proxy import async_monitor_access
 from core.ports.data_sources import DataAccessType, DataSourceType
+from core.utils.network.akshare_proxy import temporarily_unpatch_akshare_requests
 from loguru import logger
 
 from ._deps import AkshareModule, PandasModule, load_akshare, load_pandas
@@ -1698,7 +1699,12 @@ class AkShareProvider(ILifecycleProvider):
             return []
 
         try:
-            df = module.stock_sector_fund_flow_rank(indicator=indicator, sector_type=sector_type)
+            # 强制直连调用，避免全局 Worker 代理补丁污染导致 520/空响应。
+            with temporarily_unpatch_akshare_requests():
+                df = module.stock_sector_fund_flow_rank(
+                    indicator=indicator,
+                    sector_type=sector_type,
+                )
             if df is None or df.empty:
                 return []
 
@@ -1773,7 +1779,103 @@ class AkShareProvider(ILifecycleProvider):
             logger.error(f"获取板块资金流向排名失败: {e}")
             # AkShare 在 5日/10日口径偶发返回字符串值，内部排序会触发类型比较异常。
             # 这里回退到直接请求东财接口，并在本地做数值清洗与排序。
-            return self._fetch_sector_capital_flow_rank_raw_sync(indicator, sector_type)
+            raw_rows = self._fetch_sector_capital_flow_rank_raw_sync(indicator, sector_type)
+            if raw_rows:
+                return raw_rows
+
+            # 概念资金流在部分环境下会出现东财接口被远端断开。
+            # 回退到 stock_fund_flow_concept 快照接口，避免上层页面完全无数据。
+            if sector_type == "概念资金流":
+                snapshot_rows = self._fetch_concept_fund_flow_snapshot_sync()
+                if snapshot_rows:
+                    if indicator != "今日":
+                        logger.warning(f"概念资金流 {indicator} 口径暂不可用，已回退今日快照口径")
+                    return snapshot_rows
+
+            return []
+
+    def _fetch_concept_fund_flow_snapshot_sync(self) -> List[Dict[str, Any]]:
+        """获取概念资金流快照（当 rank/hist 接口异常时兜底）。"""
+        module = self._akshare
+        if module is None:
+            return []
+
+        # 优先走“直连东财 + 本地解析”链路，绕过 requests 代理补丁导致的空响应问题。
+        raw_rows = self._fetch_sector_capital_flow_rank_raw_sync("今日", "概念资金流")
+        if raw_rows:
+            rows: List[Dict[str, Any]] = []
+            for item in raw_rows:
+                rows.append(
+                    {
+                        "name": str(item.get("name", "")),
+                        "change_pct": self._safe_float(item.get("change_pct"), 0.0),
+                        "main_net_inflow": self._safe_float(item.get("main_net_inflow"), 0.0),
+                        "main_net_inflow_pct": self._safe_float(
+                            item.get("main_net_inflow_pct"), 0.0
+                        ),
+                        "super_large_net_inflow": self._safe_float(
+                            item.get("super_large_net_inflow"), 0.0
+                        ),
+                        "super_large_net_inflow_pct": self._safe_float(
+                            item.get("super_large_net_inflow_pct"), 0.0
+                        ),
+                        "large_net_inflow": self._safe_float(item.get("large_net_inflow"), 0.0),
+                        "large_net_inflow_pct": self._safe_float(
+                            item.get("large_net_inflow_pct"), 0.0
+                        ),
+                        "leading_stock": str(item.get("leading_stock", "")),
+                        "source": "akshare_direct_raw_snapshot",
+                    }
+                )
+
+            rows = [item for item in rows if item.get("name")]
+            rows.sort(key=lambda x: self._safe_float(x.get("main_net_inflow"), 0.0), reverse=True)
+            for idx, item in enumerate(rows, start=1):
+                item["rank"] = idx
+
+            logger.info(f"概念资金流快照回退成功(直连东财): {len(rows)} 条")
+            return rows
+
+        try:
+            # 快照接口同样要求直连，避免被全局 requests monkey patch 劫持。
+            with temporarily_unpatch_akshare_requests():
+                concept_snapshot_getter = getattr(module, "stock_fund_flow_concept", None)
+                if not callable(concept_snapshot_getter):
+                    return []
+                df = concept_snapshot_getter()
+            if df is None or df.empty:
+                return []
+
+            snapshot_rows: List[Dict[str, Any]] = []
+            for _, row in df.iterrows():
+                snapshot_rows.append(
+                    {
+                        "name": str(row.get("行业", row.get("概念", ""))),
+                        "change_pct": self._safe_float(row.get("行业-涨跌幅"), 0.0),
+                        "main_net_inflow": self._safe_float(row.get("净额"), 0.0),
+                        "main_net_inflow_pct": None,
+                        "super_large_net_inflow": 0.0,
+                        "super_large_net_inflow_pct": 0.0,
+                        "large_net_inflow": 0.0,
+                        "large_net_inflow_pct": 0.0,
+                        "leading_stock": str(row.get("领涨股", "")),
+                        "source": "akshare_direct_concept_snapshot",
+                    }
+                )
+
+            snapshot_rows = [item for item in snapshot_rows if item.get("name")]
+            snapshot_rows.sort(
+                key=lambda x: self._safe_float(x.get("main_net_inflow"), 0.0),
+                reverse=True,
+            )
+            for idx, item in enumerate(snapshot_rows, start=1):
+                item["rank"] = idx
+
+            logger.info(f"概念资金流快照回退成功: {len(snapshot_rows)} 条")
+            return snapshot_rows
+        except Exception as snapshot_error:
+            logger.error(f"获取概念资金流快照失败: {snapshot_error}")
+            return []
 
     def _fetch_sector_capital_flow_rank_raw_sync(
         self,
@@ -1782,9 +1884,12 @@ class AkShareProvider(ILifecycleProvider):
     ) -> List[Dict[str, Any]]:
         """绕过 akshare 排序逻辑，直接请求东财接口并做稳健解析。"""
         try:
+            import json
             import math
-
-            import requests
+            import shutil
+            import subprocess
+            from urllib.parse import urlencode
+            from urllib.request import Request, urlopen
         except Exception as import_error:
             logger.error(f"加载 fallback 依赖失败: {import_error}")
             return []
@@ -1862,10 +1967,41 @@ class AkShareProvider(ILifecycleProvider):
             "_": int(time.time() * 1000),
         }
 
+        def _fetch_json(query: Dict[str, Any]) -> Dict[str, Any]:
+            # 避免 requests 被代理补丁劫持，优先使用 urllib 直连。
+            full_url = f"{url}?{urlencode(query)}"
+            req = Request(full_url, headers=headers, method="GET")
+            try:
+                with urlopen(req, timeout=15) as resp:  # nosec B310 - 受控固定白名单 URL
+                    raw = resp.read()
+                if raw:
+                    return cast(Dict[str, Any], json.loads(raw.decode("utf-8", errors="ignore")))
+            except Exception as urllib_error:
+                logger.debug(f"urllib 请求东财失败，尝试 curl 回退: {urllib_error}")
+
+            curl_cmd = shutil.which("curl") or shutil.which("curl.exe")
+            if not curl_cmd:
+                return {}
+
+            completed = subprocess.run(
+                [curl_cmd, "-sS", "--max-time", "15", full_url],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                check=False,
+            )
+            if completed.returncode != 0:
+                stderr = (completed.stderr or "").strip()
+                raise RuntimeError(f"curl 请求失败(code={completed.returncode}): {stderr}")
+
+            content = (completed.stdout or "").strip()
+            if not content:
+                return {}
+            return cast(Dict[str, Any], json.loads(content))
+
         try:
-            first_resp = requests.get(url, params=params, headers=headers, timeout=15)  # type: ignore[attr-defined]
-            first_resp.raise_for_status()
-            first_json = first_resp.json()
+            first_json = _fetch_json(params)
         except Exception as request_error:
             logger.error(f"fallback 请求板块资金流首页失败: {request_error}")
             return []
@@ -1881,9 +2017,7 @@ class AkShareProvider(ILifecycleProvider):
         for page in range(1, total_pages + 1):
             params["pn"] = page
             try:
-                resp = requests.get(url, params=params, headers=headers, timeout=15)  # type: ignore[attr-defined]
-                resp.raise_for_status()
-                payload = resp.json()
+                payload = _fetch_json(params)
                 data = payload.get("data") if isinstance(payload, dict) else None
                 diff = data.get("diff") if isinstance(data, dict) else None
                 if not isinstance(diff, list):

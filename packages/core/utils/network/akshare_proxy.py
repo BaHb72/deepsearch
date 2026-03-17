@@ -6,13 +6,21 @@ AkShare 代理补丁
 import functools
 import importlib
 import sys
+from contextlib import contextmanager
+from threading import RLock
+from typing import Any, cast
 
-import requests
+import requests as requests_module
 from core.utils.network.proxy_client import get_proxy_client
 from loguru import logger
 
-# 在模块级别保存原始的 Session 类，避免被后续的 patch 影响
-_OriginalSession = requests.Session
+requests = cast(Any, requests_module)
+
+_ORIGINAL_GET = requests.get
+_ORIGINAL_POST = requests.post
+_ORIGINAL_REQUEST = requests.request
+_PATCH_LOCK = RLock()
+_PATCHED = False
 
 
 def patch_akshare():
@@ -26,59 +34,54 @@ def patch_akshare():
         logger.warning("akshare 未安装，跳过代理补丁")
         return
 
-    # 获取代理客户端
-    client = get_proxy_client()
+    global _PATCHED
+    with _PATCH_LOCK:
+        # 获取代理客户端
+        client = get_proxy_client()
 
-    if not client.use_proxy:
-        logger.info("未配置 Worker 代理，akshare 将使用直连模式")
-        return
+        if not client.use_proxy:
+            logger.info("未配置 Worker 代理，akshare 将使用直连模式")
+            return
 
-    logger.info(f"配置 akshare 使用 Worker 代理: {client.worker_url}")
+        if _PATCHED:
+            logger.debug("akshare 代理补丁已存在，跳过重复 patch")
+            return
 
-    # 保存原始的 requests 方法
-    original_get = requests.get
-    original_post = requests.post
-    original_request = requests.request
+        logger.info(f"配置 akshare 使用 Worker 代理: {client.worker_url}")
 
-    # 创建代理包装器
-    @functools.wraps(original_get)
-    def proxy_get(url, **kwargs):
-        """代理 GET 请求"""
-        logger.debug(f"[AkShare] 代理 GET 请求: {url}")
-        return client.get(url, **kwargs)
+        # 创建代理包装器
+        @functools.wraps(_ORIGINAL_GET)
+        def proxy_get(url, **kwargs):
+            """代理 GET 请求"""
+            logger.debug(f"[AkShare] 代理 GET 请求: {url}")
+            return client.get(url, **kwargs)
 
-    @functools.wraps(original_post)
-    def proxy_post(url, **kwargs):
-        """代理 POST 请求"""
-        logger.debug(f"[AkShare] 代理 POST 请求: {url}")
-        return client.post(url, **kwargs)
+        @functools.wraps(_ORIGINAL_POST)
+        def proxy_post(url, **kwargs):
+            """代理 POST 请求"""
+            logger.debug(f"[AkShare] 代理 POST 请求: {url}")
+            return client.post(url, **kwargs)
 
-    @functools.wraps(original_request)
-    def proxy_request(method, url, **kwargs):
-        """代理通用请求"""
-        logger.debug(f"[AkShare] 代理 {method} 请求: {url}")
-        return client.request(method, url, **kwargs)
+        @functools.wraps(_ORIGINAL_REQUEST)
+        def proxy_request(method, url, **kwargs):
+            """代理通用请求"""
+            logger.debug(f"[AkShare] 代理 {method} 请求: {url}")
+            return client.request(method, url, **kwargs)
 
-    # 只替换 requests 模块的顶层方法，不修改 Session 类
-    # 这样避免了递归问题，因为 proxy_client 内部使用的 Session 不会被影响
-    requests.get = proxy_get
-    requests.post = proxy_post
-    requests.request = proxy_request
+        # 只替换 requests 模块的顶层方法，不修改 Session 类
+        requests.get = proxy_get
+        requests.post = proxy_post
+        requests.request = proxy_request
 
-    # 不再修改 Session 类的方法，避免递归
-    # 注意：这意味着使用 requests.Session() 的 akshare 代码不会被代理
-    # 但大部分 akshare 代码使用的是 requests.get() 等顶层函数
-
-    # 同时替换 akshare 模块内部的 requests
-    # 某些 akshare 子模块可能已经导入了 requests
-    for name, module in sys.modules.items():
-        if name.startswith("akshare"):
-            if hasattr(module, "requests"):
+        # 同时替换 akshare 模块内部的 requests
+        for name, module in sys.modules.items():
+            if name.startswith("akshare") and hasattr(module, "requests"):
                 module.requests.get = proxy_get
                 module.requests.post = proxy_post
                 module.requests.request = proxy_request
 
-    logger.info("akshare 代理补丁应用成功")
+        _PATCHED = True
+        logger.info("akshare 代理补丁应用成功")
 
 
 def unpatch_akshare():
@@ -90,11 +93,40 @@ def unpatch_akshare():
     except ImportError:
         return
 
-    # 这里可以恢复原始方法，但通常不需要
-    logger.info("移除 akshare 代理补丁")
+    global _PATCHED
+    with _PATCH_LOCK:
+        if not _PATCHED:
+            return
+
+        requests.get = _ORIGINAL_GET
+        requests.post = _ORIGINAL_POST
+        requests.request = _ORIGINAL_REQUEST
+
+        for name, module in sys.modules.items():
+            if name.startswith("akshare") and hasattr(module, "requests"):
+                module.requests.get = _ORIGINAL_GET
+                module.requests.post = _ORIGINAL_POST
+                module.requests.request = _ORIGINAL_REQUEST
+
+        _PATCHED = False
+        logger.info("移除 akshare 代理补丁")
 
 
-class ProxySession(_OriginalSession):
+@contextmanager
+def temporarily_unpatch_akshare_requests():
+    """在上下文中临时恢复 requests 原始行为，退出后恢复补丁状态。"""
+    with _PATCH_LOCK:
+        was_patched = _PATCHED
+        if was_patched:
+            unpatch_akshare()
+        try:
+            yield
+        finally:
+            if was_patched:
+                patch_akshare()
+
+
+class ProxySession(requests_module.Session):
     """
     代理 Session 类，所有请求都通过 Cloudflare Worker
     专门为 akshare 设计，不会造成递归

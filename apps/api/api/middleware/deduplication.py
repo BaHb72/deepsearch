@@ -256,6 +256,11 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # 只对特定路径进行去重
         path = request.url.path
+        # concept-flow 路由已在端点内部做 singleflight，这里跳过去重避免并发链路冲突。
+        if path.startswith("/api/market/live/concept-flow"):
+            passthrough_response: Response = await call_next(request)
+            return passthrough_response
+
         should_dedupe = any(path.startswith(p) for p in self.include_paths)
 
         if not should_dedupe:

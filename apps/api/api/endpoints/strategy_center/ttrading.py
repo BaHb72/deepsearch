@@ -40,11 +40,31 @@ router = APIRouter(prefix="/ttrading", tags=["ttrading"])
 _miniqmt_provider = None
 
 
-def _probe_miniqmt_tcp_connection() -> bool:
-    """检测 MiniQMT 配置端口是否可达（进程级可用性）。"""
+def _normalize_probe_host(host: str) -> str:
+    value = (host or "127.0.0.1").strip()
+    if value in {"0.0.0.0", "::"}:
+        return "127.0.0.1"
+    return value
+
+
+def _resolve_miniqmt_probe_targets() -> list[tuple[str, int]]:
+    """解析 MiniQMT 探测目标列表（配置优先，兼容常见端口）。"""
+    targets: list[tuple[str, int]] = []
+
+    def _append_target(host_value: Any, port_value: Any) -> None:
+        try:
+            port = int(port_value)
+        except Exception:
+            return
+        if port <= 0:
+            return
+        host = _normalize_probe_host(str(host_value))
+        candidate = (host, port)
+        if candidate not in targets:
+            targets.append(candidate)
+
     try:
         from core.config import get_config
-        from core.utils.system.port_checker import PortChecker
 
         config = get_config()
         miniqmt_config: Any = getattr(config, "miniqmt", None)
@@ -55,30 +75,101 @@ def _probe_miniqmt_tcp_connection() -> bool:
 
         if isinstance(miniqmt_config, dict):
             connection = miniqmt_config.get("connection")
-            host = str(miniqmt_config.get("host", host))
-            port = int(miniqmt_config.get("port", port))
+            host = str(miniqmt_config.get("host", host) or host)
+            raw_port = miniqmt_config.get("port", port)
+            try:
+                port = int(raw_port)
+            except Exception:
+                port = 7777
         elif miniqmt_config is not None:
             connection = getattr(miniqmt_config, "connection", None)
-            host = str(getattr(miniqmt_config, "host", host))
-            port = int(getattr(miniqmt_config, "port", port))
+            host = str(getattr(miniqmt_config, "host", host) or host)
+            raw_port = getattr(miniqmt_config, "port", port)
+            try:
+                port = int(raw_port)
+            except Exception:
+                port = 7777
 
         if connection is not None:
             if isinstance(connection, dict):
-                host = str(connection.get("host", host))
-                port = int(connection.get("port", port))
+                host = str(connection.get("host", host) or host)
+                raw_port = connection.get("port", port)
+                try:
+                    port = int(raw_port)
+                except Exception:
+                    pass
             else:
-                host = str(getattr(connection, "host", host))
-                port = int(getattr(connection, "port", port))
-
-        if host in {"0.0.0.0", "::"}:
-            host = "127.0.0.1"
-
-        # PortChecker.is_port_available=True 表示端口空闲（无人监听）
-        return not PortChecker.is_port_available(port=port, host=host)
-
+                host = str(getattr(connection, "host", host) or host)
+                raw_port = getattr(connection, "port", port)
+                try:
+                    port = int(raw_port)
+                except Exception:
+                    pass
+        _append_target(host, port)
     except Exception as e:
-        logger.debug(f"MiniQMT TCP 探测失败，按未连接处理: {e}")
-        return False
+        logger.debug(f"读取 MiniQMT 配置失败，使用默认探测端口: {e}")
+
+    # 常见端口兜底：7777（旧默认）/58610（用户环境常见）
+    for fallback_port in (7777, 58610):
+        _append_target("127.0.0.1", fallback_port)
+
+    if not targets:
+        targets.append(("127.0.0.1", 7777))
+    return targets
+
+
+def _probe_miniqmt_tcp_connection() -> tuple[bool, str, int]:
+    """检测 MiniQMT TCP 端口可达性，返回 (可达, host, port)。"""
+    from core.utils.system.port_checker import PortChecker
+
+    targets = _resolve_miniqmt_probe_targets()
+    for host, port in targets:
+        try:
+            # PortChecker.is_port_available=True 表示端口空闲（无人监听）
+            if not PortChecker.is_port_available(port=port, host=host):
+                return True, host, port
+        except Exception as e:
+            logger.debug(f"MiniQMT TCP 探测失败({host}:{port})，继续尝试: {e}")
+            continue
+    first_host, first_port = targets[0]
+    return False, first_host, first_port
+
+
+async def _await_if_needed(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def _extract_connected_from_provider(provider: Any) -> bool:
+    status_getters = ("get_status", "get_connection_status")
+    for getter_name in status_getters:
+        getter = getattr(provider, getter_name, None)
+        if not callable(getter):
+            continue
+        try:
+            payload = await _await_if_needed(getter())
+            if isinstance(payload, dict) and "connected" in payload:
+                return bool(payload.get("connected"))
+        except Exception:
+            continue
+
+    is_connected_attr = getattr(provider, "is_connected", None)
+    try:
+        if callable(is_connected_attr):
+            return bool(is_connected_attr())
+        if is_connected_attr is not None:
+            return bool(is_connected_attr)
+    except Exception:
+        pass
+
+    connected_attr = getattr(provider, "connected", None)
+    if connected_attr is not None:
+        try:
+            return bool(connected_attr)
+        except Exception:
+            pass
+    return False
 
 
 def _get_positional_arity(func: Any) -> int:
@@ -95,7 +186,12 @@ def _get_positional_arity(func: Any) -> int:
     )
 
 
-async def _probe_miniqmt_actor_connection(request: Optional[Request] = None) -> bool:
+async def _probe_miniqmt_actor_connection(
+    request: Optional[Request] = None,
+    *,
+    probe_host: str | None = None,
+    probe_port: int | None = None,
+) -> bool:
     """通过 MiniQMT Actor 主动探活，返回真实连接状态。"""
     try:
         if request is None:
@@ -104,21 +200,44 @@ async def _probe_miniqmt_actor_connection(request: Optional[Request] = None) -> 
         if provider is None:
             return False
 
+        # 兼容直连 Provider：按 TCP 探测结果覆盖 host/port 后再探活
+        if probe_host and hasattr(provider, "host"):
+            try:
+                setattr(provider, "host", probe_host)
+            except Exception:
+                pass
+        if probe_port and hasattr(provider, "port"):
+            try:
+                setattr(provider, "port", int(probe_port))
+            except Exception:
+                pass
+
         heartbeat = getattr(provider, "heartbeat", None)
-        if not callable(heartbeat):
-            return False
+        if callable(heartbeat):
+            try:
+                connected = bool(await _await_if_needed(heartbeat()))
+                if connected:
+                    return bool(await _extract_connected_from_provider(provider))
+            except Exception:
+                pass
 
-        connected = bool(await heartbeat())
-        if not connected:
-            return False
+        connected = await _extract_connected_from_provider(provider)
+        if connected:
+            return True
 
-        get_status = getattr(provider, "get_status", None)
-        if callable(get_status):
-            status = await get_status()
-            if isinstance(status, dict):
-                connected = bool(status.get("connected", connected))
+        initializer = getattr(provider, "initialize", None)
+        if callable(initializer):
+            try:
+                init_result = await _await_if_needed(initializer())
+                if init_result is False:
+                    return False
+                connected = await _extract_connected_from_provider(provider)
+                if connected:
+                    return True
+            except Exception as init_exc:
+                logger.debug(f"MiniQMT 初始化探活失败: {init_exc}")
 
-        return connected
+        return False
 
     except Exception as e:
         logger.debug(f"MiniQMT Actor 探活失败，按未连接处理: {e}")
@@ -214,12 +333,17 @@ async def _get_provider_with_soft_fail(request: Optional[Request], provider_name
         return None
 
 
-async def _probe_miniqmt_actor_connection_compat(request: Optional[Request]) -> bool:
+async def _probe_miniqmt_actor_connection_compat(
+    request: Optional[Request],
+    *,
+    probe_host: str | None = None,
+    probe_port: int | None = None,
+) -> bool:
     probe = _probe_miniqmt_actor_connection
     arity = _get_positional_arity(probe)
     if arity == 0:
-        return bool(await probe())
-    return bool(await probe(request))
+        return bool(await probe(probe_host=probe_host, probe_port=probe_port))
+    return bool(await probe(request, probe_host=probe_host, probe_port=probe_port))
 
 
 async def _get_provider_with_soft_fail_compat(
@@ -798,11 +922,17 @@ async def get_datasource_status(request: Request = cast(Request, None)):
         return status
 
     # 先做进程级可达性检测，避免“客户端未启动”时误报已连接。
-    if not _probe_miniqmt_tcp_connection():
+    reachable, probe_host, probe_port = _probe_miniqmt_tcp_connection()
+    status["miniqmt_probe"] = {"host": probe_host, "port": probe_port, "reachable": reachable}
+    if not reachable:
         return status
 
     # 状态接口只依据真实探活结果，不再依赖“可导入即连接”的本地标志位。
-    connected = await _probe_miniqmt_actor_connection_compat(request)
+    connected = await _probe_miniqmt_actor_connection_compat(
+        request,
+        probe_host=probe_host,
+        probe_port=probe_port,
+    )
     if connected:
         status["miniqmt_connected"] = True
         status["active_provider"] = "miniqmt"

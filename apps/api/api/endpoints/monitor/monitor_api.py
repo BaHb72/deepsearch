@@ -183,9 +183,13 @@ def _build_event_system_overview(monitor_api: "MonitorAPI") -> Dict[str, Any]:
     """构建事件系统监控快照。"""
     stats = monitor_api.get_statistics()
     latest_record = stats.get("latest_record")
+    history = monitor_api.get_historical_data(hours=1)
+    records = [rec for rec in history.get("records", []) if rec]
     timestamp = datetime.now().isoformat()
     payload: Dict[str, Any] = {
         "timestamp": timestamp,
+        "status": "no_data",
+        "message": "事件监控尚未采集到有效记录",
         "eventMetrics": {
             "produceRate": 0.0,
             "consumeRate": 0.0,
@@ -201,6 +205,10 @@ def _build_event_system_overview(monitor_api: "MonitorAPI") -> Dict[str, Any]:
         "eventHandlers": [],
         "eventStream": [],
         "alerts": stats.get("dashboard_data", {}).get("alerts", []),
+        "diagnostics": {
+            "historyRecordCount": len(records),
+            "hasLatestRecord": bool(latest_record),
+        },
     }
 
     if not latest_record:
@@ -209,8 +217,8 @@ def _build_event_system_overview(monitor_api: "MonitorAPI") -> Dict[str, Any]:
     timestamp = latest_record.get("timestamp", timestamp)
     payload["timestamp"] = timestamp
 
-    history = monitor_api.get_historical_data(hours=1)
-    records = [rec for rec in history.get("records", []) if rec]
+    payload["status"] = "ok"
+    payload["message"] = "事件监控运行中"
     if not records or records[-1] != latest_record:
         records.append(latest_record)
 
@@ -348,6 +356,34 @@ def _build_event_system_overview(monitor_api: "MonitorAPI") -> Dict[str, Any]:
     payload["alerts"] = latest_record.get("alerts", payload["alerts"])
 
     return payload
+
+
+def _empty_event_system_overview(message: str) -> Dict[str, Any]:
+    """事件监控服务不可用时返回统一空态结构，避免前端无结构可渲染。"""
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "status": "no_data",
+        "message": message,
+        "eventMetrics": {
+            "produceRate": 0.0,
+            "consumeRate": 0.0,
+            "queueDepth": 0,
+            "queueUsage": 0.0,
+        },
+        "eventTypes": [],
+        "latencyDistribution": {
+            "categories": ["<10ms", "10-50ms", "50-100ms", "100-500ms", ">500ms"],
+            "values": [0, 0, 0, 0, 0],
+        },
+        "messageBuses": [],
+        "eventHandlers": [],
+        "eventStream": [],
+        "alerts": [],
+        "diagnostics": {
+            "historyRecordCount": 0,
+            "hasLatestRecord": False,
+        },
+    }
 
 
 class DashboardResponse(BaseModel):
@@ -844,7 +880,12 @@ async def get_events_summary() -> EventSummaryResponse:
 @router.get("/event-system/overview")
 async def get_event_system_overview() -> Dict[str, Any]:
     """获取事件系统监控总览。"""
-    monitor_api = _resolve_monitor_api()
+    try:
+        monitor_api = _resolve_monitor_api()
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            return _empty_event_system_overview("事件监控服务未启动")
+        raise
     try:
         return _build_event_system_overview(monitor_api)
     except HTTPException:

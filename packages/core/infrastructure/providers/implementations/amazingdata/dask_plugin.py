@@ -61,10 +61,13 @@ class RedisTaskListener:
         self._redis_url = redis_url
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._heartbeat_thread: threading.Thread | None = None
         self._runtime_marker_value = f"ready:{worker.address}"
         self._last_marker_refresh = 0.0
         self._marker_refresh_interval = 3.0
         self._marker_ttl_seconds = 12
+        self._heartbeat_error_count = 0
+        self._last_heartbeat_error: str | None = None
 
     def start(self) -> None:
         """启动监听线程"""
@@ -74,6 +77,12 @@ class RedisTaskListener:
             daemon=True,
         )
         self._thread.start()
+        self._heartbeat_thread = threading.Thread(
+            target=self._heartbeat_loop,
+            name="amazingdata-marker-heartbeat",
+            daemon=True,
+        )
+        self._heartbeat_thread.start()
         logger.info("[RedisTaskListener] 监听线程已启动 | queue={}", TASK_QUEUE_KEY)
 
     def stop(self) -> None:
@@ -81,6 +90,8 @@ class RedisTaskListener:
         self._stop_event.set()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3.0)
+        if self._heartbeat_thread and self._heartbeat_thread.is_alive():
+            self._heartbeat_thread.join(timeout=3.0)
         logger.info("[RedisTaskListener] 监听线程已停止")
 
     def _listen_loop(self) -> None:
@@ -88,12 +99,9 @@ class RedisTaskListener:
         import redis
 
         r = redis.from_url(self._redis_url)  # type: ignore[attr-defined]
-        self._refresh_runtime_markers(r, force=True)
 
         while not self._stop_event.is_set():
             try:
-                self._refresh_runtime_markers(r)
-
                 # BLPOP 阻塞 1 秒，超时后检查 stop_event
                 result = r.blpop(TASK_QUEUE_KEY, timeout=1)
                 if result is None:
@@ -122,6 +130,48 @@ class RedisTaskListener:
             r.close()
         except Exception:
             pass
+
+    def _heartbeat_loop(self) -> None:
+        """独立心跳线程，周期性刷新运行时标记。"""
+        import redis
+
+        redis_client: Any | None = None
+        while not self._stop_event.is_set():
+            try:
+                if redis_client is None:
+                    redis_client = redis.from_url(self._redis_url)  # type: ignore[attr-defined]
+
+                self._refresh_runtime_markers(redis_client, force=True)
+                self._heartbeat_error_count = 0
+                self._last_heartbeat_error = None
+
+                if self._stop_event.wait(self._marker_refresh_interval):
+                    break
+            except Exception as e:
+                self._heartbeat_error_count += 1
+                self._last_heartbeat_error = str(e)
+                logger.warning(
+                    "[RedisTaskListener] 心跳标记刷新失败 | count={} | error={}",
+                    self._heartbeat_error_count,
+                    e,
+                )
+
+                if redis_client is not None:
+                    try:
+                        redis_client.close()
+                    except Exception:
+                        pass
+                    redis_client = None
+
+                if self._stop_event.wait(1.0):
+                    break
+
+        if redis_client is not None:
+            try:
+                self._clear_runtime_markers(redis_client)
+                redis_client.close()
+            except Exception:
+                pass
 
     def _refresh_runtime_markers(self, redis_client: Any, force: bool = False) -> None:
         """刷新 Actor 运行时标记（ready + heartbeat）。

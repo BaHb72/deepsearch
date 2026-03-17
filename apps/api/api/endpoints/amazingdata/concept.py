@@ -135,15 +135,17 @@ async def get_concept_linkage(
             engine = get_concept_engine(provider)
             if not engine._initialized:
                 await engine.initialize_graph()
+            await engine.ensure_stock_linkage(stock_code)
             return engine.get_linkage(stock_code)
 
         data = await asyncio.wait_for(fetch_linkage(), timeout=180.0)
-        if data and data.get("concepts"):
+        if data and isinstance(data, dict) and isinstance(data.get("concepts"), list):
             return format_response(success=True, data=data)
-
-        raise HTTPException(
-            status_code=404,
-            detail=f"未找到股票 {stock_code} 的概念联动数据",
+        # 概念联动缺失属于业务空结果，不应返回 404 造成前端“请求地址不存在”误判
+        return format_response(
+            success=False,
+            data={"center": stock_code, "concepts": []},
+            error=f"未找到股票 {stock_code} 的概念联动数据",
         )
     except asyncio.TimeoutError:
         logger.error(f"获取联动图谱超时(180s)，stock_code={stock_code}")
@@ -151,7 +153,13 @@ async def get_concept_linkage(
             status_code=503,
             detail="数据服务暂时不可用，请稍后重试或先调用 /init 初始化",
         )
-    except HTTPException:
+    except HTTPException as exc:
+        if exc.status_code == 404:
+            return format_response(
+                success=False,
+                data={"center": stock_code, "concepts": []},
+                error=str(exc.detail),
+            )
         raise
     except Exception as e:
         logger.error(f"获取联动图谱失败: {e}")

@@ -218,6 +218,31 @@ class DaskInitStateManager:
 
         self._logger.error("AmazingData 运行时降级: {}", error)
 
+    def mark_amazingdata_runtime_recovered(self, worker: str | None = None) -> None:
+        """标记 AmazingData 运行时恢复。
+
+        当 Adapter 检测到 Redis 运行时标记重新出现后调用，
+        用于将状态从 PARTIAL 回切到 READY。
+        """
+        self._amazingdata_status.ready = True
+        self._amazingdata_status.error = None
+        self._amazingdata_status.ready_at = datetime.now()
+
+        if self._scheduler_status.ready and self._workers_status.ready:
+            self._phase = DaskInitPhase.READY
+            self._message = "Dask 集群完全就绪"
+        elif self._scheduler_status.ready:
+            self._phase = DaskInitPhase.PARTIAL
+            self._message = "Dask 集群部分就绪（Workers 未就绪）"
+        else:
+            self._phase = DaskInitPhase.FAILED
+            self._message = "Dask 集群初始化失败"
+
+        self._logger.info(
+            "AmazingData 运行时恢复: worker={}",
+            worker or "unknown",
+        )
+
     def _calculate_progress(self) -> int:
         """计算初始化进度百分比"""
         if self._phase == DaskInitPhase.PENDING:

@@ -4,6 +4,7 @@ Dask 集群状态 API
 提供 Dask 初始化状态查询端点，支持前端展示初始化进度和就绪检查。
 """
 
+import inspect
 from typing import Any, Dict
 
 from fastapi import APIRouter, Request
@@ -21,6 +22,54 @@ def _get_init_manager(request: Request):
 
         manager = get_dask_init_manager_sync()
     return manager
+
+
+async def _get_amazingdata_runtime_diagnostics(
+    request: Request,
+    manager: Any | None,
+) -> Dict[str, Any]:
+    """获取 AmazingData 运行时心跳诊断信息。"""
+    diagnostics: Dict[str, Any] = {
+        "marker_present": False,
+        "marker_worker": None,
+        "marker_ttl": None,
+        "ready_ttl": None,
+        "heartbeat_ttl": None,
+        "last_runtime_error": None,
+        "error": None,
+    }
+
+    provider: Any | None = getattr(manager, "_amazingdata_adapter", None) if manager else None
+
+    if provider is None:
+        container = getattr(request.app.state, "provider_container", None)
+        if container is not None and hasattr(container, "has") and container.has("amazingdata"):
+            try:
+                provider = await container.get("amazingdata")
+            except Exception as e:
+                diagnostics["error"] = f"get_provider_failed: {e}"
+                return diagnostics
+
+    if provider is None:
+        diagnostics["error"] = "provider_not_registered"
+        return diagnostics
+
+    runtime_getter = getattr(provider, "get_runtime_marker_state", None)
+    if callable(runtime_getter):
+        try:
+            runtime_result = runtime_getter()
+            if inspect.isawaitable(runtime_result):
+                runtime_result = await runtime_result
+            if isinstance(runtime_result, dict):
+                diagnostics.update(runtime_result)
+                return diagnostics
+        except Exception as e:
+            diagnostics["error"] = f"runtime_getter_failed: {e}"
+            return diagnostics
+
+    diagnostics["error"] = "runtime_getter_unavailable"
+    diagnostics["last_runtime_error"] = getattr(provider, "_last_runtime_issue", None)
+    return diagnostics
 
 
 @router.get("/init-status")
@@ -43,13 +92,23 @@ async def get_dask_init_status(request: Request) -> Dict[str, Any]:
             },
             "started_at": "ISO datetime" | null,
             "ready_at": "ISO datetime" | null,
-            "elapsed_seconds": float | null
+            "elapsed_seconds": float | null,
+            "runtime": {
+                "amazingdata": {
+                    "marker_present": bool,
+                    "marker_worker": str | null,
+                    "marker_ttl": int | null,
+                    "ready_ttl": int | null,
+                    "heartbeat_ttl": int | null,
+                    "last_runtime_error": str | null
+                }
+            }
         }
     """
     manager = _get_init_manager(request)
 
     if manager is None:
-        return {
+        payload = {
             "phase": "pending",
             "message": "Dask 初始化管理器尚未创建",
             "progress_percent": 0,
@@ -62,9 +121,17 @@ async def get_dask_init_status(request: Request) -> Dict[str, Any]:
             "ready_at": None,
             "elapsed_seconds": None,
         }
+        payload["runtime"] = {
+            "amazingdata": await _get_amazingdata_runtime_diagnostics(request, None)
+        }
+        return payload
 
     status = manager.get_status()
-    return status.to_dict()
+    payload = status.to_dict()
+    payload["runtime"] = {
+        "amazingdata": await _get_amazingdata_runtime_diagnostics(request, manager)
+    }
+    return payload
 
 
 @router.get("/ready")

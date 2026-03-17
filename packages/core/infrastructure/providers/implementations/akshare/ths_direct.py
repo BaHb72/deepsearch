@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Dict, List, Mapping, Optional, cast
 
+from core.utils.network.akshare_proxy import temporarily_unpatch_akshare_requests
 from loguru import logger
 
 from ._deps import AkshareModule, PandasModule, load_akshare, load_pandas
@@ -59,9 +60,10 @@ class ThsDirectProvider:
         akshare = self._akshare_module()
         try:
             logger.info("获取同花顺概念板块列表...")
-            df = await asyncio.get_event_loop().run_in_executor(
-                None, akshare.stock_board_concept_name_ths
-            )
+            with temporarily_unpatch_akshare_requests():
+                df = await asyncio.get_event_loop().run_in_executor(
+                    None, akshare.stock_board_concept_name_ths
+                )
 
             if df is not None and not df.empty:
                 # 转换为标准格式
@@ -86,9 +88,10 @@ class ThsDirectProvider:
         akshare = self._akshare_module()
         try:
             logger.info(f"获取概念板块指数: {symbol}")
-            df = await asyncio.get_event_loop().run_in_executor(
-                None, akshare.stock_board_concept_index_ths, symbol, start_date, end_date
-            )
+            with temporarily_unpatch_akshare_requests():
+                df = await asyncio.get_event_loop().run_in_executor(
+                    None, akshare.stock_board_concept_index_ths, symbol, start_date, end_date
+                )
 
             if df is not None and not df.empty:
                 result = df.to_dict("records")
@@ -110,9 +113,10 @@ class ThsDirectProvider:
         akshare = self._akshare_module()
         try:
             logger.info(f"获取概念板块简介: {symbol}")
-            df = await asyncio.get_event_loop().run_in_executor(
-                None, akshare.stock_board_concept_info_ths, symbol
-            )
+            with temporarily_unpatch_akshare_requests():
+                df = await asyncio.get_event_loop().run_in_executor(
+                    None, akshare.stock_board_concept_info_ths, symbol
+                )
 
             if df is not None:
                 # 根据返回数据类型处理
@@ -149,9 +153,10 @@ class ThsDirectProvider:
         akshare = self._akshare_module()
         try:
             logger.info("获取概念板块汇总信息（成份股功能暂不可用）")
-            df = await asyncio.get_event_loop().run_in_executor(
-                None, akshare.stock_board_concept_summary_ths
-            )
+            with temporarily_unpatch_akshare_requests():
+                df = await asyncio.get_event_loop().run_in_executor(
+                    None, akshare.stock_board_concept_summary_ths
+                )
 
             if df is not None and not df.empty:
                 # 筛选包含指定概念的记录

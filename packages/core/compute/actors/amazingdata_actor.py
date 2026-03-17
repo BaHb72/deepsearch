@@ -1177,10 +1177,29 @@ class AmazingDataActor:
         if func is None:
             raise ValueError(f"Method '{method}' not found on SDK object")
 
-        # 使用超时保护执行 SDK 调用
-        return await self._run_sdk_with_timeout(
-            lambda: func(**params), f"{sdk_obj.__class__.__name__}.{method}"
-        )
+        try:
+            # 优先使用关键字参数调用（大多数 SDK 方法支持）
+            return await self._run_sdk_with_timeout(
+                lambda: func(**params), f"{sdk_obj.__class__.__name__}.{method}"
+            )
+        except TypeError as exc:
+            # 某些 SDK 方法仅支持位置参数（不接受关键字参数），做一次兼容回退
+            error_message = str(exc)
+            if not params or len(params) != 1 or "unexpected keyword argument" not in error_message:
+                raise
+
+            param_keys = list(params.keys())
+            positional_args = list(params.values())
+            logger.warning(
+                "[{}] SDK 方法关键字参数不兼容，回退为位置参数调用 | method={} | keys={}",
+                _ACTOR_ID,
+                method,
+                param_keys,
+            )
+            return await self._run_sdk_with_timeout(
+                lambda: func(*positional_args),
+                f"{sdk_obj.__class__.__name__}.{method}(positional)",
+            )
 
     async def _run_sdk_with_timeout(
         self,

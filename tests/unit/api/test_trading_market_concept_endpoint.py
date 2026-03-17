@@ -61,3 +61,44 @@ async def test_concept_list_fallbacks_to_akshare_when_ths_failed(monkeypatch) ->
     assert result["_data_source"] == "akshare.stock_board_concept_name_em"
     assert result["data"][0]["name"] == "芯片概念"
     assert result["data"][0]["code"] == "BK9988"
+
+
+@pytest.mark.asyncio
+async def test_concept_constituents_fallbacks_to_ths_list_when_primary_failed(monkeypatch) -> None:
+    class _FakeThsProvider:
+        async def get_concept_constituents(self, concept: str):
+            return {"success": False, "source": "ths_direct", "error": "mock failed", "data": []}
+
+        async def get_concept_list(self):
+            return {
+                "success": True,
+                "source": "ths_direct",
+                "data": [{"name": "阿里巴巴概念", "code": "301558"}],
+            }
+
+    monkeypatch.setattr(
+        "core.infrastructure.providers.implementations.akshare.ths_direct.get_ths_provider",
+        lambda: _FakeThsProvider(),
+    )
+
+    result = await trading_market.get_ths_concept_constituents("阿里巴巴概念", service=None)
+    assert result["_data_source"] == "ths_direct.concept_list"
+    assert result["data"][0]["name"] == "阿里巴巴概念"
+    assert "回退" in result["note"]
+
+
+@pytest.mark.asyncio
+async def test_concept_constituents_returns_empty_payload_when_exception(monkeypatch) -> None:
+    class _FakeThsProvider:
+        async def get_concept_constituents(self, concept: str):
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        "core.infrastructure.providers.implementations.akshare.ths_direct.get_ths_provider",
+        lambda: _FakeThsProvider(),
+    )
+
+    result = await trading_market.get_ths_concept_constituents("人工智能", service=None)
+    assert result["_data_source"] == "ths_direct"
+    assert result["data"] == []
+    assert "异常" in result["note"]

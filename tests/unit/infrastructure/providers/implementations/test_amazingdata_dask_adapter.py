@@ -254,6 +254,48 @@ class TestAmazingDataDaskAdapterCallActor:
         assert adapter._last_runtime_issue is not None
         assert "心跳/就绪标记" in adapter._last_runtime_issue
 
+    @pytest.mark.asyncio
+    async def test_call_actor_auto_recovers_when_runtime_marker_restored(
+        self, mock_redis_client: MagicMock
+    ) -> None:
+        """测试 Actor 被标记不可用后，运行时标记恢复可自动自愈。"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
+        adapter._actor_available = False
+        adapter._initialized = True
+        adapter._last_runtime_issue = "Redis 未检测到 AmazingData Actor 心跳/就绪标记"
+        adapter._windows_worker = "tcp://worker1:1234"
+
+        expected_result = [{"symbol": "000001.SZ", "close": 12.34}]
+
+        async def _mock_get(key: str) -> Any:
+            if key in ("dask_actor_heartbeat:amazingdata", "dask_actor_ready:amazingdata"):
+                return "ready:tcp://worker2:2233"
+            if key.startswith("dask_result:"):
+                return json.dumps({"status": "success", "result": expected_result}).encode()
+            return None
+
+        mock_redis_client.get = AsyncMock(side_effect=_mock_get)
+
+        fake_manager = MagicMock()
+        with patch(
+            "core.compute.dask_init_state.get_dask_init_manager_sync",
+            return_value=fake_manager,
+        ):
+            result = await adapter._call_actor("query_kline", code_list=["000001.SZ"])
+
+        assert result == expected_result
+        assert adapter._actor_available is True
+        assert adapter._initialized is True
+        assert adapter._last_runtime_issue is None
+        assert adapter._windows_worker == "tcp://worker2:2233"
+        fake_manager.mark_amazingdata_runtime_recovered.assert_called_once_with(
+            "tcp://worker2:2233"
+        )
+
 
 class TestAmazingDataDaskAdapterDataProviderMethods:
     """DataProvider 接口方法测试"""
@@ -377,6 +419,59 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
             local_path="D:/tmp/amazingdata",
             is_local=True,
         )
+
+
+class TestAmazingDataDaskAdapterRuntimeMarkers:
+    """运行时标记诊断测试"""
+
+    @pytest.mark.asyncio
+    async def test_get_runtime_marker_state_with_markers(
+        self, mock_redis_client: MagicMock
+    ) -> None:
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
+        adapter._last_runtime_issue = "previous_error"
+
+        async def _mock_get(key: str) -> Any:
+            if key == "dask_actor_ready:amazingdata":
+                return "ready:tcp://worker2:2233"
+            if key == "dask_actor_heartbeat:amazingdata":
+                return "ready:tcp://worker2:2233"
+            return None
+
+        async def _mock_ttl(key: str) -> int:
+            if key == "dask_actor_ready:amazingdata":
+                return 9
+            if key == "dask_actor_heartbeat:amazingdata":
+                return 12
+            return -2
+
+        mock_redis_client.get = AsyncMock(side_effect=_mock_get)
+        mock_redis_client.ttl = AsyncMock(side_effect=_mock_ttl)
+
+        state = await adapter.get_runtime_marker_state()
+
+        assert state["marker_present"] is True
+        assert state["marker_worker"] == "tcp://worker2:2233"
+        assert state["marker_ttl"] == 12
+        assert state["ready_ttl"] == 9
+        assert state["heartbeat_ttl"] == 12
+        assert state["last_runtime_error"] == "previous_error"
+
+    @pytest.mark.asyncio
+    async def test_get_runtime_marker_state_without_redis(self) -> None:
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(redis_client=None)
+        state = await adapter.get_runtime_marker_state()
+
+        assert state["marker_present"] is False
+        assert state["error"] == "redis_unavailable"
 
 
 class TestAmazingDataDaskAdapterHealthCheck:

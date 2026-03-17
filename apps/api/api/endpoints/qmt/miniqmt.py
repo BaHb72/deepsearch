@@ -105,6 +105,102 @@ def _legacy_payload_with_trace(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+async def _await_if_needed(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def _provider_call(provider: Any, method: str, **kwargs: Any) -> Any:
+    """
+    兼容调用 Provider 方法：
+    1) Actor 风格: _provider_call(provider, "method", **kwargs)
+    2) 直连风格: provider.method(**kwargs)
+    """
+    caller = getattr(provider, "call", None)
+    if callable(caller):
+        try:
+            return await _await_if_needed(caller(method, **kwargs))
+        except TypeError:
+            # 部分实现可能不支持关键字参数透传，退回直接方法调用
+            pass
+
+    direct_method = getattr(provider, method, None)
+    if callable(direct_method):
+        return await _await_if_needed(direct_method(**kwargs))
+
+    raise AttributeError(f"provider 不支持方法: {method}")
+
+
+async def _resolve_provider_status(
+    provider: Any,
+    *,
+    ensure_initialized: bool = False,
+) -> Dict[str, Any]:
+    """兼容提取 Provider 连接状态（Actor 与直连 Provider）。"""
+    get_status = getattr(provider, "get_status", None)
+    if callable(get_status):
+        payload = await _await_if_needed(get_status())
+        if isinstance(payload, dict):
+            return payload
+
+    get_connection_status = getattr(provider, "get_connection_status", None)
+    if callable(get_connection_status):
+        payload = await _await_if_needed(get_connection_status())
+        if isinstance(payload, dict):
+            return payload
+
+    if ensure_initialized:
+        initializer = getattr(provider, "initialize", None)
+        if callable(initializer):
+            try:
+                await _await_if_needed(initializer())
+            except Exception:
+                pass
+
+    is_connected_attr = getattr(provider, "is_connected", None)
+    connected = False
+    if callable(is_connected_attr):
+        try:
+            connected = bool(is_connected_attr())
+        except Exception:
+            connected = False
+    elif is_connected_attr is not None:
+        connected = bool(is_connected_attr)
+    elif hasattr(provider, "connected"):
+        connected = bool(getattr(provider, "connected"))
+
+    return {
+        "connected": connected,
+        "provider_type": provider.__class__.__name__,
+    }
+
+
+async def _probe_provider_connected(provider: Any) -> bool:
+    """兼容检测 Provider 连接状态。"""
+    heartbeat = getattr(provider, "heartbeat", None)
+    if callable(heartbeat):
+        try:
+            return bool(await _await_if_needed(heartbeat()))
+        except Exception:
+            pass
+
+    status = await _resolve_provider_status(provider, ensure_initialized=False)
+    if bool(status.get("connected", False)):
+        return True
+
+    initializer = getattr(provider, "initialize", None)
+    if callable(initializer):
+        try:
+            await _await_if_needed(initializer())
+        except Exception:
+            return False
+        status = await _resolve_provider_status(provider, ensure_initialized=False)
+        return bool(status.get("connected", False))
+
+    return False
+
+
 def _to_float(value: Any, default: float = 0.0) -> float:
     try:
         if value is None:
@@ -585,8 +681,7 @@ async def get_status() -> Dict[str, Any]:
     """
     try:
         provider = await get_miniqmt_provider()
-        # Actor 使用 get_status() 方法
-        status = await provider.get_status()
+        status = await _resolve_provider_status(provider, ensure_initialized=True)
         status["timestamp"] = datetime.now().isoformat()
         return status
 
@@ -621,13 +716,13 @@ async def subscribe_symbols(request: SubscribeRequest) -> Dict[str, Any]:
         for symbol in request.symbols:
             try:
                 # 通过 Actor 调用 xtdata.get_full_tick 验证股票有效性
-                result = await provider.call("get_full_tick", stock_list=[symbol])
+                result = await _provider_call(provider, "get_full_tick", stock_list=[symbol])
                 if result and symbol in result:
                     valid_symbols.append(symbol)
                 else:
                     # 尝试下载历史数据
-                    await provider.call(
-                        "download_history_data", stock_code=symbol, period="1d", count=1
+                    await _provider_call(
+                        provider, "download_history_data", stock_code=symbol, period="1d", count=1
                     )
                     valid_symbols.append(symbol)
             except Exception:
@@ -699,7 +794,7 @@ async def get_realtime_data(
             raise HTTPException(status_code=400, detail="请提供股票代码")
 
         # 通过 Actor 调用 xtdata.get_full_tick
-        result = await provider.call("get_full_tick", stock_list=symbol_list)
+        result = await _provider_call(provider, "get_full_tick", stock_list=symbol_list)
 
         if not result:
             return {
@@ -778,12 +873,15 @@ async def get_history_data(
 
         # 尝试下载数据
         try:
-            await provider.call("download_history_data", stock_code=symbol, period=period, count=-1)
+            await _provider_call(
+                provider, "download_history_data", stock_code=symbol, period=period, count=-1
+            )
         except Exception:
             pass
 
         # 通过 Actor 调用 xtdata.get_market_data
-        result = await provider.call(
+        result = await _provider_call(
+            provider,
             "get_market_data",
             field_list=[],
             stock_list=[symbol],
@@ -923,12 +1021,15 @@ async def get_minute_data(
 
         # 尝试下载数据
         try:
-            await provider.call("download_history_data", stock_code=symbol, period=period, count=-1)
+            await _provider_call(
+                provider, "download_history_data", stock_code=symbol, period=period, count=-1
+            )
         except Exception:
             pass
 
         # 通过 Actor 调用 xtdata.get_market_data
-        result = await provider.call(
+        result = await _provider_call(
+            provider,
             "get_market_data",
             field_list=[],
             stock_list=[symbol],
@@ -1068,9 +1169,8 @@ async def reconnect() -> Dict[str, Any]:
         init_success = await provider.initialize()
 
         if init_success:
-            # 使用 heartbeat 验证连接
-            connected = await provider.heartbeat()
-            status = await provider.get_status()
+            connected = await _probe_provider_connected(provider)
+            status = await _resolve_provider_status(provider)
 
             return {
                 "success": connected,
@@ -1108,8 +1208,7 @@ async def get_subscriptions() -> Dict[str, Any]:
     """
     try:
         provider = await get_miniqmt_provider()
-        # Actor 通过 get_status 返回状态
-        status = await provider.get_status()
+        status = await _resolve_provider_status(provider)
 
         return {
             "success": True,
@@ -1135,8 +1234,7 @@ async def get_statistics() -> Dict[str, Any]:
     """
     try:
         provider = await get_miniqmt_provider()
-        # Actor 使用 get_status 返回包含统计信息的状态
-        status = await provider.get_status()
+        status = await _resolve_provider_status(provider)
 
         return {"success": True, "statistics": status, "timestamp": datetime.now().isoformat()}
 
@@ -1202,7 +1300,7 @@ async def get_xtdata_tick(
         if not symbol_list:
             raise HTTPException(status_code=400, detail="请提供股票代码")
 
-        result = await provider.call("get_full_tick", stock_list=symbol_list)
+        result = await _provider_call(provider, "get_full_tick", stock_list=symbol_list)
 
         if not result:
             return {
@@ -1372,14 +1470,15 @@ async def get_xtdata_status() -> Dict[str, Any]:
     """
     try:
         provider = await get_miniqmt_provider()
-
-        # 使用 Actor 的 heartbeat 检测连接
-        connected = await provider.heartbeat()
-        status = await provider.get_status()
+        connected = await _probe_provider_connected(provider)
+        status = await _resolve_provider_status(provider, ensure_initialized=False)
+        xtdata_available = bool(status.get("sdk_available") if isinstance(status, dict) else False)
+        if not xtdata_available:
+            xtdata_available = bool(connected)
 
         return {
             "success": True,
-            "xtdata_available": status.get("sdk_available", False),
+            "xtdata_available": xtdata_available,
             "connected": connected,
             "message": "xtdata 已连接" if connected else "xtdata 可用但未获取到数据",
             "actor_status": status,
@@ -1490,7 +1589,7 @@ async def get_instrument_info(
     try:
         provider = await get_miniqmt_provider()
 
-        result = await provider.call("get_instrument_detail", stock_code=symbol)
+        result = await _provider_call(provider, "get_instrument_detail", stock_code=symbol)
 
         if not result:
             return {
@@ -1534,7 +1633,9 @@ async def get_instruments_batch(
         if not symbol_list:
             raise HTTPException(status_code=400, detail="请提供股票代码")
 
-        result = await provider.call("get_instrument_detail_list", stock_list=symbol_list)
+        result = await _provider_call(
+            provider, "get_instrument_detail_list", stock_list=symbol_list
+        )
 
         if not result:
             return {
@@ -1581,8 +1682,8 @@ async def get_trading_dates(
     try:
         provider = await get_miniqmt_provider()
 
-        result = await provider.call(
-            "get_trading_dates", market=market, start_time=start_date, end_time=end_date
+        result = await _provider_call(
+            provider, "get_trading_dates", market=market, start_time=start_date, end_time=end_date
         )
 
         if not result:
@@ -1631,7 +1732,7 @@ async def get_holidays() -> Dict[str, Any]:
     try:
         provider = await get_miniqmt_provider()
 
-        result = await provider.call("get_holidays")
+        result = await _provider_call(provider, "get_holidays")
 
         if not result:
             return {
@@ -1720,8 +1821,11 @@ async def get_financial_data(
         if auto_download:
             try:
                 await asyncio.wait_for(
-                    provider.call(
-                        "download_financial_data", stock_list=symbol_list, table_list=table_list
+                    _provider_call(
+                        provider,
+                        "download_financial_data",
+                        stock_list=symbol_list,
+                        table_list=table_list,
                     ),
                     timeout=timeout,
                 )
@@ -1733,7 +1837,8 @@ async def get_financial_data(
         # 获取财务数据（带超时）
         try:
             result = await asyncio.wait_for(
-                provider.call(
+                _provider_call(
+                    provider,
                     "get_financial_data",
                     stock_list=symbol_list,
                     table_list=table_list,
@@ -1808,7 +1913,7 @@ async def get_etf_info(
         # 先下载 ETF 信息（带超时）
         try:
             await asyncio.wait_for(
-                provider.call("download_etf_info"),
+                _provider_call(provider, "download_etf_info"),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
@@ -1819,7 +1924,7 @@ async def get_etf_info(
         # 获取 ETF 信息（带超时）
         try:
             result = await asyncio.wait_for(
-                provider.call("get_etf_info", fund_code=symbol),
+                _provider_call(provider, "get_etf_info", fund_code=symbol),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
@@ -1876,7 +1981,7 @@ async def get_index_weight(
         # 先下载指数权重数据（带超时）
         try:
             await asyncio.wait_for(
-                provider.call("download_index_weight"),
+                _provider_call(provider, "download_index_weight"),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
@@ -1887,7 +1992,7 @@ async def get_index_weight(
         # 获取指数权重（带超时）
         try:
             result = await asyncio.wait_for(
-                provider.call("get_index_weight", index_code=index),
+                _provider_call(provider, "get_index_weight", index_code=index),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
@@ -1939,7 +2044,7 @@ async def get_divid_factors(symbol: str = Query(..., description="股票代码")
         provider = await get_miniqmt_provider()
 
         # 通过 Actor 调用 xtdata.get_divid_factors
-        result = await provider.call("get_divid_factors", stock_code=symbol)
+        result = await _provider_call(provider, "get_divid_factors", stock_code=symbol)
 
         # 检查结果是否为空（处理 DataFrame/dict/None 等不同类型）
         import pandas as pd
@@ -1987,7 +2092,7 @@ async def get_markets() -> Dict[str, Any]:
     try:
         provider = await get_miniqmt_provider()
 
-        result = await provider.call("get_markets")
+        result = await _provider_call(provider, "get_markets")
 
         return {
             "success": True,
@@ -2013,7 +2118,7 @@ async def get_period_list() -> Dict[str, Any]:
     try:
         provider = await get_miniqmt_provider()
 
-        result = await provider.call("get_period_list")
+        result = await _provider_call(provider, "get_period_list")
 
         return {
             "success": True,
@@ -2160,7 +2265,7 @@ async def get_sector_stocks_with_names(
         provider = await get_miniqmt_provider()
 
         # 获取板块内股票列表
-        stock_list = await provider.call("get_stock_list_in_sector", sector_name=sector)
+        stock_list = await _provider_call(provider, "get_stock_list_in_sector", sector_name=sector)
 
         if not stock_list:
             return {
@@ -2175,7 +2280,7 @@ async def get_sector_stocks_with_names(
         result = []
         for symbol in stock_list:
             try:
-                detail = await provider.call("get_instrument_detail", stock_code=symbol)
+                detail = await _provider_call(provider, "get_instrument_detail", stock_code=symbol)
                 name = detail.get("InstrumentName", symbol) if detail else symbol
 
                 # 处理编码问题

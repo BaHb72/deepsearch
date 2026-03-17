@@ -100,3 +100,18 @@ def test_mark_amazingdata_runtime_unavailable_switches_to_partial() -> None:
     assert manager.phase == DaskInitPhase.PARTIAL
     assert manager._amazingdata_status.ready is False
     assert manager._amazingdata_status.error == "worker exited unexpectedly"
+
+
+def test_mark_amazingdata_runtime_recovered_switches_to_ready() -> None:
+    manager = DaskInitStateManager()
+    manager._phase = DaskInitPhase.PARTIAL
+    manager._scheduler_status.ready = True
+    manager._workers_status.ready = True
+    manager._amazingdata_status.ready = False
+    manager._amazingdata_status.error = "runtime lost"
+
+    manager.mark_amazingdata_runtime_recovered("tcp://localhost:58300")
+
+    assert manager.phase == DaskInitPhase.READY
+    assert manager._amazingdata_status.ready is True
+    assert manager._amazingdata_status.error is None

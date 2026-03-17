@@ -230,6 +230,7 @@ async def test_concept_flow_realtime_singleflight(monkeypatch):
     from apps.api.api.endpoints.amazingdata import concept as concept_endpoint
 
     calls = {"count": 0}
+    live_api._CONCEPT_FLOW_BREAKERS.clear()
     live_api._CONCEPT_FLOW_SINGLEFLIGHT.clear()
 
     async def fake_get_concept_velocity(limit: int):
@@ -283,3 +284,302 @@ async def test_concept_flow_realtime_singleflight(monkeypatch):
     assert calls["count"] == 1
     assert payload_a["count"] == 1
     assert payload_b["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_concept_flow_today_fallbacks_to_ths_concept_list(monkeypatch):
+    """今日概念资金流为空时，应回退到 THS 概念列表，避免页面空白。"""
+    live_api._CONCEPT_FLOW_BREAKERS.clear()
+    live_api._CONCEPT_FLOW_SINGLEFLIGHT.clear()
+
+    async def fake_fetch_akshare(limit: int, indicator_label: str):
+        return []
+
+    async def fake_fetch_ths(limit: int):
+        return [
+            {
+                "concept_name": "人工智能",
+                "concept_code": "BK001",
+                "main_net_inflow": None,
+                "main_net_inflow_pct": None,
+                "change_pct": None,
+                "leading_stock": "",
+                "flow_speed": None,
+            }
+        ]
+
+    async def fake_fetch_snapshot_empty(limit: int):
+        return []
+
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_akshare_singleflight",
+        fake_fetch_akshare,
+    )
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_akshare_snapshot_singleflight",
+        fake_fetch_snapshot_empty,
+    )
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_ths_singleflight",
+        fake_fetch_ths,
+    )
+
+    app = Starlette()
+    app.state.app_state = SimpleNamespace()
+    app.state.settings = SimpleNamespace()
+
+    async def empty_receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "app": app,
+            "method": "GET",
+            "path": "/api/market/live/concept-flow",
+            "headers": [],
+            "query_string": b"period=today&limit=10",
+        },
+        empty_receive,
+    )
+
+    response = await live_api.get_concept_flow(request, period="today", limit=10, source=None)
+    payload = json.loads(response.body.decode("utf-8"))
+
+    assert response.status_code == 200
+    assert payload["data_source"] == "ths_direct"
+    assert payload["stale"] is True
+    assert payload["count"] == 1
+    assert payload["items"][0]["concept_name"] == "人工智能"
+    assert payload["detail"]["code"] == "DATA_SOURCE_DEGRADED"
+
+
+@pytest.mark.asyncio
+async def test_concept_flow_today_fallbacks_to_akshare_snapshot_before_ths(monkeypatch):
+    """今日概念资金流主接口失败时，应先回退 AKShare 概念快照。"""
+    live_api._CONCEPT_FLOW_BREAKERS.clear()
+    live_api._CONCEPT_FLOW_SINGLEFLIGHT.clear()
+
+    async def fake_fetch_akshare(limit: int, indicator_label: str):
+        return []
+
+    async def fake_fetch_snapshot(limit: int):
+        return [
+            {
+                "concept_name": "AI应用",
+                "concept_code": "AKS-1",
+                "main_net_inflow": 12.5,
+                "main_net_inflow_pct": None,
+                "change_pct": 2.35,
+                "leading_stock": "示例A",
+                "flow_speed": 12.5,
+            }
+        ]
+
+    async def fake_fetch_ths(limit: int):
+        raise AssertionError("有 AKShare 概念快照时不应再回退 THS")
+
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_akshare_singleflight",
+        fake_fetch_akshare,
+    )
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_akshare_snapshot_singleflight",
+        fake_fetch_snapshot,
+    )
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_ths_singleflight",
+        fake_fetch_ths,
+    )
+
+    app = Starlette()
+    app.state.app_state = SimpleNamespace()
+    app.state.settings = SimpleNamespace()
+
+    async def empty_receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "app": app,
+            "method": "GET",
+            "path": "/api/market/live/concept-flow",
+            "headers": [],
+            "query_string": b"period=today&limit=10",
+        },
+        empty_receive,
+    )
+
+    response = await live_api.get_concept_flow(request, period="today", limit=10, source=None)
+    payload = json.loads(response.body.decode("utf-8"))
+
+    assert response.status_code == 200
+    assert payload["data_source"] == "akshare.stock_fund_flow_concept"
+    assert payload["stale"] is False
+    assert payload["count"] == 1
+    assert payload["items"][0]["concept_name"] == "AI应用"
+    assert payload["detail"]["code"] == "DATA_SOURCE_DEGRADED"
+
+
+@pytest.mark.asyncio
+async def test_concept_flow_week_does_not_retry_today_rank_when_week_rank_empty(monkeypatch):
+    """周口径为空时不应再次调用今日 rank 主链路，直接降级到快照。"""
+    live_api._CONCEPT_FLOW_BREAKERS.clear()
+    live_api._CONCEPT_FLOW_SINGLEFLIGHT.clear()
+
+    indicator_calls: list[str] = []
+
+    async def fake_fetch_akshare(limit: int, indicator_label: str):
+        indicator_calls.append(indicator_label)
+        return []
+
+    async def fake_fetch_snapshot(limit: int):
+        return [
+            {
+                "concept_name": "AI应用",
+                "concept_code": "AKS-1",
+                "main_net_inflow": 21.5,
+                "main_net_inflow_pct": None,
+                "change_pct": 1.25,
+                "leading_stock": "示例A",
+                "flow_speed": 21.5,
+            }
+        ]
+
+    async def fake_fetch_ths(limit: int):
+        raise AssertionError("有 AKShare 概念快照时不应再回退 THS")
+
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_akshare_singleflight",
+        fake_fetch_akshare,
+    )
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_akshare_snapshot_singleflight",
+        fake_fetch_snapshot,
+    )
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_ths_singleflight",
+        fake_fetch_ths,
+    )
+
+    app = Starlette()
+    app.state.app_state = SimpleNamespace()
+    app.state.settings = SimpleNamespace()
+
+    async def empty_receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "app": app,
+            "method": "GET",
+            "path": "/api/market/live/concept-flow",
+            "headers": [],
+            "query_string": b"period=week&limit=10",
+        },
+        empty_receive,
+    )
+
+    response = await live_api.get_concept_flow(request, period="week", limit=10, source=None)
+    payload = json.loads(response.body.decode("utf-8"))
+
+    assert response.status_code == 200
+    assert indicator_calls == ["5日"]
+    assert payload["data_source"] == "akshare.stock_fund_flow_concept"
+    assert payload["stale"] is True
+    assert payload["count"] == 1
+    assert payload["detail"]["code"] == "DATA_SOURCE_DEGRADED"
+
+
+@pytest.mark.asyncio
+async def test_concept_flow_realtime_skips_akshare_rank_when_breaker_open(monkeypatch):
+    """实时口径回退时，若 akshare 今日 rank 熔断开启，应直接走快照降级。"""
+    live_api._CONCEPT_FLOW_BREAKERS.clear()
+    live_api._CONCEPT_FLOW_SINGLEFLIGHT.clear()
+
+    breaker = live_api._get_concept_flow_breaker("今日")
+
+    async def always_fail():
+        raise RuntimeError("mock failure")
+
+    for _ in range(live_api._CONCEPT_FLOW_BREAKER_FAILURE_THRESHOLD):
+        with pytest.raises(RuntimeError):
+            await breaker.async_call(always_fail)
+
+    async def fake_realtime_fail(limit: int):
+        raise RuntimeError("amazingdata unavailable")
+
+    async def fake_fetch_akshare(limit: int, indicator_label: str):
+        raise AssertionError("熔断开启时不应调用 akshare rank 主链路")
+
+    async def fake_fetch_snapshot(limit: int):
+        return [
+            {
+                "concept_name": "AI应用",
+                "concept_code": "AKS-1",
+                "main_net_inflow": 9.9,
+                "main_net_inflow_pct": None,
+                "change_pct": 0.88,
+                "leading_stock": "示例A",
+                "flow_speed": 9.9,
+            }
+        ]
+
+    async def fake_fetch_ths(limit: int):
+        raise AssertionError("有 AKShare 概念快照时不应再回退 THS")
+
+    monkeypatch.setattr(live_api, "_fetch_realtime_concept_flow", fake_realtime_fail)
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_akshare_singleflight",
+        fake_fetch_akshare,
+    )
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_akshare_snapshot_singleflight",
+        fake_fetch_snapshot,
+    )
+    monkeypatch.setattr(
+        live_api,
+        "_fetch_concept_flow_from_ths_singleflight",
+        fake_fetch_ths,
+    )
+
+    app = Starlette()
+    app.state.app_state = SimpleNamespace()
+    app.state.settings = SimpleNamespace()
+
+    async def empty_receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "app": app,
+            "method": "GET",
+            "path": "/api/market/live/concept-flow",
+            "headers": [],
+            "query_string": b"period=realtime&limit=10",
+        },
+        empty_receive,
+    )
+
+    response = await live_api.get_concept_flow(request, period="realtime", limit=10, source=None)
+    payload = json.loads(response.body.decode("utf-8"))
+
+    assert response.status_code == 200
+    assert payload["data_source"] == "akshare.stock_fund_flow_concept"
+    assert payload["stale"] is False
+    assert payload["count"] == 1
+    assert payload["detail"]["code"] == "DATA_SOURCE_DEGRADED"
