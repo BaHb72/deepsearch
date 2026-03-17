@@ -616,7 +616,7 @@ uv run python -m apps.api.runner
 ### 相关文档
 
 - [Provider 架构设计](docs/development/provider_refactoring_implementation.md)
-- [后端启动错误报告](BACKEND_ERROR_REPORT.md)
+- [后端启动错误报告](../reports/diagnostics/backend_error_report_2026-01-16.md)
 - [生命周期协议定义](packages/core/infrastructure/providers/protocols/lifecycle.py)
 
 ---

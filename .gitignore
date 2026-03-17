@@ -207,6 +207,10 @@ runtime/interpreters/
 worker/
 .python-version
 .agent/
+.agents/
+/tmpclaude-*-cwd
+/tmp_cmd_output.txt
+/package-lock.json
 
 # ==================== Misc ====================
 /.claude/

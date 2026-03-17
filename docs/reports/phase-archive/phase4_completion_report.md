@@ -344,8 +344,8 @@ client_session: <aiohttp.client.ClientSession object at 0x...>
 3. `apps/api/api/endpoints/providers/__init__.py` - Provider 管理模块
 4. `apps/api/api/endpoints/providers/management.py` - Provider 管理 API
 5. `test_phase4_api_integration.py` - Phase 4 集成测试
-6. `PHASE4_PLAN.md` - Phase 4 计划文档
-7. `PHASE4_COMPLETION_REPORT.md` - 本报告
+6. `phase4_plan.md` - Phase 4 计划文档
+7. `phase4_completion_report.md` - 本报告
 
 ### 修改文件
 
