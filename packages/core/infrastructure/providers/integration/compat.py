@@ -105,17 +105,9 @@ class ProviderFactoryCompat:
 
             except Exception as create_error:
                 logger.error(f"ProviderFactoryCompat: 创建 Provider 失败: {create_error}")
-                # 最后尝试 fallback 到旧 Factory
-                try:
-                    from apps.api.api.providers import DataProviderFactory as OldFactory
-
-                    logger.warning(f"Fallback 到旧 DataProviderFactory: {normalized_type}")
-                    return await OldFactory.get_provider_async(normalized_type)
-                except Exception as fallback_error:
-                    logger.error(f"Fallback 也失败: {fallback_error}")
-                    raise RuntimeError(
-                        f"无法获取 Provider '{normalized_type}': {create_error}"
-                    ) from create_error
+                raise RuntimeError(
+                    f"无法通过 ProviderContainer 获取 Provider '{normalized_type}': {create_error}"
+                ) from create_error
 
     @staticmethod
     def _normalize_provider_type(provider_type: str | Any) -> str:

@@ -232,7 +232,7 @@ async def get_stock_info(
         return error_response(str(e))
 
 
-@router.get("/kline")
+@router.get("/market-kline")
 async def get_kline_data(
     response: Response,
     symbol: str = Query(..., description="股票代码"),

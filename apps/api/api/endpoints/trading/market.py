@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel
 
-from apps.api.api.providers import get_market_service
+from apps.api.api.service_deps import get_market_service
 
 router = APIRouter(prefix="/api/trading/market", tags=["�г�����"])
 
@@ -69,6 +69,105 @@ class DataSourceStatus(BaseModel):
     healthy: bool = True  # 是否健康
     latency: float = 0  # 平均延迟
     statistics: dict = {}  # 统计信息
+
+
+def _safe_service_statistics(service: Any) -> dict[str, Any]:
+    get_statistics = getattr(service, "get_statistics", None)
+    if not callable(get_statistics):
+        return {}
+
+    try:
+        stats = get_statistics()
+    except Exception as exc:
+        logger.debug(f"获取市场服务统计失败: {exc}")
+        return {}
+
+    return dict(stats) if isinstance(stats, dict) else {}
+
+
+def _infer_service_source(service: Any) -> str:
+    explicit_source = getattr(service, "data_source", None)
+    if isinstance(explicit_source, str) and explicit_source.strip():
+        return explicit_source
+
+    provider = getattr(service, "data_provider", None)
+    provider_name = getattr(provider, "name", None)
+    if isinstance(provider_name, str) and provider_name.strip():
+        return provider_name
+
+    return service.__class__.__name__
+
+
+def _infer_service_mode(service: Any, source: str) -> str:
+    explicit_mode = getattr(service, "data_source_mode", None)
+    if isinstance(explicit_mode, str) and explicit_mode.strip():
+        return explicit_mode
+
+    if getattr(service, "is_fallback_stub", False):
+        return "degraded"
+
+    provider = getattr(service, "data_provider", None)
+    worker_urls = getattr(provider, "worker_urls", None)
+    if isinstance(worker_urls, list) and worker_urls:
+        return "workers"
+
+    if "worker" in source.lower():
+        return "workers"
+
+    return "direct"
+
+
+def _infer_worker_url(service: Any) -> str:
+    provider = getattr(service, "data_provider", None)
+    worker_url = getattr(provider, "worker_url", None)
+    if isinstance(worker_url, str) and worker_url.strip():
+        return worker_url
+
+    worker_urls = getattr(provider, "worker_urls", None)
+    if isinstance(worker_urls, list) and worker_urls:
+        first = worker_urls[0]
+        return str(first) if first else ""
+
+    return ""
+
+
+def _infer_latency(statistics: dict[str, Any]) -> float:
+    for key in ("latency", "avg_latency", "average_latency", "response_time_avg"):
+        value = statistics.get(key)
+        try:
+            if value is not None:
+                return float(value)
+        except (TypeError, ValueError):
+            continue
+    return 0.0
+
+
+def _build_data_source_status(service: Any) -> DataSourceStatus:
+    statistics = _safe_service_statistics(service)
+    source = _infer_service_source(service)
+    mode = _infer_service_mode(service, source)
+    is_fallback = bool(getattr(service, "is_fallback_stub", False))
+    healthy = not is_fallback
+
+    if not healthy:
+        statistics.setdefault(
+            "reason",
+            getattr(
+                service, "data_source_reason", "market service fallback stub is serving requests"
+            ),
+        )
+        statistics["degraded"] = True
+
+    statistics.setdefault("service_class", service.__class__.__name__)
+
+    return DataSourceStatus(
+        source=source,
+        mode=mode,
+        worker_url=_infer_worker_url(service),
+        healthy=healthy,
+        latency=_infer_latency(statistics),
+        statistics=statistics,
+    )
 
 
 class MarketActivityResponse(BaseModel):
@@ -342,14 +441,69 @@ async def get_ths_concept_constituents(concept: str, service=Depends(get_market_
 
         provider = get_ths_provider()
         result = await provider.get_concept_constituents(concept)
-        if result["success"]:
-            return {"data": result["data"], "_data_source": result["source"]}
-        else:
-            logger.error(f"获取失败: {result.get('error')}")
-            raise HTTPException(status_code=500, detail=result.get("error", "Failed to get data"))
+        if result.get("success"):
+            return {
+                "data": result.get("data") or [],
+                "_data_source": result.get("source", "ths_direct"),
+                "note": result.get("note") or "",
+            }
+
+        logger.warning(f"THS 概念成分股接口失败，尝试降级回退: {result.get('error')}")
+
+        # 回退1：THS 概念列表匹配（保证页面有可视化数据）
+        list_result = await provider.get_concept_list()
+        if list_result.get("success"):
+            raw_items = list_result.get("data")
+            if isinstance(raw_items, list):
+                matched = []
+                token = concept.strip()
+                for item in raw_items:
+                    if not isinstance(item, dict):
+                        continue
+                    name = str(
+                        item.get("name") or item.get("板块名称") or item.get("概念名称") or ""
+                    )
+                    code = str(item.get("code") or item.get("板块代码") or "")
+                    if not token or token in name or token in code:
+                        matched.append(item)
+                if matched:
+                    return {
+                        "data": matched,
+                        "_data_source": "ths_direct.concept_list",
+                        "note": "THS 成分股明细暂不可用，已回退概念列表匹配结果。",
+                    }
+
+        # 回退2：尝试东方财富成分股接口
+        try:
+            from core.infrastructure.providers.integration.compat import get_provider_compat
+
+            akshare_provider = await get_provider_compat("akshare")
+            fallback_result = await akshare_provider.call_api(
+                api_name="stock_board_concept_cons_em",
+                params={"symbol": concept},
+            )
+            fallback_items = _extract_records_from_api_result(fallback_result)
+            if fallback_items:
+                return {
+                    "data": fallback_items,
+                    "_data_source": "akshare.stock_board_concept_cons_em",
+                    "note": "THS 成分股不可用，已回退东方财富概念成分股。",
+                }
+        except Exception as fallback_exc:
+            logger.warning(f"回退东方财富概念成分股失败: {fallback_exc}")
+
+        return {
+            "data": [],
+            "_data_source": "ths_direct",
+            "note": "当前数据源暂未返回该概念成分股数据，请稍后重试。",
+        }
     except Exception as e:
         logger.error(f"获取同花顺概念板块成份股失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {
+            "data": [],
+            "_data_source": "ths_direct",
+            "note": f"概念成分股接口异常: {e}",
+        }
 
 
 @router.get("/anomalies", response_model=List[AnomalyResponse])
@@ -427,22 +581,10 @@ async def get_data_source_status(service=Depends(get_market_service)):
         logger.debug("使用缓存的数据源状态")
         return _data_source_status_cache["data"]
 
-    # 简化处理 - 直接返回默认状态，避免超时
-    # 因为当前service可能没有初始化或者provider为空
-    default_status = DataSourceStatus(
-        source="direct:akshare",
-        mode="direct",
-        worker_url="",
-        healthy=True,
-        latency=0,
-        statistics={"note": "Using default status to avoid timeout"},
-    )
-
-    # 缓存默认结果
-    _data_source_status_cache["data"] = default_status
+    current_status = _build_data_source_status(service)
+    _data_source_status_cache["data"] = current_status
     _data_source_status_cache["timestamp"] = current_time
-
-    return default_status
+    return current_status
 
 
 @router.get("/stats")

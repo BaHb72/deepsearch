@@ -80,6 +80,20 @@ class DBStore:
         except Exception as e:
             logger.error(f"[DBStore] 初始化表失败: {e}")
 
+    def close(self) -> None:
+        """释放当前 Engine 持有的连接池资源。"""
+        engine = self._engine
+        if engine is None:
+            return
+
+        try:
+            engine.dispose()
+        except Exception as e:
+            logger.warning(f"[DBStore] 释放数据库引擎失败: {e}")
+        finally:
+            self._engine = None
+            self._initialized = False
+
     async def save_records(self, task_name: str, records: List[Dict[str, Any]]) -> bool:
         """
         保存记录到数据库

@@ -121,6 +121,18 @@ class AmazingDataDaskAdapter:
             return raw_value
         return str(raw_value)
 
+    async def _get_redis_ttl(self, key: str) -> int | None:
+        """在适配器边界读取 TTL，兼容不完整的类型声明。"""
+        if not self._redis:
+            return None
+
+        ttl_method = getattr(self._redis, "ttl", None)
+        if not callable(ttl_method):
+            return None
+
+        ttl_value = await ttl_method(key)
+        return ttl_value if isinstance(ttl_value, int) else None
+
     @staticmethod
     def _extract_worker_address(marker_value: str | None) -> str | None:
         """从 ready/heartbeat 标记中提取 worker 地址。"""
@@ -199,6 +211,46 @@ class AmazingDataDaskAdapter:
                 manager.mark_amazingdata_runtime_unavailable(reason)
         except Exception:
             logger.debug("[AmazingData/Dask] 写入 DaskInitState 失败", exc_info=True)
+
+    def _mark_actor_recovered(self) -> None:
+        """统一处理 Actor 运行时恢复状态。"""
+        was_unavailable = not self._actor_available or bool(self._last_runtime_issue)
+        self._actor_available = True
+        self._initialized = True
+        self._last_runtime_issue = None
+
+        if was_unavailable:
+            logger.info(
+                "[AmazingData/Dask] 检测到 Actor 运行时恢复 | worker={}",
+                self._windows_worker,
+            )
+
+        try:
+            from core.compute.dask_init_state import get_dask_init_manager_sync
+
+            manager = get_dask_init_manager_sync()
+            if manager is not None:
+                mark_recovered = getattr(manager, "mark_amazingdata_runtime_recovered", None)
+                if callable(mark_recovered):
+                    mark_recovered(self._windows_worker)
+        except Exception:
+            logger.debug("[AmazingData/Dask] 写入 DaskInitState 恢复状态失败", exc_info=True)
+
+    async def _attempt_runtime_recovery(self) -> bool:
+        """尝试通过 Redis 运行时标记恢复 Actor 可用状态。"""
+        if not self._initialized or not self._redis:
+            return False
+
+        runtime_alive, runtime_reason = await self._probe_actor_runtime()
+        if not runtime_alive:
+            logger.warning(
+                "[AmazingData/Dask] Actor 运行时恢复失败 | reason={}",
+                runtime_reason or "unknown",
+            )
+            return False
+
+        self._mark_actor_recovered()
+        return True
 
     # ==================== 连接管理 ====================
 
@@ -475,10 +527,12 @@ class AmazingDataDaskAdapter:
             )
 
         if not self._actor_available:
-            return HealthCheckResult(
-                status=HealthStatus.UNHEALTHY,
-                message="Actor 不可用",
-            )
+            recovered = await self._attempt_runtime_recovery()
+            if not recovered:
+                return HealthCheckResult(
+                    status=HealthStatus.UNHEALTHY,
+                    message="Actor 不可用",
+                )
 
         # 检查 Redis 连通性
         if self._redis:
@@ -499,6 +553,7 @@ class AmazingDataDaskAdapter:
                 message=reason,
                 details={"worker": self._windows_worker},
             )
+        self._mark_actor_recovered()
 
         # 检查 DaskInitManager 的 AmazingData 就绪状态
         try:
@@ -521,6 +576,55 @@ class AmazingDataDaskAdapter:
             status=HealthStatus.DEGRADED,
             message="Dask Worker 状态未知",
         )
+
+    async def get_runtime_marker_state(self) -> dict[str, Any]:
+        """获取 AmazingData Actor 运行时标记诊断信息。"""
+        state: dict[str, Any] = {
+            "marker_present": False,
+            "marker_worker": None,
+            "marker_ttl": None,
+            "ready_ttl": None,
+            "heartbeat_ttl": None,
+            "last_runtime_error": self._last_runtime_issue,
+        }
+
+        if not self._redis:
+            state["error"] = "redis_unavailable"
+            return state
+
+        try:
+            ready_raw = await self._redis.get(_ACTOR_READY_KEY)
+            heartbeat_raw = await self._redis.get(_ACTOR_HEARTBEAT_KEY)
+            ready_ttl = await self._get_redis_ttl(_ACTOR_READY_KEY)
+            heartbeat_ttl = await self._get_redis_ttl(_ACTOR_HEARTBEAT_KEY)
+
+            ready_value = self._decode_redis_value(ready_raw)
+            heartbeat_value = self._decode_redis_value(heartbeat_raw)
+            marker_value = heartbeat_value or ready_value
+            marker_worker = self._extract_worker_address(marker_value)
+
+            ttl_candidates = [
+                ttl for ttl in (ready_ttl, heartbeat_ttl) if isinstance(ttl, int) and ttl >= 0
+            ]
+            state.update(
+                {
+                    "marker_present": bool(marker_value),
+                    "marker_worker": marker_worker,
+                    "marker_ttl": max(ttl_candidates) if ttl_candidates else None,
+                    "ready_ttl": (
+                        ready_ttl if isinstance(ready_ttl, int) and ready_ttl >= 0 else None
+                    ),
+                    "heartbeat_ttl": (
+                        heartbeat_ttl
+                        if isinstance(heartbeat_ttl, int) and heartbeat_ttl >= 0
+                        else None
+                    ),
+                }
+            )
+            return state
+        except Exception as e:
+            state["error"] = str(e)
+            return state
 
     # ==================== 核心远程调用 ====================
 
@@ -559,12 +663,19 @@ class AmazingDataDaskAdapter:
             DataProviderError: 调用失败或超时
         """
         if not self._actor_available:
-            reason = (
-                f"Actor 不可用（最近异常: {self._last_runtime_issue}）"
-                if self._last_runtime_issue
-                else "Actor 不可用，请先调用 initialize()"
-            )
-            raise DataProviderError(reason)
+            recovered = await self._attempt_runtime_recovery()
+            if recovered:
+                logger.info(
+                    "[AmazingData/Dask] 调用前已恢复 Actor 可用状态 | method={}",
+                    method,
+                )
+            else:
+                reason = (
+                    f"Actor 不可用（最近异常: {self._last_runtime_issue}）"
+                    if self._last_runtime_issue
+                    else "Actor 不可用，请先调用 initialize()"
+                )
+                raise DataProviderError(reason)
 
         if not self._redis:
             raise DataProviderError("Redis 客户端未配置，无法获取调用结果")
@@ -1447,6 +1558,52 @@ class AmazingDataDaskAdapter:
 
     # ==================== 行业数据接口 ====================
 
+    @staticmethod
+    def _result_to_dataframe(result: Any) -> pd.DataFrame:
+        """将 Actor 返回结果转换为 DataFrame。"""
+        if result is None:
+            return pd.DataFrame()
+        if isinstance(result, pd.DataFrame):
+            return result.copy()
+        if isinstance(result, list):
+            return pd.DataFrame(result)
+        if isinstance(result, dict):
+            return pd.DataFrame(result)
+        return pd.DataFrame([result])
+
+    @classmethod
+    def _industry_result_to_dataframe(
+        cls,
+        result: Any,
+        *,
+        preferred_code: str | None = None,
+    ) -> pd.DataFrame:
+        """处理行业接口常见的 dict[index_code -> list[records]] 结构。"""
+        if not isinstance(result, dict):
+            return cls._result_to_dataframe(result)
+
+        normalized_code = str(preferred_code or "").strip().upper()
+        if normalized_code:
+            for key, value in result.items():
+                key_token = str(key or "").strip().upper()
+                if key_token == normalized_code:
+                    return cls._result_to_dataframe(value)
+
+        frames: list[pd.DataFrame] = []
+        for key, value in result.items():
+            frame = cls._result_to_dataframe(value)
+            if frame.empty:
+                continue
+            if "INDEX_CODE" not in frame.columns:
+                frame = frame.copy()
+                frame["INDEX_CODE"] = str(key)
+            frames.append(frame)
+
+        if frames:
+            return pd.concat(frames, ignore_index=True)
+
+        return cls._result_to_dataframe(result)
+
     async def get_industry_daily(
         self,
         industry_code: str,
@@ -1463,14 +1620,15 @@ class AmazingDataDaskAdapter:
         Returns:
             DataFrame: 行业日线数据
         """
-        kwargs: dict[str, Any] = {"industry_code": industry_code}
+        # SDK v1.0.4: get_industry_daily(code_list, local_path, is_local, **kwargs)
+        kwargs: dict[str, Any] = {"code_list": [industry_code]}
         if begin_date is not None:
             kwargs["begin_date"] = begin_date
         if end_date is not None:
             kwargs["end_date"] = end_date
 
         result = await self._call_actor("get_industry_daily", **kwargs)
-        return pd.DataFrame(result) if result else pd.DataFrame()
+        return self._industry_result_to_dataframe(result, preferred_code=industry_code)
 
     async def get_industry_weight(
         self,
@@ -1486,12 +1644,13 @@ class AmazingDataDaskAdapter:
         Returns:
             DataFrame: 行业权重数据
         """
-        kwargs: dict[str, Any] = {"industry_code": industry_code}
+        # SDK v1.0.4: get_industry_weight(code_list, local_path, is_local, **kwargs)
+        kwargs: dict[str, Any] = {"code_list": [industry_code]}
         if date is not None:
             kwargs["date"] = date
 
         result = await self._call_actor("get_industry_weight", **kwargs)
-        return pd.DataFrame(result) if result else pd.DataFrame()
+        return self._industry_result_to_dataframe(result, preferred_code=industry_code)
 
     async def get_industry_constituent(
         self,
@@ -1507,12 +1666,18 @@ class AmazingDataDaskAdapter:
         Returns:
             DataFrame: 行业成分股数据
         """
-        kwargs: dict[str, Any] = {"industry_code": industry_code}
         if date is not None:
-            kwargs["date"] = date
+            logger.debug(
+                "[AmazingData/Dask] get_industry_constituent 忽略 date 参数: {}",
+                date,
+            )
 
-        result = await self._call_actor("get_industry_constituent", **kwargs)
-        return pd.DataFrame(result) if result else pd.DataFrame()
+        # SDK v1.0.4: get_industry_constituent(code_list, local_path, is_local)
+        result = await self._call_actor(
+            "get_industry_constituent",
+            code_list=[industry_code],
+        )
+        return self._industry_result_to_dataframe(result, preferred_code=industry_code)
 
     async def get_industry_base_info(
         self,
@@ -1526,11 +1691,14 @@ class AmazingDataDaskAdapter:
         Returns:
             DataFrame: 行业基础信息
         """
-        kwargs: dict[str, Any] = {}
         if industry_type is not None:
-            kwargs["industry_type"] = industry_type
+            logger.debug(
+                "[AmazingData/Dask] get_industry_base_info 忽略 industry_type 参数: {}",
+                industry_type,
+            )
 
-        result = await self._call_actor("get_industry_base_info", **kwargs)
+        # SDK v1.0.4: get_industry_base_info(local_path, is_local)
+        result = await self._call_actor("get_industry_base_info")
         return pd.DataFrame(result) if result else pd.DataFrame()
 
     # ==================== 特色数据接口 ====================
@@ -1839,6 +2007,7 @@ class AmazingDataDaskAdapter:
 
     async def shutdown(self) -> None:
         """关闭 Adapter"""
+        await self.stop()
         self._actor_available = False
         self._initialized = False
 

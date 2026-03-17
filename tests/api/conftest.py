@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
 # 配置日志
+logger_manager.set_log_path(Path("data/logs/tests/api"))
 logger_manager.start()
 logger = get_logger(__name__)
 

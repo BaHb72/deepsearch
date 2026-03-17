@@ -119,6 +119,7 @@ class CacheScheduler:
 
     async def _store_to_db(self, task: CacheTask, data: Any) -> None:
         """持久化数据到数据库"""
+        db_store = None
         try:
             from core.core.scheduler.storage.db_store import DBStore
 
@@ -129,6 +130,9 @@ class CacheScheduler:
                 logger.debug(f"[Scheduler] DB 持久化成功: {task.name}, {len(records)} 条")
         except Exception as e:
             logger.error(f"[Scheduler] DB 持久化失败: {e}")
+        finally:
+            if db_store is not None:
+                db_store.close()
 
     async def start(self) -> None:
         """启动调度器"""
@@ -215,6 +219,7 @@ class CacheScheduler:
     async def restore_from_db(self) -> None:
         """从数据库恢复缓存"""
         logger.info("[Scheduler] 从数据库恢复缓存...")
+        db_store = None
         try:
             from core.core.scheduler.storage.db_store import DBStore
 
@@ -240,6 +245,9 @@ class CacheScheduler:
                         )
         except Exception as e:
             logger.error(f"[Scheduler] 恢复缓存失败: {e}")
+        finally:
+            if db_store is not None:
+                db_store.close()
 
     def get_status(self) -> Dict[str, Any]:
         """获取调度器状态"""

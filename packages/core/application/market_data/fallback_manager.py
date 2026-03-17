@@ -13,10 +13,14 @@ from core.config.models.market_data import (
     MarketModuleFallbackConfig,
 )
 from core.config.settings import Settings
+from core.infrastructure.providers.container import ProviderContainer
 from loguru import logger
 
 if TYPE_CHECKING:
-    from core.application.market_data.orchestrator import RealtimeRuntimeHandle
+    from core.application.market_data.orchestrator import (
+        RealtimeDataOrchestrator,
+        RealtimeRuntimeHandle,
+    )
 
 
 def _iso_now() -> str:
@@ -36,11 +40,20 @@ class FallbackFetchResult:
 class ModuleFallbackManager:
     """Coordinates module-level fallback fetches without disturbing primary runtime."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        orchestrator: "RealtimeDataOrchestrator | None" = None,
+        provider_container: ProviderContainer | None = None,
+    ) -> None:
         from core.application.market_data.orchestrator import RealtimeDataOrchestrator
 
         self._settings = settings
-        self._orchestrator = RealtimeDataOrchestrator(settings)
+        self._orchestrator = orchestrator or RealtimeDataOrchestrator(
+            settings,
+            provider_container=provider_container,
+        )
         self._locks: Dict[Tuple[str, str], asyncio.Lock] = {}
         self._last_fetch: Dict[Tuple[str, str], datetime] = {}
 
@@ -84,6 +97,12 @@ class ModuleFallbackManager:
                     "writer_source": handle.cache_writer.data_source,
                     "boards": list(getattr(handle.pipeline, "boards", ())),
                 }
+                logger.info(
+                    "模块 fallback 拉取完成: module={} source={} writer_source={}",
+                    module_name,
+                    source_name,
+                    handle.cache_writer.data_source,
+                )
                 return FallbackFetchResult(
                     module=module_name, source=source_name, status="ok", detail=detail
                 )

@@ -30,7 +30,7 @@ async def get_metrics() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/cache/stats")
+@router.get("/metrics/cache/stats")
 async def get_cache_stats() -> Dict[str, Any]:
     """获取缓存统计信息"""
     try:

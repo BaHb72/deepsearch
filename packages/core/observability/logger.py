@@ -78,6 +78,7 @@ class LoggerManager:
         self.log_path: Path = Path("data/logs")
         self.log_level: str = "INFO"
         self._started: bool = False
+        self._path_override: bool = False
         self._logging_bridge_installed: bool = False
         self._datasource_sinks: Dict[str, int] = {}
         self._datasource_configs: Dict[str, None] = {}
@@ -255,6 +256,9 @@ class LoggerManager:
     def _load_log_configuration(self) -> None:
         """从全局设置加载并应用日志配置。"""
 
+        if self._path_override:
+            return
+
         try:
             from core.config import get_config
 
@@ -304,6 +308,12 @@ class LoggerManager:
             if modules_config.retention_days is not None
             else None
         )
+
+    def set_log_path(self, path: Path | str) -> None:
+        """显式覆盖日志目录，后续 start() 不再从 settings.log_dir 回写。"""
+
+        self.log_path = Path(path)
+        self._path_override = True
 
     def _normalize_module_name(self, raw_name: Optional[str]) -> str:
         """Normalize module identifier while keeping readable labels"""

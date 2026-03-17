@@ -251,7 +251,7 @@ class SeriesResponse(BaseModel):
     timestamp: str
 
 
-@router.get("/series", response_model=SeriesResponse)
+@router.get("/legacy/series", response_model=SeriesResponse)
 @handle_api_exceptions
 async def get_series(
     symbol: str = Query(..., description="股票代码"),
@@ -305,7 +305,7 @@ async def get_series(
     return data
 
 
-@router.post("/indicators")
+@router.post("/legacy/indicators")
 async def calculate_indicators(request: IndicatorsRequest):
     """
     计算技术指标
@@ -512,33 +512,16 @@ async def get_stock_list(keyword: Optional[str] = Query(None, description="搜�
         return data
     except Exception as e:
         logger.error(f"获取股票列表失败: {e}")
-        # 如果服务失败，返回模拟数据
-        mock_stocks = [
-            {"code": "000001", "name": "平安银行", "label": "平安银行 (000001)", "value": "000001"},
-            {"code": "000002", "name": "万科A", "label": "万科A (000002)", "value": "000002"},
-            {"code": "000858", "name": "五粮液", "label": "五粮液 (000858)", "value": "000858"},
-            {"code": "002415", "name": "海康威视", "label": "海康威视 (002415)", "value": "002415"},
-            {"code": "300750", "name": "宁德时代", "label": "宁德时代 (300750)", "value": "300750"},
-            {"code": "600000", "name": "浦发银行", "label": "浦发银行 (600000)", "value": "600000"},
-            {"code": "600036", "name": "招商银行", "label": "招商银行 (600036)", "value": "600036"},
-            {"code": "600519", "name": "贵州茅台", "label": "贵州茅台 (600519)", "value": "600519"},
-            {"code": "601318", "name": "中国平安", "label": "中国平安 (601318)", "value": "601318"},
-            {"code": "601606", "name": "长城军工", "label": "长城军工 (601606)", "value": "601606"},
-        ]
-
-        if keyword:
-            keyword_lower = keyword.lower()
-            filtered = [
-                s
-                for s in mock_stocks
-                if keyword_lower in s["code"].lower() or keyword_lower in s["name"].lower()
-            ]
-            return filtered
-
-        return mock_stocks
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "CHART_STOCK_LIST_UNAVAILABLE",
+                "message": "图表股票列表服务暂不可用，请稍后重试",
+            },
+        ) from e
 
 
-@router.get("/chip-distribution")
+@router.get("/legacy/chip-distribution")
 async def get_chip_distribution(
     symbol: str = Query(..., description="股票代码"),
     lookback_days: int = Query(120, description="回看天数"),

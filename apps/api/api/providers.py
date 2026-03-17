@@ -1179,6 +1179,10 @@ async def get_market_service():
 
     class _FallbackMarketService:
         data_provider = None
+        data_source = "fallback:market-service-stub"
+        data_source_mode = "degraded"
+        data_source_reason = "real market service providers are unavailable"
+        is_fallback_stub = True
 
         async def get_market_overview(self):
 
@@ -1238,7 +1242,123 @@ async def get_market_service():
 
         async def get_anomalies(self, kind="all", min_change=0, min_amount=0):
             """获取异动数据"""
-            return []
+            try:
+                provider = await _get_fallback_akshare_direct_provider()
+            except Exception as e:
+                logger.error(f"FallbackMarketService.get_anomalies 初始化 provider 失败: {e}")
+                return []
+
+            kind_map = {
+                "all": ["大笔买入", "火箭发射", "封涨停板", "封跌停板"],
+                "limit_up": ["封涨停板"],
+                "limit_down": ["封跌停板"],
+                "price_surge": ["火箭发射", "快速反弹"],
+                "volume_spike": ["大笔买入", "大笔卖出"],
+            }
+            change_types = kind_map.get(str(kind or "all"), kind_map["all"])
+
+            def _to_float(value: Any, default: float = 0.0) -> float:
+                try:
+                    if value is None:
+                        return default
+                    if isinstance(value, str):
+                        token = value.replace(",", "").strip()
+                        if not token:
+                            return default
+                        return float(token)
+                    return float(value)
+                except Exception:
+                    return default
+
+            def _parse_related_info(raw: Any) -> tuple[float, float, float]:
+                """解析 stock_changes_em 的相关信息字段：volume,price,change,amount。"""
+                text = str(raw or "").strip()
+                if not text:
+                    return 0.0, 0.0, 0.0
+                parts = [part.strip() for part in text.split(",")]
+                price = _to_float(parts[1], 0.0) if len(parts) >= 2 else 0.0
+                change_raw = _to_float(parts[2], 0.0) if len(parts) >= 3 else 0.0
+                amount = _to_float(parts[3], 0.0) if len(parts) >= 4 else 0.0
+                change_pct = change_raw * 100 if -1.0 <= change_raw <= 1.0 else change_raw
+                return price, change_pct, amount
+
+            anomalies: list[dict[str, Any]] = []
+            for change_type in change_types:
+                try:
+                    result = await provider.call_api(
+                        api_name="stock_changes_em",
+                        params={"symbol": change_type},
+                    )
+                except Exception as error:
+                    logger.debug(f"Fallback anomalies call_api 失败({change_type}): {error}")
+                    continue
+
+                if not isinstance(result, dict):
+                    continue
+                records = result.get("data")
+                if not isinstance(records, list):
+                    continue
+
+                for row in records:
+                    if not isinstance(row, dict):
+                        continue
+                    symbol = str(row.get("代码") or row.get("symbol") or "")
+                    name = str(row.get("名称") or row.get("name") or "")
+                    if not symbol and not name:
+                        continue
+
+                    event_time = str(row.get("时间") or row.get("time") or "")
+                    if event_time and len(event_time) <= 12 and "T" not in event_time:
+                        event_time = f"{now().strftime('%Y-%m-%d')} {event_time}"
+
+                    price_raw, change_pct_raw, amount_raw = _parse_related_info(row.get("相关信息"))
+                    price = _to_float(row.get("最新价"), price_raw)
+                    change_pct = _to_float(row.get("涨跌幅"), change_pct_raw)
+                    if change_pct == 0.0:
+                        change_pct = change_pct_raw
+                    amount = amount_raw
+
+                    if min_change and abs(change_pct) < float(min_change):
+                        continue
+                    if min_amount and amount < float(min_amount):
+                        continue
+
+                    anomalies.append(
+                        {
+                            "symbol": symbol,
+                            "name": name,
+                            "price": price,
+                            "change_pct": change_pct,
+                            "amount": amount,
+                            "reason": str(row.get("板块") or change_type),
+                            "timestamp": event_time,
+                            "extra": {
+                                "change_type": change_type,
+                                "board": row.get("板块"),
+                                "info": row.get("相关信息"),
+                                "source": "akshare.stock_changes_em",
+                            },
+                        }
+                    )
+
+            deduped: list[dict[str, Any]] = []
+            seen: set[tuple[str, str, str]] = set()
+            for item in anomalies:
+                key = (
+                    str(item.get("symbol") or ""),
+                    str(item.get("timestamp") or ""),
+                    str(item.get("reason") or ""),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                deduped.append(item)
+
+            deduped.sort(
+                key=lambda item: str(item.get("timestamp") or ""),
+                reverse=True,
+            )
+            return deduped[:300]
 
         async def get_market_activity(self):
             """获取赚钱效应数据"""

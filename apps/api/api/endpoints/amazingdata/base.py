@@ -48,6 +48,14 @@ async def get_amazingdata_provider():
     """
     from core.compute.dask_init_state import get_dask_init_manager_sync
 
+    from apps.api.api.provider_deps import resolve_provider
+
+    provider = await resolve_provider("amazingdata", strict=False)
+    if provider is not None:
+        is_initialized = getattr(provider, "_initialized", True)
+        if is_initialized:
+            return provider
+
     manager = get_dask_init_manager_sync()
 
     if manager is not None:

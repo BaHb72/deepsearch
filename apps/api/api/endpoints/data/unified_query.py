@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Iterable, List, Optional
 
 from core.application.services.unified_data import get_unified_feed
@@ -192,6 +192,54 @@ def _normalize_date_int(value: Any) -> int | None:
         return None
 
 
+def _normalize_stock_symbol(symbol: str) -> str:
+    raw = str(symbol or "").strip().upper()
+    if not raw:
+        return ""
+    if "." not in raw:
+        return raw
+    left, right = raw.split(".", 1)
+    if left in {"SH", "SZ", "BJ"} and right:
+        return f"{right}.{left}"
+    return raw
+
+
+def _strip_market_suffix(symbol: str) -> str:
+    normalized = _normalize_stock_symbol(symbol)
+    if "." not in normalized:
+        return normalized
+    code, market = normalized.rsplit(".", 1)
+    if market in {"SH", "SZ", "BJ"}:
+        return code
+    return normalized
+
+
+def _append_market_suffix(symbol: str) -> str:
+    normalized = _normalize_stock_symbol(symbol)
+    if "." in normalized:
+        return normalized
+    if len(normalized) != 6 or not normalized.isdigit():
+        return normalized
+    if normalized.startswith(("0", "3")):
+        return f"{normalized}.SZ"
+    if normalized.startswith(("6", "9")):
+        return f"{normalized}.SH"
+    if normalized.startswith(("4", "8")):
+        return f"{normalized}.BJ"
+    return normalized
+
+
+def _stock_symbol_candidates(symbol: str) -> list[str]:
+    normalized = _normalize_stock_symbol(symbol)
+    stripped = _strip_market_suffix(normalized)
+    suffixed = _append_market_suffix(stripped)
+    candidates: list[str] = []
+    for item in (normalized, suffixed, stripped):
+        if item and item not in candidates:
+            candidates.append(item)
+    return candidates
+
+
 def _select_sources(
     capability: str,
     params: dict[str, Any],
@@ -203,7 +251,7 @@ def _select_sources(
         return [preferred] if preferred else []
 
     if capability == "realtime_quote":
-        base = [DataSourceType.MINIQMT, DataSourceType.AMAZINGDATA]
+        base = [DataSourceType.MINIQMT, DataSourceType.AMAZINGDATA, DataSourceType.AKSHARE]
     elif capability == "tick_data":
         base = [DataSourceType.MINIQMT, DataSourceType.AMAZINGDATA]
     elif capability == "stock_kline":
@@ -239,6 +287,32 @@ def _select_sources(
     if preferred and preferred in available:
         ordered = [preferred] + [src for src in ordered if src != preferred]
     return ordered
+
+
+def _provider_call_timeout_seconds(
+    capability: str,
+    source: DataSourceType,
+    strict_source: bool,
+) -> float | None:
+    """按能力与来源提供单次调用超时（仅用于非 strict 模式）。"""
+    if strict_source:
+        return None
+
+    if capability in {"realtime_quote", "tick_data"}:
+        if source == DataSourceType.AKSHARE:
+            return 20.0
+        if source == DataSourceType.AMAZINGDATA:
+            return 12.0
+        return 8.0
+
+    if capability == "stock_kline":
+        if source == DataSourceType.AMAZINGDATA:
+            return 20.0
+        if source == DataSourceType.AKSHARE:
+            return 35.0
+        return 20.0
+
+    return None
 
 
 def _coerce_rows(payload: Any) -> list[dict[str, Any]]:
@@ -284,6 +358,21 @@ def _coerce_rows(payload: Any) -> list[dict[str, Any]]:
                 row.setdefault("symbol", str(symbol))
                 mapped_rows.append(row)
             return mapped_rows
+        if payload and all(
+            isinstance(value, (list, tuple))
+            or isinstance(value, dict)
+            or (hasattr(value, "to_dict") and callable(getattr(value, "to_dict")))
+            or hasattr(value, "records")
+            for value in payload.values()
+        ):
+            mapped_rows: list[dict[str, Any]] = []
+            for symbol, value in payload.items():
+                rows = _coerce_rows(value)
+                for row in rows:
+                    row.setdefault("symbol", str(symbol))
+                    mapped_rows.append(row)
+            if mapped_rows:
+                return mapped_rows
         return [dict(payload)]
     return []
 
@@ -299,6 +388,134 @@ async def _invoke_method(provider: Any, method_name: str, *args: Any, **kwargs: 
     if asyncio.iscoroutine(result):
         return await result
     return result
+
+
+def _normalize_realtime_rows(
+    rows: list[dict[str, Any]], symbols: list[str]
+) -> list[dict[str, Any]]:
+    symbol_hint = symbols[0] if len(symbols) == 1 else ""
+    normalized: list[dict[str, Any]] = []
+    quote_keys = (
+        "price",
+        "last",
+        "last_price",
+        "close",
+        "current",
+        "最新价",
+        "收盘",
+        "volume",
+        "amount",
+        "change",
+        "change_pct",
+    )
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item = dict(row)
+        symbol = str(
+            item.get("symbol")
+            or item.get("code")
+            or item.get("SECURITY_CODE")
+            or item.get("market_code")
+            or ""
+        ).strip()
+        if not symbol and symbol_hint:
+            symbol = symbol_hint
+        if symbol:
+            item.setdefault("symbol", symbol)
+
+        non_empty_keys = [
+            key
+            for key, value in item.items()
+            if value is not None and not (isinstance(value, str) and not value.strip())
+        ]
+        if not non_empty_keys:
+            continue
+
+        has_quote_value = any(
+            item.get(key) is not None
+            and not (isinstance(item.get(key), str) and not item.get(key).strip())
+            for key in quote_keys
+        )
+        error_value = item.get("error") or item.get("errmsg") or item.get("message")
+        if error_value and not has_quote_value:
+            continue
+        if not has_quote_value:
+            non_symbol_keys = [
+                key
+                for key in non_empty_keys
+                if key
+                not in {
+                    "symbol",
+                    "code",
+                    "SECURITY_CODE",
+                    "market_code",
+                    "error",
+                    "errmsg",
+                    "message",
+                }
+            ]
+            if not non_symbol_keys:
+                continue
+
+        normalized.append(item)
+
+    return normalized
+
+
+def _is_akshare_proxy_provider(provider: Any) -> bool:
+    if provider is None:
+        return False
+    provider_cls = provider.__class__
+    cls_name = provider_cls.__name__.lower()
+    module_name = provider_cls.__module__.lower()
+    if "cloudflare" in module_name:
+        return True
+    if "proxy" in cls_name and "akshare" not in cls_name:
+        return True
+    proxy_info = getattr(provider, "proxy_info", None)
+    if isinstance(proxy_info, dict) and bool(proxy_info.get("enabled")):
+        return True
+    return False
+
+
+async def _get_akshare_direct_fallback_provider() -> Any | None:
+    """复用 providers 层已有的直连 AKShare 单例。"""
+    try:
+        from apps.api.api.service_deps import get_akshare_direct_fallback_provider
+    except Exception as exc:
+        logger.warning(f"加载 AKShare 直连兜底 provider 失败: {exc}")
+        return None
+
+    try:
+        return await get_akshare_direct_fallback_provider()
+    except Exception as exc:
+        logger.warning(f"初始化 AKShare 直连兜底 provider 失败: {exc}")
+        return None
+
+
+async def _resolve_runtime_provider(
+    source: DataSourceType,
+    capability: str,
+    provider: Any | None,
+) -> tuple[Any | None, str]:
+    provider_name = source.value
+
+    # Cloudflare 代理 provider 仅覆盖部分 AkShare 能力；对以下能力优先切到
+    # 直连 AkShare provider，避免“声明支持但运行时方法缺失”导致空结果。
+    if source == DataSourceType.AKSHARE and capability in {
+        "stock_kline",
+        "realtime_quote",
+        "block_trading",
+        "sector_capital_flow",
+    }:
+        if provider is None or _is_akshare_proxy_provider(provider):
+            direct_provider = await _get_akshare_direct_fallback_provider()
+            if direct_provider is not None:
+                return direct_provider, "akshare_direct"
+
+    return provider, provider_name
 
 
 async def _run_capability_call(
@@ -317,41 +534,141 @@ async def _run_capability_call(
     if capability == "realtime_quote":
         if not symbols:
             return [], "missing_symbol"
+
+        candidate_batches: list[list[str]] = []
+
+        def _append_batch(batch_symbols: list[str]) -> None:
+            normalized_batch = [str(item) for item in batch_symbols if str(item).strip()]
+            if not normalized_batch:
+                return
+            if normalized_batch not in candidate_batches:
+                candidate_batches.append(normalized_batch)
+
+        _append_batch(symbols)
         if len(symbols) == 1:
-            single = await _invoke_method(provider, "get_realtime_quote", symbols[0])
-            if single:
-                return _coerce_rows(single), None
-        batch = await _invoke_method(provider, "get_realtime_quotes", symbols)
-        return _coerce_rows(batch), None
+            plain = _strip_market_suffix(symbols[0])
+            suffixed = _append_market_suffix(plain)
+            normalized = _normalize_stock_symbol(symbols[0])
+            single_candidates = [item for item in (plain, suffixed, normalized) if item]
+            for candidate in single_candidates:
+                _append_batch([candidate])
+        else:
+            stripped_batch = [_strip_market_suffix(item) for item in symbols]
+            suffixed_batch = [_append_market_suffix(_strip_market_suffix(item)) for item in symbols]
+            _append_batch(stripped_batch)
+            _append_batch(suffixed_batch)
+
+        for batch_symbols in candidate_batches:
+            batch = await _invoke_method(provider, "get_realtime_quotes", batch_symbols)
+            rows = _normalize_realtime_rows(_coerce_rows(batch), batch_symbols)
+            if rows:
+                return rows, None
+
+        if len(symbols) == 1:
+            plain = _strip_market_suffix(symbols[0])
+            suffixed = _append_market_suffix(plain)
+            normalized = _normalize_stock_symbol(symbols[0])
+            single_candidates = [item for item in (plain, suffixed, normalized) if item]
+            for single_symbol in single_candidates:
+                # 兼容 MiniQMT IDataFeed: get_realtime_quote(symbols: list[str])
+                single_list = await _invoke_method(provider, "get_realtime_quote", [single_symbol])
+                rows = _normalize_realtime_rows(_coerce_rows(single_list), [single_symbol])
+                if rows:
+                    return rows, None
+
+                # 兼容 AKShare: get_realtime_quote(symbol: str)
+                single = await _invoke_method(provider, "get_realtime_quote", single_symbol)
+                rows = _normalize_realtime_rows(_coerce_rows(single), [single_symbol])
+                if rows:
+                    return rows, None
+
+        return [], None
 
     if capability == "stock_kline":
         symbol = symbols[0] if symbols else ""
         if not symbol:
             return [], "missing_symbol"
         period = str(params.get("period", "1d"))
-        start_date = params.get("startDate") or params.get("start_date")
-        end_date = params.get("endDate") or params.get("end_date")
-        limit = int(params.get("limit", 100) or 100)
-        payload = await _invoke_method(
-            provider,
-            "get_kline_data",
-            symbol=symbol,
-            period=period,
-            start_date=start_date,
-            end_date=end_date,
-            limit=limit,
-        )
-        if payload is None:
+        start_date_raw = params.get("startDate") or params.get("start_date")
+        end_date_raw = params.get("endDate") or params.get("end_date")
+        limit_raw = params.get("limit", params.get("count", 100))
+        try:
+            limit = int(limit_raw or 100)
+        except (TypeError, ValueError):
+            limit = 100
+        symbol_candidates = _stock_symbol_candidates(symbol)
+
+        end_int = _normalize_date_int(end_date_raw)
+        if end_int is None:
+            end_int = int(datetime.now().strftime("%Y%m%d"))
+
+        begin_int = _normalize_date_int(start_date_raw)
+        if begin_int is None:
+            lookback_days = max(limit * 2, 120) if limit > 0 else 120
+            begin_int = int((datetime.now() - timedelta(days=lookback_days)).strftime("%Y%m%d"))
+
+        if begin_int > end_int:
+            begin_int, end_int = end_int, begin_int
+
+        start_date = str(begin_int)
+        end_date = str(end_int)
+
+        for candidate in symbol_candidates:
             payload = await _invoke_method(
                 provider,
-                "get_stock_hist",
-                symbol=symbol,
+                "get_kline_data",
+                symbol=candidate,
                 period=period,
                 start_date=start_date,
                 end_date=end_date,
                 limit=limit,
             )
-        return _coerce_rows(payload), None
+            rows = _coerce_rows(payload)
+            if rows:
+                if limit > 0 and len(rows) > limit:
+                    return rows[-limit:], None
+                return rows, None
+
+        for candidate in symbol_candidates:
+            payload = await _invoke_method(
+                provider,
+                "get_stock_hist",
+                symbol=candidate,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            rows = _coerce_rows(payload)
+            if rows:
+                if limit > 0 and len(rows) > limit:
+                    return rows[-limit:], None
+                return rows, None
+
+        query_codes: list[str] = []
+        for candidate in symbol_candidates:
+            suffixed = _append_market_suffix(candidate)
+            if suffixed and suffixed not in query_codes:
+                query_codes.append(suffixed)
+        for candidate in symbol_candidates:
+            if candidate and candidate not in query_codes:
+                query_codes.append(candidate)
+
+        for query_code in query_codes:
+            payload = await _invoke_method(
+                provider,
+                "query_kline",
+                code_list=[query_code],
+                begin_date=begin_int,
+                end_date=end_int,
+                period=period,
+            )
+            rows = _coerce_rows(payload)
+            if rows:
+                if limit > 0 and len(rows) > limit:
+                    return rows[-limit:], None
+                return rows, None
+
+        return [], None
 
     if capability == "stock_list":
         payload = await _invoke_method(provider, "get_stock_list_records")
@@ -625,11 +942,16 @@ async def _query_capability_with_fallback(
 
     attempts: list[RouteAttempt] = []
     for source in source_order:
-        provider = manager.providers.get(source)
+        origin_provider = manager.providers.get(source)
+        provider, provider_name = await _resolve_runtime_provider(
+            source=source,
+            capability=capability,
+            provider=origin_provider,
+        )
         if provider is None:
             attempts.append(
                 RouteAttempt(
-                    provider=source.value,
+                    provider=provider_name,
                     success=False,
                     reason_code=FallbackReasonCode.PROVIDER_UNAVAILABLE,
                     reason_detail="provider_missing",
@@ -639,13 +961,20 @@ async def _query_capability_with_fallback(
             continue
 
         started = time.perf_counter()
+        provider_timeout = _provider_call_timeout_seconds(capability, source, strict_source)
         try:
-            rows, problem = await _run_capability_call(provider, capability, params)
+            if provider_timeout is not None:
+                rows, problem = await asyncio.wait_for(
+                    _run_capability_call(provider, capability, params),
+                    timeout=provider_timeout,
+                )
+            else:
+                rows, problem = await _run_capability_call(provider, capability, params)
             latency_ms = int((time.perf_counter() - started) * 1000)
             if rows:
                 attempts.append(
                     RouteAttempt(
-                        provider=source.value,
+                        provider=provider_name,
                         success=True,
                         reason_code=None,
                         reason_detail=None,
@@ -656,7 +985,7 @@ async def _query_capability_with_fallback(
                 if len(attempts) > 1:
                     fallback_reason = attempts[-2].reason_code or FallbackReasonCode.PROVIDER_ERROR
                 meta = RoutedResponseMeta(
-                    source=source.value,
+                    source=provider_name,
                     fallback_reason=fallback_reason,
                     attempts=tuple(attempts),
                 )
@@ -669,7 +998,7 @@ async def _query_capability_with_fallback(
 
             attempts.append(
                 RouteAttempt(
-                    provider=source.value,
+                    provider=provider_name,
                     success=False,
                     reason_code=(
                         FallbackReasonCode.CAPABILITY_NOT_SUPPORTED
@@ -681,19 +1010,24 @@ async def _query_capability_with_fallback(
                 )
             )
         except asyncio.TimeoutError as exc:
+            timeout_detail = (
+                f"provider_timeout>{provider_timeout:.1f}s"
+                if provider_timeout is not None
+                else str(exc) or "timeout"
+            )
             attempts.append(
                 RouteAttempt(
-                    provider=source.value,
+                    provider=provider_name,
                     success=False,
                     reason_code=FallbackReasonCode.PROVIDER_TIMEOUT,
-                    reason_detail=str(exc),
+                    reason_detail=timeout_detail,
                     latency_ms=int((time.perf_counter() - started) * 1000),
                 )
             )
         except Exception as exc:
             attempts.append(
                 RouteAttempt(
-                    provider=source.value,
+                    provider=provider_name,
                     success=False,
                     reason_code=FallbackReasonCode.PROVIDER_ERROR,
                     reason_detail=str(exc),
@@ -1072,7 +1406,7 @@ async def get_capabilities():
     获取当前统一查询可用能力与数据源。
     """
     capabilities = {
-        "realtime_quote": ["miniqmt", "amazingdata"],
+        "realtime_quote": ["miniqmt", "amazingdata", "akshare"],
         "tick_data": ["miniqmt", "amazingdata"],
         "stock_kline": ["miniqmt", "amazingdata", "akshare"],
         "stock_list": ["amazingdata", "akshare", "miniqmt"],

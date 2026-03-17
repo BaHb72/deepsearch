@@ -560,7 +560,7 @@ async def clean_old_data(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.get("/stocks")
+@router.get("/stock-list")
 async def get_stocks(
     limit: int = Query(100, description="返回股票数量限制")
 ) -> List[Dict[str, Any]]:

@@ -354,10 +354,23 @@ async def ensure_market_data_runtime(
                 config_obj, provider_container=provider_container
             )
             app_state.market_data_orchestrator = orchestrator
+            backend_runtime = getattr(app_state, "backend_runtime", None)
+            if backend_runtime is not None:
+                backend_runtime.market_data_orchestrator = orchestrator
 
         if getattr(app_state, "market_data_fallback_manager", None) is None:
             try:
-                app_state.market_data_fallback_manager = ModuleFallbackManager(config_obj)
+                provider_container = getattr(app_state, "provider_container", None)
+                app_state.market_data_fallback_manager = ModuleFallbackManager(
+                    config_obj,
+                    orchestrator=orchestrator,
+                    provider_container=provider_container,
+                )
+                backend_runtime = getattr(app_state, "backend_runtime", None)
+                if backend_runtime is not None:
+                    backend_runtime.market_data_fallback_manager = (
+                        app_state.market_data_fallback_manager
+                    )
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning("初始化 fallback 管理器失败: {}", exc)
 
@@ -385,6 +398,9 @@ async def ensure_market_data_runtime(
             return
 
         await bind_market_data_handle(app_state, orchestrator, handle, realtime_cfg)
+        backend_runtime = getattr(app_state, "backend_runtime", None)
+        if backend_runtime is not None:
+            backend_runtime.market_data_service = getattr(app_state, "market_data_service", None)
 
     finally:
         app_state.market_data_initializing = False

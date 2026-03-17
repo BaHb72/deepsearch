@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.routing import APIRoute
 
 if not TYPE_CHECKING:
     setattr(builtins, "Optional", Optional)
@@ -35,6 +36,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
+
+from apps.api.runtime import BackendRuntime
 
 if TYPE_CHECKING:
     from core.application.market_data.orchestrator import RealtimeDataOrchestrator
@@ -103,6 +106,47 @@ class SafeJSONResponse(JSONResponse):
         if isinstance(rendered, str):
             return rendered.encode("utf-8")
         return cast(bytes, rendered)
+
+
+def ensure_backend_runtime(app: FastAPI) -> BackendRuntime:
+    """确保 app.state 中存在统一的后端运行时对象。"""
+
+    runtime = getattr(app.state, "backend_runtime", None)
+    if not isinstance(runtime, BackendRuntime):
+        runtime = BackendRuntime()
+        app.state.backend_runtime = runtime
+    return runtime
+
+
+def assert_unique_route_signatures(app: FastAPI) -> None:
+    """校验 `(path, method)` 唯一，避免重复路由掩盖真实实现。"""
+
+    route_map: dict[tuple[str, tuple[str, ...]], list[str]] = {}
+    ignored_methods = {"HEAD", "OPTIONS"}
+
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+
+        methods = tuple(sorted(method for method in route.methods if method not in ignored_methods))
+        if not methods:
+            continue
+
+        signature = (route.path, methods)
+        endpoint_name = f"{route.endpoint.__module__}.{route.endpoint.__name__}"
+        route_map.setdefault(signature, []).append(endpoint_name)
+
+    duplicates = {
+        signature: endpoints for signature, endpoints in route_map.items() if len(endpoints) > 1
+    }
+    if not duplicates:
+        return
+
+    detail = "; ".join(
+        f"{path} {','.join(methods)} -> {endpoints}"
+        for (path, methods), endpoints in sorted(duplicates.items())
+    )
+    raise RuntimeError(f"检测到重复路由注册: {detail}")
 
 
 class MessageBatcher:
@@ -431,6 +475,7 @@ class AppState:
         self.market_data_lock = asyncio.Lock()
         self.market_data_fallback_manager: ModuleFallbackManager | None = None
         self.provider_container: Any = None  # ProviderContainer 实例（用于 orchestrator 复用）
+        self.backend_runtime: BackendRuntime | None = None
 
     @diagnostic_logger.diagnostic_method
     def set_engine(self, engine: MainEngine) -> None:
@@ -658,6 +703,10 @@ async def lifespan(app: FastAPI):
         logger.warning("Lifespan 启动时无运行中的事件循环")
 
     # === STARTUP ===
+    backend_runtime = ensure_backend_runtime(app)
+    if hasattr(app.state, "app_state") and app.state.app_state is not None:
+        app.state.app_state.backend_runtime = backend_runtime
+
     # 首先确保日志系统已正确初始化
     try:
         from core.observability.logger import logger_manager
@@ -677,6 +726,7 @@ async def lifespan(app: FastAPI):
         logger.info("初始化 ProviderContainer...")
         provider_container = ProviderContainer()
         app.state.provider_container = provider_container
+        backend_runtime.provider_container = provider_container
 
         # 同步到 AppState 实例，便于 market_data_runtime/orchestrator 访问
         if hasattr(app.state, "app_state") and app.state.app_state is not None:
@@ -705,6 +755,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"ProviderContainer 初始化失败（非致命）: {e}")
         app.state.provider_container = None
+        backend_runtime.provider_container = None
 
     # 初始化数据库组件（确保在正确的事件循环中）
     try:
@@ -723,11 +774,15 @@ async def lifespan(app: FastAPI):
         # 存储到 app.state 供依赖注入使用
         app.state.db_component = db_component
         app.state.db_service = DatabaseService(db_component)
+        backend_runtime.db_component = db_component
+        backend_runtime.db_service = app.state.db_service
         logger.info("数据库连接池已在 lifespan 中初始化并覆盖全局组件")
     except Exception as e:
         logger.warning(f"lifespan 中初始化数据库失败: {e}")
         app.state.db_component = None
         app.state.db_service = None
+        backend_runtime.db_component = None
+        backend_runtime.db_service = None
 
     # 启动 Dask 集群（后台异步初始化，不阻塞 Uvicorn 端口监听）
     # 这是关键优化：Dask Worker 初始化需要 15-25 秒，移到后台可让 Uvicorn 立即响应
@@ -741,9 +796,11 @@ async def lifespan(app: FastAPI):
             name="dask_background_init",
         )
         app.state.dask_init_manager = dask_init_manager
+        backend_runtime.dask_init_manager = dask_init_manager
         logger.info("Dask 后台初始化任务已启动（Uvicorn 将立即开始监听端口）")
     except Exception as e:
         logger.warning(f"启动 Dask 后台初始化失败: {e}")
+        backend_runtime.dask_init_manager = None
 
     # 初始化 UnifiedDataFeed（核心数据访问层）
     # 注意：此时 Dask Worker 可能还在后台初始化中，AmazingData adapter 可能尚不可用
@@ -782,9 +839,11 @@ async def lifespan(app: FastAPI):
             quota_guard=NotificationQuotaGuard(),
         )
         get_ctx().register_service("notifications", notification_service)
+        backend_runtime.notification_service = notification_service
         logger.info("通知推送服务已初始化")
     except Exception as e:
         logger.warning(f"通知推送服务初始化失败（非致命）: {e}")
+        backend_runtime.notification_service = None
 
     # 初始化 AI 分析服务（仅当配置启用时）
     try:
@@ -832,6 +891,7 @@ async def lifespan(app: FastAPI):
     dask_init_manager_state: Any = getattr(app.state, "dask_init_manager", None)
     if dask_init_manager_state is not None:
         await dask_init_manager_state.shutdown()
+    backend_runtime.dask_init_manager = None
 
     # 停止定时 GC 任务
     try:
@@ -852,6 +912,7 @@ async def lifespan(app: FastAPI):
             logger.info("ProviderContainer 已关闭")
         except Exception as e:
             logger.warning(f"关闭 ProviderContainer 失败: {e}")
+    backend_runtime.provider_container = None
 
     # 清理数据库连接池
     db_component_raw = getattr(app.state, "db_component", None)
@@ -861,6 +922,8 @@ async def lifespan(app: FastAPI):
             logger.info("数据库连接池已在 lifespan 中关闭")
         except Exception as e:
             logger.warning(f"关闭数据库连接池失败: {e}")
+    backend_runtime.db_component = None
+    backend_runtime.db_service = None
 
     # 关闭通知推送服务
     try:
@@ -875,6 +938,7 @@ async def lifespan(app: FastAPI):
                 logger.info("通知推送服务已关闭")
     except Exception as e:
         logger.warning(f"关闭通知推送服务失败: {e}")
+    backend_runtime.notification_service = None
 
     # 关闭 AI 客户端
     ai_client_state: Any = getattr(app.state, "ai_client", None)
@@ -933,6 +997,8 @@ def create_app() -> FastAPI:
 
     # 存储全局应用状态
     app.state.app_state = app_state
+    app.state.backend_runtime = BackendRuntime()
+    app_state.backend_runtime = app.state.backend_runtime
 
     # 设置全局异常处理器
     try:
@@ -1293,8 +1359,6 @@ def create_app() -> FastAPI:
         from apps.api.api.endpoints.market import router as market_analysis_router
 
         app.include_router(market_analysis_router, prefix="/api", tags=["Market Analysis"])
-        app.include_router(market_live_router, tags=["Market Live"])
-        logger.info("市场数据实时API已注册")
         logger.info("市场分析API已注册")
     except ImportError as e:
         logger.warning(f"市场分析API模块加载失败: {e}")
@@ -1538,7 +1602,7 @@ async def health_check():
     return {"status": "healthy", "details": {}}
 
 
-@app.post("/api/frontend/errors")
+@app.post("/api/frontend/error-report")
 async def report_frontend_error(error: Dict[str, Any]) -> Dict[str, Any]:
     """前端错误上报接口"""
     # 仅在开发环境记录详细信息
@@ -1546,6 +1610,9 @@ async def report_frontend_error(error: Dict[str, Any]) -> Dict[str, Any]:
     if settings and settings.app.env == "dev":
         logger.warning(f"Frontend error: {error}")
     return {"success": True, "message": "Error reported"}
+
+
+assert_unique_route_signatures(app)
 
 
 # 向后兼容的函数

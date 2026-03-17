@@ -46,7 +46,7 @@ def get_cache_component():
         raise HTTPException(status_code=500, detail=f"获取缓存组件失败: {str(e)}")
 
 
-@router.get("/status")
+@router.get("/component/status")
 async def get_cache_status() -> Dict[str, Any]:
     """
     获取 Redis 缓存详细状态
@@ -237,7 +237,7 @@ async def connect_cache(request: CacheConnectRequest) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"连接失败: {str(e)}")
 
 
-@router.post("/disconnect")
+@router.post("/component/disconnect")
 async def disconnect_cache() -> Dict[str, Any]:
     """
     手动断开 Redis 缓存连接
@@ -266,7 +266,7 @@ async def disconnect_cache() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"断开失败: {str(e)}")
 
 
-@router.post("/reconnect")
+@router.post("/component/reconnect")
 async def reconnect_cache() -> Dict[str, Any]:
     """
     重新连接 Redis 缓存（先断开再连接）
@@ -296,7 +296,7 @@ async def reconnect_cache() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"重连失败: {str(e)}")
 
 
-@router.get("/info")
+@router.get("/component/info")
 async def get_cache_info() -> Dict[str, Any]:
     """
     获取 Redis 详细信息
