@@ -112,11 +112,153 @@ export interface EngineStartRequest {
     use_real_data?: boolean;
 }
 
+export type StrategyCategory =
+    | 'trend_following'
+    | 'mean_reversion'
+    | 'momentum'
+    | 'composite'
+    | 'custom';
+
+export type StrategyParamType = 'int' | 'float' | 'bool' | 'str' | 'list';
+
+export interface StrategyParamDef {
+    type: StrategyParamType;
+    default: unknown;
+    min?: number;
+    max?: number;
+    step?: number;
+    label?: string;
+    description?: string;
+    choices?: unknown[];
+}
+
+export interface StrategyMeta {
+    id: string;
+    file: string;
+    class: string;
+    name: string;
+    description?: string;
+    category: StrategyCategory;
+    tags: string[];
+    params: Record<string, StrategyParamDef>;
+    enabled: boolean;
+    version: string;
+    author: string;
+}
+
+export interface StrategyListResponse {
+    strategies: StrategyMeta[];
+    total: number;
+    categories: Record<string, number>;
+}
+
+export interface StrategyParamsResponse {
+    strategy_id: string;
+    params: Record<string, StrategyParamDef>;
+    defaults: Record<string, unknown>;
+}
+
+export type AggregationMethod = 'weighted_avg' | 'vote' | 'unanimous';
+
+export type SignalDirection = 'buy' | 'sell' | 'hold';
+
+export interface StrategyWeight {
+    strategy_id: string;
+    weight: number;
+    enabled: boolean;
+    params?: Record<string, unknown>;
+}
+
+export interface CompositeStrategy {
+    id: string;
+    name: string;
+    description?: string;
+    components: StrategyWeight[];
+    aggregation: AggregationMethod;
+    signal_threshold: number;
+    created_at: string;
+    updated_at: string;
+    author: string;
+    tags: string[];
+}
+
+export interface CompositeListResponse {
+    composites: CompositeStrategy[];
+    total: number;
+}
+
+export interface CompositeSignal {
+    composite_id: string;
+    symbol: string;
+    timestamp: string;
+    component_signals: Record<string, number>;
+    aggregated_signal: number;
+    direction: SignalDirection;
+    confidence: number;
+}
+
+export interface StockPoolItem {
+    id: string;
+    name: string;
+    description?: string;
+    count?: number;
+    enabled?: boolean;
+}
+
+export interface StockPoolListResponse {
+    pools: StockPoolItem[];
+}
+
+export interface ScreeningRequestPayload {
+    composite_id?: string;
+    strategy_ids?: string[];
+    stock_pool?: string[];
+    params?: Record<string, boolean | number | string>;
+    signal_threshold?: number;
+    limit?: number;
+}
+
+export interface QuickScreenRequestPayload {
+    strategy_id: string;
+    stock_pool?: string[];
+    limit?: number;
+    params?: Record<string, boolean | number | string>;
+}
+
+export interface BatchScreenRequestPayload {
+    strategy_ids: string[];
+    weights?: Record<string, number>;
+    stock_pool?: string[];
+    signal_threshold?: number;
+    limit?: number;
+}
+
+export interface ScreeningResult {
+    symbol: string;
+    name?: string;
+    score: number;
+    direction: SignalDirection;
+    component_signals: Record<string, number>;
+    rank: number;
+}
+
+export interface ScreeningResponse {
+    request_id: string;
+    composite_id?: string;
+    strategy_ids: string[];
+    results: ScreeningResult[];
+    total_scanned: number;
+    total_matched: number;
+    executed_at: string;
+    duration_ms: number;
+}
+
 // ============================================
 // API 函数
 // ============================================
 
-const BASE_PATH = '/strategy-center/ttrading';
+const STRATEGY_CENTER_BASE_PATH = '/strategy-center';
+const BASE_PATH = `${STRATEGY_CENTER_BASE_PATH}/ttrading`;
 
 /**
  * 获取默认做T配置
@@ -191,6 +333,76 @@ export const getEngineSnapshot = async (
  */
 export const getDatasourceStatus = async (): Promise<DatasourceStatus> => {
     const res = await request.get(`${BASE_PATH}/datasource/status`);
+    return res?.data ?? res;
+};
+
+// ============================================
+// 策略中心管理 API
+// ============================================
+
+export const getStrategies = async (params?: {
+    category?: string;
+    enabled_only?: boolean;
+}): Promise<StrategyListResponse> => {
+    const query = new URLSearchParams();
+    if (params?.category) {
+        query.set('category', params.category);
+    }
+    if (typeof params?.enabled_only === 'boolean') {
+        query.set('enabled_only', String(params.enabled_only));
+    }
+    const qs = query.toString();
+    const res = await request.get(`${STRATEGY_CENTER_BASE_PATH}/strategies${qs ? `?${qs}` : ''}`);
+    return res?.data ?? res;
+};
+
+export const getStrategyParams = async (strategyId: string): Promise<StrategyParamsResponse> => {
+    const res = await request.get(`${STRATEGY_CENTER_BASE_PATH}/strategies/${strategyId}/params`);
+    return res?.data ?? res;
+};
+
+export const getComposites = async (): Promise<CompositeListResponse> => {
+    const res = await request.get(`${STRATEGY_CENTER_BASE_PATH}/composites`);
+    return res?.data ?? res;
+};
+
+export const getCompositeById = async (compositeId: string): Promise<CompositeStrategy> => {
+    const res = await request.get(`${STRATEGY_CENTER_BASE_PATH}/composites/${compositeId}`);
+    return res?.data ?? res;
+};
+
+export const testCompositeSignal = async (payload: {
+    composite_id: string;
+    symbol: string;
+    mock_signals?: Record<string, number>;
+}): Promise<CompositeSignal> => {
+    const res = await request.post(`${STRATEGY_CENTER_BASE_PATH}/composites/test-signal`, payload);
+    return res?.data ?? res;
+};
+
+export const getStockPools = async (): Promise<StockPoolListResponse> => {
+    const res = await request.get(`${STRATEGY_CENTER_BASE_PATH}/screener/stock-pools`);
+    return res?.data ?? res;
+};
+
+export const screenStocks = async (
+    payload: ScreeningRequestPayload
+): Promise<ScreeningResponse> => {
+    const res = await request.post(`${STRATEGY_CENTER_BASE_PATH}/screener`, payload);
+    return res?.data ?? res;
+};
+
+export const quickScreenStocks = async (
+    payload: QuickScreenRequestPayload
+): Promise<ScreeningResponse> => {
+    const res = await request.post(`${STRATEGY_CENTER_BASE_PATH}/screener/quick`, payload);
+    return res?.data ?? res;
+};
+
+export const batchScreenStocks = async (
+    payload: BatchScreenRequestPayload
+): Promise<ScreeningResponse> => {
+    const res = await request.post(`${STRATEGY_CENTER_BASE_PATH}/screener/batch`, payload);
     return res?.data ?? res;
 };
 
@@ -557,6 +769,16 @@ export const strategyCenterAPI = {
     getEngineSignals,
     getEngineSnapshot,
     getDatasourceStatus,
+    // 策略管理/组合/选股
+    getStrategies,
+    getStrategyParams,
+    getComposites,
+    getCompositeById,
+    testCompositeSignal,
+    getStockPools,
+    screenStocks,
+    quickScreenStocks,
+    batchScreenStocks,
     // 监控列表
     getWatchlist,
     addToWatchlist,

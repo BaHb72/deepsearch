@@ -3,21 +3,15 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Badge, Button, Dropdown, Switch, } from 'antd'
 import {
   BellOutlined,
-  CodeOutlined,
-  DashboardOutlined,
-  DatabaseOutlined,
-  FileTextOutlined,
-  FlagOutlined,
-  LineChartOutlined,
   LogoutOutlined,
   MoonOutlined,
-  SettingOutlined,
   SunOutlined,
   UserOutlined,
 } from '@ant-design/icons'
 import { ProLayout } from '@ant-design/pro-components'
 import { useTheme } from '@/contexts/ThemeContext'
 import { useSystemStore } from '@/stores'
+import { buildMenuRouteTree } from '@/router/manifest'
 // import { useRealtimeSource } from '@/contexts/RealtimeSourceContext' // TODO: 准备用于数据源切换
 import JobStatusIndicator from '@/components/common/JobStatusIndicator'
 import './index.scss'
@@ -30,125 +24,7 @@ const MainLayout: React.FC = () => {
   // const realtimeSource = useRealtimeSource() // TODO: 准备用于数据源切换
   // const { message } = AntApp.useApp() // TODO: 准备用于数据源切换
 
-
-
-  const route = useMemo(() => ({
-    path: '/',
-    routes: [
-      {
-        path: '/',
-        name: '实时总览',
-        icon: <DashboardOutlined />,
-      },
-      {
-        path: '/market',
-        name: '行情数据',
-        icon: <LineChartOutlined />,
-      },
-      {
-        path: '/strategy',
-        name: '策略中心',
-        icon: <FlagOutlined />,
-        routes: [
-          {
-            path: '/strategy/manager',
-            name: '策略管理',
-          },
-          {
-            path: '/strategy/composite',
-            name: '策略组合',
-          },
-          {
-            path: '/strategy/ttrading',
-            name: '日内做T',
-          },
-          {
-            path: '/strategy/backtest',
-            name: '策略回测',
-          },
-        ],
-      },
-      {
-        path: '/monitor/market',
-        name: '市场监控',
-        icon: <DashboardOutlined />,
-      },
-      {
-        path: '/monitor',
-        name: '系统监控',
-        icon: <DatabaseOutlined />,
-        routes: [
-          {
-            path: '/monitor/datasource',
-            name: '数据源监控',
-          },
-          {
-            path: '/events',
-            name: '事件系统',
-          },
-          {
-            path: '/monitor/cache',
-            name: '缓存系统',
-          },
-          {
-            path: '/monitor/performance',
-            name: '性能分析',
-          },
-          {
-            path: '/monitor/alert',
-            name: '告警管理',
-          },
-          {
-            path: '/monitor/component',
-            name: '组件管理',
-          },
-        ],
-      },
-      {
-        path: '/system',
-        name: '系统管理',
-        icon: <SettingOutlined />,
-        routes: [
-          {
-            path: '/system/config',
-            name: '系统配置',
-          },
-          {
-            path: '/datasource/explorer',
-            name: '数据源浏览器',
-          },
-          {
-            path: '/datasource/matrix',
-            name: '能力矩阵对比',
-          },
-          {
-            path: '/system/logs',
-            name: '日志查看',
-            icon: <FileTextOutlined />,
-          },
-          {
-            path: '/system/memory',
-            name: '内存管理',
-          },
-        ]
-      },
-      {
-        path: '/dev',
-        name: '开发工具',
-        icon: <CodeOutlined />,
-        routes: [
-          {
-            path: '/dev/amazingdata',
-            name: 'AmazingData Playground',
-          },
-          {
-            path: '/dev/miniqmt',
-            name: 'MiniQMT Playground',
-          },
-        ]
-      },
-    ],
-  }), [])
+  const route = useMemo(() => buildMenuRouteTree(), [])
 
   const userMenuItems = [
     {

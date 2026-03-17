@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PageContainer, ProCard } from '@ant-design/pro-components';
 import {
     Form,
@@ -12,20 +12,39 @@ import {
     Table,
     message,
     Typography,
-    Divider
+    Divider,
 } from 'antd';
 import { Line } from '@ant-design/charts';
 import { PlayCircleOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { strategyAPI, StrategyType, StrategyParameter, BacktestResult, BacktestTrade } from '../../api/strategy';
+import { strategyAPI, StrategyType, BacktestResult, BacktestTrade } from '../../api/strategy';
+import {
+    StrategyParamForm,
+    buildDefaultParamValues,
+    fromGeneratorStrategyParams,
+    toPayloadParamMap,
+    type UnifiedParamDef,
+    type UnifiedParamMap,
+} from '../../components/strategy';
 
 const { Text } = Typography;
 const { RangePicker } = DatePicker;
+
+interface GeneratorFormValues {
+    strategy_type: string;
+    symbols: string[];
+    dateRange: [dayjs.Dayjs, dayjs.Dayjs];
+    initial_capital: number;
+    commission: number;
+    params?: UnifiedParamMap;
+}
 
 const StrategyGenerator: React.FC = () => {
     const [form] = Form.useForm();
     const [strategyTypes, setStrategyTypes] = useState<StrategyType[]>([]);
     const [selectedStrategy, setSelectedStrategy] = useState<StrategyType | null>(null);
+    const [paramDefinitions, setParamDefinitions] = useState<Record<string, UnifiedParamDef>>({});
+    const [paramValues, setParamValues] = useState<UnifiedParamMap>({});
     const [loading, setLoading] = useState(false);
     const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
 
@@ -43,41 +62,65 @@ const StrategyGenerator: React.FC = () => {
     }, []);
 
     const handleStrategyChange = (value: string) => {
-        const strategy = strategyTypes.find(s => s.type === value);
+        const strategy = strategyTypes.find((item) => item.type === value);
         setSelectedStrategy(strategy || null);
-        // Reset dynamic fields if needed, or set defaults
+
         if (strategy) {
-            const defaultParams: Record<string, any> = {};
-            Object.entries(strategy.params).forEach(([key, config]: [string, StrategyParameter]) => {
-                defaultParams[key] = config.default;
-            });
-            form.setFieldsValue({ params: defaultParams });
+            const nextDefinitions = fromGeneratorStrategyParams(strategy.params);
+            const defaults = buildDefaultParamValues(nextDefinitions);
+            setParamDefinitions(nextDefinitions);
+            setParamValues(defaults);
+            form.setFieldsValue({ params: defaults });
+            return;
         }
+
+        setParamDefinitions({});
+        setParamValues({});
+        form.setFieldsValue({ params: {} });
     };
 
-    const handleRunBacktest = async (values: any) => {
+    const handleRunBacktest = async (values: GeneratorFormValues) => {
         setLoading(true);
         setBacktestResult(null);
         try {
             const { strategy_type, symbols, dateRange, initial_capital, commission, params } = values;
+            const resolvedParams = toPayloadParamMap(paramDefinitions, params || paramValues);
+            const missingKeys = Object.entries(paramDefinitions)
+                .filter(([key, def]) => {
+                    const resolved = resolvedParams[key];
+                    if (resolved === undefined) {
+                        return true;
+                    }
+                    if (def.type === 'str' || def.type === 'select' || def.type === 'list') {
+                        return String(resolved).trim() === '';
+                    }
+                    return false;
+                })
+                .map(([key]) => key);
+
+            if (missingKeys.length) {
+                message.warning(`请完善策略参数：${missingKeys.join('、')}`);
+                return;
+            }
 
             // Format request
             const requestData = {
                 strategy_type,
-                symbols: Array.isArray(symbols) ? symbols : [symbols], // Support multiple symbols if UI implies
+                symbols: Array.isArray(symbols) ? symbols : [symbols],
                 start_date: dateRange[0].format('YYYY-MM-DD'),
                 end_date: dateRange[1].format('YYYY-MM-DD'),
                 initial_capital,
-                commission, // 用户输入已经是小数形式（如0.0003表示0.03%）
-                strategy_params: params
+                commission,
+                strategy_params: resolvedParams,
             };
 
             const result = await strategyAPI.runBacktest(requestData);
             setBacktestResult(result);
             message.success('回测完成');
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error(error);
-            message.error(error.message || '回测失败');
+            const text = error instanceof Error ? error.message : '回测失败';
+            message.error(text);
         } finally {
             setLoading(false);
         }
@@ -96,7 +139,7 @@ const StrategyGenerator: React.FC = () => {
             title: { text: '资金权益' },
         },
         tooltip: {
-            formatter: (datum: any) => {
+            formatter: (datum: { equity: number }) => {
                 return { name: '权益', value: datum.equity.toFixed(2) };
             },
         },
@@ -184,25 +227,15 @@ const StrategyGenerator: React.FC = () => {
 
                         <Divider orientation="left">策略参数</Divider>
 
-                        {selectedStrategy ? (
-                            Object.entries(selectedStrategy.params).map(([key, config]: [string, StrategyParameter]) => (
-                                <Form.Item
-                                    key={key}
-                                    name={['params', key]}
-                                    label={key}
-                                    tooltip={config.description}
-                                    rules={[{ required: true, message: '必填' }]}
-                                >
-                                    {config.type === 'int' ? <InputNumber precision={0} style={{ width: '100%' }} /> :
-                                        config.type === 'float' ? <InputNumber step={0.1} style={{ width: '100%' }} /> :
-                                            <InputNumber style={{ width: '100%' }} />}
-                                </Form.Item>
-                            ))
-                        ) : (
-                            <div style={{ textAlign: 'center', color: '#999', padding: '20px 0' }}>
-                                请先选择策略类型
-                            </div>
-                        )}
+                        <StrategyParamForm
+                            definitions={paramDefinitions}
+                            value={paramValues}
+                            onChange={(next) => {
+                                setParamValues(next);
+                                form.setFieldsValue({ params: next });
+                            }}
+                            emptyText={selectedStrategy ? '当前策略未声明可配置参数。' : '请先选择策略类型'}
+                        />
 
                         <Form.Item style={{ marginTop: 24 }}>
                             <Button type="primary" htmlType="submit" icon={<PlayCircleOutlined />} loading={loading} block size="large">
