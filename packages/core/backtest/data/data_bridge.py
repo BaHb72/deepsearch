@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 import pandas as pd
 from loguru import logger
 
+from .history_status_overlay import apply_history_status_overlay, coerce_status_dataframe
+
 bt: Any
 
 try:
@@ -178,6 +180,24 @@ class DataBridge:
         df = self.clean_data(df)
 
         return df
+
+    def apply_history_status_overlay(
+        self,
+        bars_df: pd.DataFrame,
+        *,
+        status_payload: Any,
+        symbol: str,
+        strict: bool = True,
+    ) -> pd.DataFrame:
+        """统一入口：按交易日覆盖 history_stock_status 约束。"""
+
+        status_df = coerce_status_dataframe(status_payload)
+        return apply_history_status_overlay(
+            bars_df,
+            status_df,
+            symbol=symbol,
+            strict=strict,
+        )
 
     def standardize_fields(self, df: pd.DataFrame) -> pd.DataFrame:
         """

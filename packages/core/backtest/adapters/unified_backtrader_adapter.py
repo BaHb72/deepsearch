@@ -13,9 +13,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import pandas as pd
 from core.infrastructure.providers.managers.data_source_manager import get_data_manager
+from core.ports.data_sources import DataSourceType
 from loguru import logger
 
 from ..data.data_bridge import DataBridge
+from ..data.history_status_overlay import HistoryStatusOverlayError, coerce_status_dataframe
 
 bt: Any
 
@@ -60,6 +62,188 @@ class UnifiedBacktraderAdapter:
         self.data_bridge = DataBridge()
         self._cache: Dict[str, pd.DataFrame] = {}
         self._initialized = False
+
+    @staticmethod
+    def _normalize_symbol(symbol: str) -> str:
+        return symbol.strip().upper().replace("-", "").replace("_", "")
+
+    @classmethod
+    def _is_a_share_symbol(cls, symbol: str) -> bool:
+        normalized = cls._normalize_symbol(symbol)
+        if not normalized:
+            return False
+
+        def _is_a_stock_code(code_part: str, market: Optional[str] = None) -> bool:
+            if not (code_part.isdigit() and len(code_part) == 6):
+                return False
+
+            prefix = code_part[:3]
+            if market == "SH":
+                return prefix in {"600", "601", "603", "605", "688", "689"}
+            if market == "SZ":
+                return prefix in {"000", "001", "002", "003", "300", "301"}
+            if market == "BJ":
+                return code_part.startswith(("4", "8"))
+
+            # 无交易所后缀时按常见 A 股号段兜底判定。
+            return prefix in {
+                "000",
+                "001",
+                "002",
+                "003",
+                "300",
+                "301",
+                "600",
+                "601",
+                "603",
+                "605",
+                "688",
+                "689",
+            } or code_part.startswith(("4", "8"))
+
+        if "." in normalized:
+            code_part, market = normalized.split(".", 1)
+            return market in {"SH", "SZ", "BJ"} and _is_a_stock_code(code_part, market)
+
+        if normalized.endswith(("SH", "SZ", "BJ")) and len(normalized) > 2:
+            code_part = normalized[:-2]
+            market = normalized[-2:]
+            return _is_a_stock_code(code_part, market)
+
+        if normalized.startswith(("SH", "SZ", "BJ")) and len(normalized) > 2:
+            market = normalized[:2]
+            code_part = normalized[2:]
+            return _is_a_stock_code(code_part, market)
+
+        return _is_a_stock_code(normalized)
+
+    @staticmethod
+    async def _await_if_needed(value: Any) -> Any:
+        if asyncio.iscoroutine(value):
+            return await value
+        return value
+
+    async def _fetch_daily_data(
+        self,
+        manager: Any,
+        *,
+        symbol: str,
+        start_date: str,
+        end_date: str,
+        adjust: str,
+    ) -> Any:
+        if hasattr(manager, "get_stock_daily"):
+            getter = getattr(manager, "get_stock_daily")
+            if callable(getter):
+                try:
+                    return await getter(
+                        symbol=symbol,
+                        start_date=start_date,
+                        end_date=end_date,
+                        source=self.source,
+                        adjust=adjust,
+                        use_cache=True,
+                    )
+                except TypeError:
+                    return await getter(
+                        symbol=symbol,
+                        start_date=start_date,
+                        end_date=end_date,
+                        source=self.source,
+                        adjust=adjust,
+                    )
+
+        hist_getter = getattr(manager, "get_stock_hist", None)
+        if callable(hist_getter):
+            raw_payload = await hist_getter(
+                symbol=symbol,
+                period="1d",
+                start_date=start_date,
+                end_date=end_date,
+                preferred_source=self.source,
+                limit=5000,
+            )
+            if isinstance(raw_payload, dict) and "data" in raw_payload:
+                return raw_payload.get("data")
+            return raw_payload
+
+        raise ValueError("数据管理器不支持日线历史数据接口")
+
+    async def _fetch_history_status_payload(self, manager: Any, symbol: str) -> Any:
+        provider: Any | None = None
+        get_provider = getattr(manager, "get_provider", None)
+        if callable(get_provider):
+            try:
+                provider = get_provider(DataSourceType.AMAZINGDATA)
+            except Exception:
+                provider = None
+            if provider is None:
+                try:
+                    provider = get_provider()
+                except Exception:
+                    provider = None
+
+        if provider is None:
+            raise HistoryStatusOverlayError(
+                "回测要求强制接入 history_stock_status，但当前数据管理器未提供可用 Provider"
+            )
+
+        fetcher = getattr(provider, "get_history_stock_status", None)
+        if not callable(fetcher):
+            raise HistoryStatusOverlayError(
+                "回测要求强制接入 history_stock_status，但当前 Provider 不支持该接口"
+            )
+
+        last_error: Optional[Exception] = None
+        call_patterns = (
+            lambda: fetcher(code_list=[symbol], is_local=True),
+            lambda: fetcher([symbol], is_local=True),
+            lambda: fetcher(code_list=[symbol]),
+            lambda: fetcher([symbol]),
+        )
+
+        for invoke in call_patterns:
+            try:
+                payload = await self._await_if_needed(invoke())
+            except TypeError:
+                continue
+            except Exception as exc:
+                last_error = exc
+                continue
+
+            if not coerce_status_dataframe(payload).empty:
+                return payload
+
+        if last_error is not None:
+            raise HistoryStatusOverlayError(
+                f"拉取 history_stock_status 失败: {last_error}"
+            ) from last_error
+
+        raise HistoryStatusOverlayError(
+            f"{symbol} 未返回有效 history_stock_status 数据", not_found=True
+        )
+
+    async def _apply_status_overlay_if_needed(
+        self,
+        manager: Any,
+        bars_df: pd.DataFrame,
+        *,
+        symbol: str,
+    ) -> pd.DataFrame:
+        if bars_df.empty:
+            return bars_df
+
+        if not self._is_a_share_symbol(symbol):
+            logger.debug(f"{symbol} 非A股标的，跳过 history_status_overlay")
+            return bars_df
+
+        payload = await self._fetch_history_status_payload(manager, symbol)
+        return self.data_bridge.apply_history_status_overlay(
+            bars_df,
+            status_payload=payload,
+            symbol=symbol,
+            strict=True,
+        )
 
     def _require_data_manager(self) -> Any:
         """Retrieve the data manager instance or raise if not initialized."""
@@ -148,13 +332,12 @@ class UnifiedBacktraderAdapter:
         logger.info(f"获取数据: {symbol} [{start_str} - {end_str}] {timeframe}")
 
         if timeframe == "1d":
-            raw_df = await manager.get_stock_daily(
+            raw_df = await self._fetch_daily_data(
+                manager,
                 symbol=symbol,
                 start_date=start_str,
                 end_date=end_str,
-                source=self.source,
                 adjust=adjust,
-                use_cache=True,
             )
         elif timeframe in ["1m", "5m", "15m", "30m", "60m"]:
             raw_df = await self._get_minute_data(symbol, start_str, end_str, timeframe, adjust)
@@ -165,6 +348,7 @@ class UnifiedBacktraderAdapter:
 
         standardized_df = self._ensure_dataframe(raw_df)
         df = self.data_bridge.convert_to_backtrader(standardized_df, symbol)
+        df = await self._apply_status_overlay_if_needed(manager, df, symbol=symbol)
 
         if not df.empty:
             self._cache[cache_key] = df.copy()
@@ -201,11 +385,11 @@ class UnifiedBacktraderAdapter:
                 logger.warning(f"QMT 获取分钟数据失败: {exc}")
 
         logger.warning("未命中分钟级专用数据源，使用日线数据降采样")
-        fallback = await manager.get_stock_daily(
+        fallback = await self._fetch_daily_data(
+            manager,
             symbol=symbol,
             start_date=start_date,
             end_date=end_date,
-            source=self.source,
             adjust=adjust,
         )
         return self._ensure_dataframe(fallback)
@@ -216,11 +400,11 @@ class UnifiedBacktraderAdapter:
         """获取周线数据"""
         manager = self._require_data_manager()
 
-        daily_df = await manager.get_stock_daily(
+        daily_df = await self._fetch_daily_data(
+            manager,
             symbol=symbol,
             start_date=start_date,
             end_date=end_date,
-            source=self.source,
             adjust=adjust,
         )
 
@@ -364,7 +548,7 @@ class UnifiedBacktraderAdapter:
     def clear_cache(self) -> None:
         """清理缓存"""
         self._cache.clear()
-        if self.data_manager:
+        if self.data_manager and hasattr(self.data_manager, "clear_cache"):
             self.data_manager.clear_cache()
         logger.info("缓存已清理")
 
@@ -376,7 +560,11 @@ class UnifiedBacktraderAdapter:
             "cache_size": len(self._cache),
             "cached_symbols": list({key.split("_")[0] for key in self._cache.keys()}),
             "bridge_diagnostics": self.data_bridge.get_diagnostics(),
-            "manager_status": self.data_manager.get_status() if self.data_manager else None,
+            "manager_status": (
+                self.data_manager.get_status()
+                if self.data_manager and hasattr(self.data_manager, "get_status")
+                else None
+            ),
         }
 
 

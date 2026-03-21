@@ -22,6 +22,21 @@ export interface TradeRecord {
     reason: string;
 }
 
+export interface BlockedRecord {
+    id: string;
+    time: string;
+    direction: 'buy' | 'sell';
+    strategy: string;
+    reasonCode: string;
+    reason: string;
+}
+
+export interface BlockedSummaryItem {
+    code: string;
+    label: string;
+    count: number;
+}
+
 export interface BacktestResult {
     /** 总收益率 (%) */
     totalProfitPct: number;
@@ -39,6 +54,14 @@ export interface BacktestResult {
     maxDrawdown: number;
     /** 交易记录 */
     trades: TradeRecord[];
+    /** 未成交约束记录 */
+    blockedEvents?: BlockedRecord[];
+    /** 未成交约束统计 */
+    blockedSummary?: Record<string, number>;
+    /** 未成交约束统计（中文聚合） */
+    blockedSummaryZh?: Record<string, number>;
+    /** 未成交约束统计（结构化条目） */
+    blockedSummaryItems?: BlockedSummaryItem[];
 }
 
 interface BacktestResultPanelProps {
@@ -58,6 +81,31 @@ const BacktestResultPanel: React.FC<BacktestResultPanelProps> = ({
     stockName,
     date,
 }) => {
+    const summaryItems: BlockedSummaryItem[] = React.useMemo(() => {
+        if (result?.blockedSummaryItems && result.blockedSummaryItems.length > 0) {
+            return [...result.blockedSummaryItems].sort((a, b) => b.count - a.count);
+        }
+        if (result?.blockedSummaryZh && Object.keys(result.blockedSummaryZh).length > 0) {
+            return Object.entries(result.blockedSummaryZh)
+                .map(([label, count]) => ({
+                    code: label,
+                    label,
+                    count,
+                }))
+                .sort((a, b) => b.count - a.count);
+        }
+        if (result?.blockedSummary && Object.keys(result.blockedSummary).length > 0) {
+            return Object.entries(result.blockedSummary)
+                .map(([code, count]) => ({
+                    code,
+                    label: code,
+                    count,
+                }))
+                .sort((a, b) => b.count - a.count);
+        }
+        return [];
+    }, [result]);
+
     // 表格列配置 - 合理的列宽分配
     const columns: ColumnsType<TradeRecord> = [
         {
@@ -115,6 +163,47 @@ const BacktestResultPanel: React.FC<BacktestResultPanelProps> = ({
             dataIndex: 'reason',
             key: 'reason',
             // 不设置width，自动填充剩余空间
+        },
+    ];
+
+    const blockedColumns: ColumnsType<BlockedRecord> = [
+        {
+            title: '时间',
+            dataIndex: 'time',
+            key: 'time',
+            width: 70,
+            align: 'center',
+        },
+        {
+            title: '方向',
+            dataIndex: 'direction',
+            key: 'direction',
+            width: 65,
+            align: 'center',
+            render: (dir: string) => (
+                <Tag color={dir === 'buy' ? 'green' : 'red'}>
+                    {dir === 'buy' ? '买入' : '卖出'}
+                </Tag>
+            ),
+        },
+        {
+            title: '策略',
+            dataIndex: 'strategy',
+            key: 'strategy',
+            width: 120,
+            render: (strategy: string) => <Tag>{strategy}</Tag>,
+        },
+        {
+            title: '约束编码',
+            dataIndex: 'reasonCode',
+            key: 'reasonCode',
+            width: 140,
+            render: (reasonCode: string) => <Tag color="orange">{reasonCode}</Tag>,
+        },
+        {
+            title: '未成交原因',
+            dataIndex: 'reason',
+            key: 'reason',
         },
     ];
 
@@ -226,6 +315,32 @@ const BacktestResultPanel: React.FC<BacktestResultPanelProps> = ({
                         scroll={{ y: 200 }}
                         tableLayout="fixed"
                     />
+
+                    {(summaryItems.length > 0 || result.blockedEvents?.length) ? (
+                        <div style={{ marginTop: 16 }}>
+                            <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                                未成交约束
+                            </Text>
+                            {summaryItems.length > 0 ? (
+                                <Space size={[8, 8]} wrap style={{ marginBottom: 8 }}>
+                                    {summaryItems.map((item) => (
+                                        <Tag key={item.code} color="orange">
+                                            {item.label}: {item.count}
+                                        </Tag>
+                                    ))}
+                                </Space>
+                            ) : null}
+                            <Table
+                                columns={blockedColumns}
+                                dataSource={result.blockedEvents || []}
+                                rowKey="id"
+                                size="small"
+                                pagination={false}
+                                scroll={{ y: 160 }}
+                                tableLayout="fixed"
+                            />
+                        </div>
+                    ) : null}
                 </>
             )}
         </Card>

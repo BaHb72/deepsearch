@@ -597,6 +597,66 @@ export interface KLineDataResponse {
     bars: KLineBar[];
 }
 
+export interface TTradingBacktestTrade {
+    id: string;
+    time: string;
+    direction: 'buy' | 'sell';
+    price: number;
+    quantity: number;
+    strategy: string;
+    reason: string;
+    profit_pct?: number;
+}
+
+export interface TTradingBacktestBlockedEvent {
+    time: string;
+    direction: 'buy' | 'sell';
+    strategy: string;
+    reason_code: string;
+    reason: string;
+}
+
+export interface TTradingBacktestBlockedSummaryItem {
+    code: string;
+    label: string;
+    count: number;
+}
+
+export interface TTradingBacktestEquityPoint {
+    time: string;
+    equity: number;
+}
+
+export interface TTradingBacktestRequest {
+    symbol: string;
+    strategies: string[];
+    trade_date?: string;
+    initial_capital?: number;
+    base_position_ratio?: number;
+    position_ratio?: number;
+    min_confidence?: number;
+    max_trades?: number;
+}
+
+export interface TTradingBacktestResponse {
+    symbol: string;
+    trade_date: string;
+    strategies: string[];
+    total_profit_pct: number;
+    win_rate: number;
+    trade_count: number;
+    win_count: number;
+    lose_count: number;
+    avg_profit_loss_ratio: number;
+    max_drawdown: number;
+    trades: TTradingBacktestTrade[];
+    blocked_events: TTradingBacktestBlockedEvent[];
+    blocked_summary: Record<string, number>;
+    blocked_summary_zh?: Record<string, number>;
+    blocked_summary_items?: TTradingBacktestBlockedSummaryItem[];
+    equity_curve: TTradingBacktestEquityPoint[];
+}
+
 /**
  * 获取K线历史数据
  * @param symbol 股票代码
@@ -619,6 +679,16 @@ export const getKLineData = async (
     if (count) params.append('count', count.toString());
 
     const res = await request.get(`${BASE_PATH}/kline/${symbol}?${params.toString()}`);
+    return res?.data ?? res;
+};
+
+/**
+ * 做T真实回测
+ */
+export const runTTradingBacktest = async (
+    payload: TTradingBacktestRequest
+): Promise<TTradingBacktestResponse> => {
+    const res = await request.post(`${BASE_PATH}/backtest`, payload);
     return res?.data ?? res;
 };
 
@@ -791,6 +861,8 @@ export const strategyCenterAPI = {
     getIntradayData,
     // K线历史数据
     getKLineData,
+    // 做T回测
+    runTTradingBacktest,
     // 持仓管理
     getPositions,
     getPositionsWithPnl,

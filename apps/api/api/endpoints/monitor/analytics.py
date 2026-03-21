@@ -10,6 +10,14 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from core.infrastructure.persistence.duckdb_analytics import get_analytics_db
 from core.infrastructure.providers.managers.data_sync_service import get_sync_service
+from core.strategies.implementations import (
+    MeanReversionStrategy,
+    MomentumStrategy,
+    SimpleMAStrategy,
+    TurtleTradingStrategy,
+)
+from core.strategies.interfaces.models import TradingCostConfig
+from core.strategies.services.backtest_service import get_backtest_service
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from loguru import logger
 
@@ -17,6 +25,13 @@ from apps.api.api.utils import sanitize_for_json
 from apps.api.auth import optional_auth
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
+ANALYTICS_BACKTEST_STRATEGY_MAP: dict[str, type] = {
+    "simple_ma": SimpleMAStrategy,
+    "turtle": TurtleTradingStrategy,
+    "mean_reversion": MeanReversionStrategy,
+    "momentum": MomentumStrategy,
+}
 
 
 @router.get("/indicators/{symbol}")
@@ -127,151 +142,66 @@ async def run_backtest(
     基于历史数据运行策略回测
     """
     try:
-        analytics_db = get_analytics_db()
+        if not symbol:
+            raise HTTPException(status_code=400, detail="symbol 不能为空")
 
-        # 获取历史数据
-        sql = """
-              SELECT *
-              FROM kline_history
-              WHERE symbol = ? AND time BETWEEN ? AND ?
-              ORDER BY time \
-              """
+        strategy_key = str(strategy_id).strip().lower()
+        strategy_class = ANALYTICS_BACKTEST_STRATEGY_MAP.get(strategy_key)
+        if strategy_class is None:
+            raise HTTPException(status_code=400, detail=f"不支持的策略ID: {strategy_id}")
 
-        df = await analytics_db.query(sql, (symbol, start_date, end_date))
+        service = get_backtest_service()
+        commission_rate = float(parameters.get("commission", 0.001)) if parameters else 0.001
+        cost_config = TradingCostConfig(commission_rate=commission_rate)
+        strategy_params = parameters if isinstance(parameters, dict) else {}
 
-        if df.empty:
-            raise HTTPException(status_code=404, detail="没有历史数据")
-
-        # 实现简单的均线交叉策略回测
-        import numpy as np
-
-        # 计算均线
-        df["ma5"] = df["close"].rolling(window=5).mean()
-        df["ma20"] = df["close"].rolling(window=20).mean()
-
-        # 生成交易信号
-        df["signal"] = 0
-        df.loc[(df["ma5"] > df["ma20"]) & (df["ma5"].shift(1) <= df["ma20"].shift(1)), "signal"] = (
-            1  # 买入信号
+        result = await service.run_backtest(
+            strategy_class=strategy_class,
+            symbols=[symbol],
+            start_date=start_date,
+            end_date=end_date,
+            initial_capital=initial_capital,
+            strategy_params=strategy_params,
+            cost_config=cost_config,
+            plot=False,
         )
-        df.loc[(df["ma5"] < df["ma20"]) & (df["ma5"].shift(1) >= df["ma20"].shift(1)), "signal"] = (
-            -1
-        )  # 卖出信号
 
-        # 计算持仓
-        df["position"] = df["signal"].cumsum().clip(0, 1)
-
-        # 计算收益
-        df["returns"] = df["close"].pct_change()
-        df["strategy_returns"] = df["position"].shift(1) * df["returns"]
-        df["cumulative_returns"] = (1 + df["strategy_returns"]).cumprod()
-
-        # 去除NaN值
-        df = df.dropna()
-
-        if len(df) == 0:
-            raise HTTPException(status_code=400, detail="数据不足以进行回测")
-
-        # 计算回测指标
-        total_return = float((df["cumulative_returns"].iloc[-1] - 1) * 100)  # 转换为百分比
-
-        # 计算夏普比率 (假设无风险利率为3%)
-        risk_free_rate = 0.03 / 252  # 日化无风险利率
-        excess_returns = df["strategy_returns"] - risk_free_rate
-        if excess_returns.std() > 0:
-            sharpe_ratio = float(np.sqrt(252) * excess_returns.mean() / excess_returns.std())
-        else:
-            sharpe_ratio = 0.0
-
-        # 计算最大回撤
-        cumulative = df["cumulative_returns"]
-        running_max = cumulative.cummax()
-        drawdown = (cumulative - running_max) / running_max
-        max_drawdown = float(drawdown.min() * 100)  # 转换为百分比
-
-        # 计算胜率
-        trades = df[df["signal"] != 0].copy()
-        if len(trades) > 0:
-            trades["trade_return"] = trades["close"].pct_change()
-            winning_trades = len(trades[trades["trade_return"] > 0])
-            total_trades = len(trades)
-            win_rate = float(winning_trades / total_trades) if total_trades > 0 else 0.0
-        else:
-            win_rate = 0.0
-            total_trades = 0
-
-        # 生成交易记录
-        trade_records = []
-        position = 0
-        entry_price = 0
-
-        for idx, row in df.iterrows():
-            if row["signal"] == 1 and position == 0:  # 买入
-                position = 1
-                entry_price = row["close"]
-                trade_records.append(
-                    {
-                        "date": (
-                            row["time"].strftime("%Y-%m-%d")
-                            if hasattr(row["time"], "strftime")
-                            else str(row["time"])
-                        ),
-                        "action": "BUY",
-                        "price": float(entry_price),
-                        "volume": 100,  # 假设每次买入100股
-                    }
-                )
-            elif row["signal"] == -1 and position == 1:  # 卖出
-                position = 0
-                exit_price = row["close"]
-                profit = (exit_price - entry_price) / entry_price * 100
-                trade_records.append(
-                    {
-                        "date": (
-                            row["time"].strftime("%Y-%m-%d")
-                            if hasattr(row["time"], "strftime")
-                            else str(row["time"])
-                        ),
-                        "action": "SELL",
-                        "price": float(exit_price),
-                        "volume": 100,
-                        "profit": float(profit),
-                    }
-                )
-
-        # 保存回测结果
+        analytics_db = get_analytics_db()
         result_df = pd.DataFrame(
             [
                 {
-                    "strategy_id": strategy_id,
+                    "strategy_id": strategy_key,
                     "run_time": datetime.now(),
                     "symbol": symbol,
                     "start_date": start_date,
                     "end_date": end_date,
-                    "total_return": total_return,
-                    "sharpe_ratio": sharpe_ratio,
-                    "max_drawdown": max_drawdown,
-                    "win_rate": win_rate,
-                    "trades": "[]",  # JSON string
-                    "metrics": "{}",  # JSON string
+                    "total_return": float(result.total_return * 100),
+                    "sharpe_ratio": float(result.sharpe_ratio),
+                    "max_drawdown": float(result.max_drawdown * 100),
+                    "win_rate": float(result.win_rate),
+                    "trades": "[]",
+                    "metrics": "{}",
                 }
             ]
         )
-
         await analytics_db.import_from_dataframe(result_df, "backtest_results", if_exists="append")
 
-        return {
-            "strategy_id": strategy_id,
-            "symbol": symbol,
-            "period": f"{start_date} to {end_date}",
-            "results": {
-                "total_return": total_return,
-                "sharpe_ratio": sharpe_ratio,
-                "max_drawdown": max_drawdown,
-                "win_rate": win_rate,
-            },
-        }
+        return sanitize_for_json(
+            {
+                "strategy_id": strategy_key,
+                "symbol": symbol,
+                "period": f"{start_date} to {end_date}",
+                "results": {
+                    "total_return": float(result.total_return * 100),
+                    "sharpe_ratio": float(result.sharpe_ratio),
+                    "max_drawdown": float(result.max_drawdown * 100),
+                    "win_rate": float(result.win_rate),
+                },
+            }
+        )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"回测失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -215,78 +215,74 @@ const TTrading: React.FC = () => {
     }, [watchlist]);
 
     // 运行回测
-    const handleRunBacktest = useCallback(async (_strategies: string[]) => {
+    const handleRunBacktest = useCallback(async (strategies: string[]) => {
         if (!selectedSymbol) {
             message.warning('请先选择股票');
+            return;
+        }
+        if (!strategies.length) {
+            message.warning('请先选择至少一个策略');
             return;
         }
 
         setBacktestLoading(true);
         try {
-            // 模拟回测结果 (后续接入真实API)
-            // TODO: 调用真实的回测API
-            await new Promise(resolve => setTimeout(resolve, 1500));
-
-            // 模拟生成回测结果
-            const mockTrades: TradeRecord[] = [
-                {
-                    id: '1',
-                    time: '09:45',
-                    direction: 'buy',
-                    price: 43.50,
-                    profitPct: 0,
-                    strategy: 'vwap_deviation',
-                    reason: 'VWAP低吸: 偏离-1.8%',
-                },
-                {
-                    id: '2',
-                    time: '10:15',
-                    direction: 'sell',
-                    price: 44.20,
-                    profitPct: 1.61,
-                    strategy: 'opening_breakout',
-                    reason: '冲高回落至开盘高点',
-                },
-                {
-                    id: '3',
-                    time: '13:30',
-                    direction: 'buy',
-                    price: 43.80,
-                    profitPct: 0,
-                    strategy: 'time_window',
-                    reason: '下午主升段买入',
-                },
-                {
-                    id: '4',
-                    time: '14:30',
-                    direction: 'sell',
-                    price: 44.50,
-                    profitPct: 1.60,
-                    strategy: 'momentum_reversal',
-                    reason: '超涨缩量反转',
-                },
-            ];
+            const response = await strategyCenterAPI.runTTradingBacktest({
+                symbol: selectedSymbol,
+                strategies,
+                trade_date: selectedDate,
+                initial_capital: 100000,
+                base_position_ratio: 50,
+                position_ratio: 50,
+                min_confidence: 0.6,
+                max_trades: 12,
+            });
 
             const result: BacktestResult = {
-                totalProfitPct: 2.35,
-                winRate: 66.7,
-                tradeCount: 4,
-                winCount: 2,
-                loseCount: 1,
-                avgProfitLossRatio: 1.8,
-                maxDrawdown: 0.5,
-                trades: mockTrades,
+                totalProfitPct: response.total_profit_pct ?? 0,
+                winRate: response.win_rate ?? 0,
+                tradeCount: response.trade_count ?? 0,
+                winCount: response.win_count ?? 0,
+                loseCount: response.lose_count ?? 0,
+                avgProfitLossRatio: response.avg_profit_loss_ratio ?? 0,
+                maxDrawdown: response.max_drawdown ?? 0,
+                trades: (response.trades || []).map((trade): TradeRecord => ({
+                    id: trade.id,
+                    time: trade.time,
+                    direction: trade.direction,
+                    price: trade.price,
+                    quantity: trade.quantity,
+                    profitPct: trade.profit_pct,
+                    strategy: trade.strategy,
+                    reason: trade.reason,
+                })),
+                blockedSummary: response.blocked_summary || {},
+                blockedSummaryZh: response.blocked_summary_zh || {},
+                blockedSummaryItems: (response.blocked_summary_items || []).map((item) => ({
+                    code: item.code,
+                    label: item.label,
+                    count: item.count,
+                })),
+                blockedEvents: (response.blocked_events || []).map((event, index) => ({
+                    id: `${event.time}-${event.direction}-${event.reason_code}-${index}`,
+                    time: event.time,
+                    direction: event.direction,
+                    strategy: event.strategy,
+                    reasonCode: event.reason_code,
+                    reason: event.reason,
+                })),
             };
 
             setBacktestResult(result);
             message.success('回测完成');
         } catch (error) {
             console.error('Failed to run backtest:', error);
-            message.error('回测失败');
+            const text = error instanceof Error ? error.message : '回测失败';
+            message.error(text);
         } finally {
             setBacktestLoading(false);
         }
-    }, [selectedSymbol]);
+    }, [selectedDate, selectedSymbol]);
 
     return (
         <PageContainer

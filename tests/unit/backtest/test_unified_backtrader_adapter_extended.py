@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 from core.backtest.adapters.unified_backtrader_adapter import UnifiedBacktraderAdapter
+from core.backtest.data.history_status_overlay import HistoryStatusOverlayError
 
 
 class TestRunSync:
@@ -211,6 +212,115 @@ class TestValidateData:
         # 应该报告缺失字段
         assert result["is_valid"] is False
         assert "缺少必要字段" in str(result.get("errors", []))
+
+
+class TestStatusOverlayIntegration:
+    """测试 A 股状态覆盖接入链路。"""
+
+    @pytest.fixture
+    def adapter(self):
+        with patch("core.backtest.adapters.unified_backtrader_adapter.get_data_manager") as mock:
+            mock.return_value = MagicMock()
+            adapter = UnifiedBacktraderAdapter()
+            adapter._initialized = True
+            adapter.data_manager = MagicMock()
+            yield adapter
+
+    def test_is_a_share_symbol_filters_non_stock(self, adapter):
+        assert adapter._is_a_share_symbol("000001.SZ") is True
+        assert adapter._is_a_share_symbol("600519.SH") is True
+        assert adapter._is_a_share_symbol("510300.SH") is False
+        assert adapter._is_a_share_symbol("159915.SZ") is False
+
+    @pytest.mark.asyncio
+    async def test_get_data_calls_overlay_for_a_share(
+        self, adapter, monkeypatch: pytest.MonkeyPatch
+    ):
+        async def _fake_fetch_daily_data(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+            return pd.DataFrame(
+                [
+                    {
+                        "date": "2026-03-20",
+                        "open": 10.0,
+                        "high": 10.2,
+                        "low": 9.9,
+                        "close": 10.1,
+                        "volume": 1000,
+                    }
+                ]
+            )
+
+        called = {"overlay": False}
+
+        async def _fake_apply_overlay(manager, bars_df, *, symbol):  # type: ignore[no-untyped-def]
+            called["overlay"] = True
+            assert symbol == "000001.SZ"
+            return bars_df.assign(high_limited=11.0, low_limited=9.0, is_suspended=False)
+
+        monkeypatch.setattr(adapter, "_fetch_daily_data", _fake_fetch_daily_data)
+        monkeypatch.setattr(adapter, "_apply_status_overlay_if_needed", _fake_apply_overlay)
+
+        result = await adapter.get_data(
+            symbol="000001.SZ",
+            start_date="2026-03-20",
+            end_date="2026-03-20",
+            timeframe="1d",
+        )
+
+        assert called["overlay"] is True
+        assert "high_limited" in result.columns
+
+    @pytest.mark.asyncio
+    async def test_apply_status_overlay_skip_non_a_share(
+        self, adapter, monkeypatch: pytest.MonkeyPatch
+    ):
+        bars_df = pd.DataFrame(
+            {
+                "open": [1.0],
+                "high": [1.0],
+                "low": [1.0],
+                "close": [1.0],
+                "volume": [1.0],
+            },
+            index=pd.to_datetime(["2026-03-20"]),
+        )
+
+        async def _unexpected_fetch(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+            raise AssertionError("非A股不应调用 history_stock_status 拉取")
+
+        monkeypatch.setattr(adapter, "_fetch_history_status_payload", _unexpected_fetch)
+        result = await adapter._apply_status_overlay_if_needed(
+            adapter.data_manager,
+            bars_df,
+            symbol="510300.SH",
+        )
+        assert result.equals(bars_df)
+
+    @pytest.mark.asyncio
+    async def test_apply_status_overlay_raise_when_status_missing(
+        self, adapter, monkeypatch: pytest.MonkeyPatch
+    ):
+        bars_df = pd.DataFrame(
+            {
+                "open": [10.0],
+                "high": [10.2],
+                "low": [9.9],
+                "close": [10.1],
+                "volume": [1000],
+            },
+            index=pd.to_datetime(["2026-03-20"]),
+        )
+
+        async def _raise_not_found(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+            raise HistoryStatusOverlayError("missing status", not_found=True)
+
+        monkeypatch.setattr(adapter, "_fetch_history_status_payload", _raise_not_found)
+        with pytest.raises(HistoryStatusOverlayError):
+            await adapter._apply_status_overlay_if_needed(
+                adapter.data_manager,
+                bars_df,
+                symbol="000001.SZ",
+            )
 
 
 if __name__ == "__main__":
