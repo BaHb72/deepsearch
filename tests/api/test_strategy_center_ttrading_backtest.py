@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from core.strategies.interfaces.models import SignalDirection, TTradingSignal
@@ -378,3 +379,77 @@ async def test_ttrading_backtest_shadow_mode_falls_back_to_legacy(
     result = await ttrading.run_ttrading_backtest(payload)
     assert result.symbol == "000001.SZ"
     assert result.trade_count >= 2
+
+
+def test_resolve_ttrading_backtest_mode_reads_strategy_center_config(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import core.config as config_module
+
+    monkeypatch.setenv("TTRADING_BACKTEST_MODE", "legacy")
+    monkeypatch.setattr(
+        config_module,
+        "get_config",
+        lambda: SimpleNamespace(
+            strategy_center=SimpleNamespace(ttrading_backtest_mode="backtrader")
+        ),
+    )
+
+    assert ttrading._resolve_ttrading_backtest_mode() == "backtrader"
+
+
+@pytest.mark.asyncio
+async def test_ttrading_backtest_ignores_env_mode_and_uses_strategy_center_config(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import core.config as config_module
+
+    context = ttrading.TTradingBacktestContext(
+        symbol="000001.SZ",
+        trade_day=datetime(2026, 3, 20).date(),
+        bars_df=ttrading.pd.DataFrame({"close": [10.0]}),
+        strategy_keys=["ma_deviation"],
+        initial_capital=100000.0,
+        base_position_ratio=0.5,
+        position_ratio=0.1,
+        min_confidence=0.0,
+        max_trades=5,
+    )
+    observed_modes: list[str] = []
+    sentinel_response = object()
+
+    class _Executor:
+        def execute(self, _context):  # type: ignore[no-untyped-def]
+            return {"executor": "ok"}
+
+    async def _fake_prepare_context(*_args, **_kwargs):  # type: ignore[no-untyped-def]
+        return context
+
+    def _fake_select_executor(mode: str):  # type: ignore[no-untyped-def]
+        observed_modes.append(mode)
+        return _Executor(), None
+
+    monkeypatch.setenv("TTRADING_BACKTEST_MODE", "legacy")
+    monkeypatch.setattr(
+        config_module,
+        "get_config",
+        lambda: SimpleNamespace(strategy_center=SimpleNamespace(ttrading_backtest_mode="shadow")),
+    )
+    monkeypatch.setattr(ttrading, "_prepare_ttrading_backtest_context", _fake_prepare_context)
+    monkeypatch.setattr(ttrading, "_select_ttrading_executor", _fake_select_executor)
+    monkeypatch.setattr(
+        ttrading,
+        "_to_ttrading_backtest_response",
+        lambda **_kwargs: sentinel_response,
+    )
+
+    result = await ttrading.run_ttrading_backtest(
+        ttrading.TTradingBacktestRequest(
+            symbol="000001.SZ",
+            strategies=["ma_deviation"],
+            trade_date="2026-03-20",
+        )
+    )
+
+    assert result is sentinel_response
+    assert observed_modes == ["shadow"]

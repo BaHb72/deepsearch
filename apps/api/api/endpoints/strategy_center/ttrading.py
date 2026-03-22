@@ -10,7 +10,6 @@ API endpoints for the T-Trading engine:
 """
 
 import inspect
-import os
 from dataclasses import dataclass
 from datetime import date as date_type
 from datetime import datetime, time
@@ -76,7 +75,6 @@ except ImportError:
 
 TTradingBacktestMode = Literal["legacy", "shadow", "backtrader"]
 DEFAULT_TTRADING_BACKTEST_MODE: TTradingBacktestMode = "shadow"
-TTRADING_BACKTEST_MODE_ENV = "TTRADING_BACKTEST_MODE"
 SHADOW_DIFF_THRESHOLDS: dict[str, float] = {
     "total_profit_pct": 0.5,
     "win_rate": 3.0,
@@ -1103,28 +1101,13 @@ def _is_a_share_symbol(symbol: str) -> bool:
 
 
 def _resolve_ttrading_backtest_mode() -> TTradingBacktestMode:
-    raw_candidates: list[Any] = [os.getenv(TTRADING_BACKTEST_MODE_ENV)]
     try:
         from core.config import get_config
 
         config = get_config()
-        raw_candidates.extend(
-            [
-                getattr(config, "ttrading_backtest_mode", None),
-                getattr(getattr(config, "strategy_center", None), "ttrading_backtest_mode", None),
-                getattr(getattr(config, "backtest", None), "ttrading_backtest_mode", None),
-            ]
-        )
+        return cast(TTradingBacktestMode, config.strategy_center.ttrading_backtest_mode)
     except Exception as exc:
         logger.debug(f"读取做T回测模式配置失败，使用默认模式: {exc}")
-
-    for raw_value in raw_candidates:
-        if raw_value is None:
-            continue
-        normalized = str(raw_value).strip().lower()
-        if normalized in {"legacy", "shadow", "backtrader"}:
-            return cast(TTradingBacktestMode, normalized)
-        logger.warning(f"忽略非法做T回测模式配置: {raw_value}")
 
     return DEFAULT_TTRADING_BACKTEST_MODE
 

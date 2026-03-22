@@ -61,6 +61,7 @@ from .prefetch import DataSourcePrefetchConfig
 from .qmt import QmtConfig
 from .runtime import RuntimeConfig, RuntimeModeSetting
 from .security import SecurityConfig
+from .strategy_center import StrategyCenterConfig
 from .timeouts import (
     AmazingDataTimeoutsConfig,
     DaskTimeoutsConfig,
@@ -117,6 +118,7 @@ __all__ = [
     "RedisConfig",
     # Security
     "SecurityConfig",
+    "StrategyCenterConfig",
     # WebUI
     "WebUIConfig",
     # ZeroMQ

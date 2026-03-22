@@ -46,6 +46,9 @@
 
 ## 扩展建议
 
-- 新增配置类别时，在 `models/` 中定义 Pydantic 模型，并在 `Settings` 中增加字段；同步更新示例 YAML 与
-  `settings.template.yaml`。
-- 涉及兼容旧版字段时，应在 `migrations/` 中添加脚本，并在 `loader` 中串联执行以保持自动迁移能力。
+- 新增配置类别时，在 `models/` 中定义 Pydantic 模型，并在 `Settings` 中增加字段；同步更新 `settings.dev.yaml`、
+  `settings.prod.yaml` 及对应 `.example` 模板。
+- 例如新增策略中心开关时，应新增 `models/strategy_center.py`、在 `Settings.strategy_center` 聚合，并在 YAML 中使用
+  `strategy_center.ttrading_backtest_mode` 这类稳定路径，避免直接新增环境变量或根级临时键。
+- 涉及兼容旧版字段时，应在 `migrations/` 中添加脚本，并在 `loader` 中串联执行以保持自动迁移能力；若旧键必须立即废弃，
+  则应在 loader 原始字典阶段显式报错，避免被 `extra="ignore"` 静默吞掉。

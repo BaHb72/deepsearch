@@ -84,6 +84,25 @@ def ensure_env_config_file(env: str, config_dir: Optional[Path] = None) -> Path:
     )
 
 
+def _raise_on_legacy_ttrading_backtest_mode_keys(config: Dict[str, Any]) -> None:
+    """拦截已废弃的做T回测模式配置路径。"""
+
+    legacy_keys: list[str] = []
+    if "ttrading_backtest_mode" in config:
+        legacy_keys.append("ttrading_backtest_mode")
+
+    backtest_config = config.get("backtest")
+    if isinstance(backtest_config, dict) and "ttrading_backtest_mode" in backtest_config:
+        legacy_keys.append("backtest.ttrading_backtest_mode")
+
+    if legacy_keys:
+        legacy_key_text = ", ".join(legacy_keys)
+        raise ValueError(
+            f"检测到已废弃的做T回测模式配置键: {legacy_key_text}。"
+            "请改用 strategy_center.ttrading_backtest_mode"
+        )
+
+
 def load_yaml_config() -> Dict[str, Any]:
     """
     加载特定环境的 YAML 配置。
@@ -126,6 +145,7 @@ def load_yaml_config() -> Dict[str, Any]:
     try:
         with env_config_path.open("r", encoding=YAML_ENCODING) as f:
             config = yaml.safe_load(f) or {}
+        _raise_on_legacy_ttrading_backtest_mode_keys(config)
 
         # 加载拆分的配置文件
         config = _load_infrastructure_config(config, config_dir, env)
@@ -134,6 +154,7 @@ def load_yaml_config() -> Dict[str, Any]:
 
         # 加载独立的 data_sources.yaml（替换原有的 providers.yaml 逻辑）
         config = _load_data_sources_config(config, config_dir)
+        _raise_on_legacy_ttrading_backtest_mode_keys(config)
 
         config, migrated = migrate_data_source_config(config, source_path=env_config_path)
         if migrated:

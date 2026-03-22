@@ -37,6 +37,7 @@ from .models import (
     QmtConfig,
     RuntimeConfig,
     SecurityConfig,
+    StrategyCenterConfig,
     TimeoutsConfig,
     WebUIConfig,
     ZeroMQConfig,
@@ -72,6 +73,7 @@ class Settings(BaseSettings):
     capability_routing: Optional[CapabilityRoutingConfig] = None  # 能力路由配置
     dask: Optional[DaskConfig] = None  # Dask 分布式计算配置
     ai: Optional[AiConfig] = None  # AI 分析服务配置
+    strategy_center: StrategyCenterConfig = Field(default_factory=StrategyCenterConfig)
     timeouts: TimeoutsConfig = Field(default_factory=TimeoutsConfig)  # 统一超时配置
 
     @property
