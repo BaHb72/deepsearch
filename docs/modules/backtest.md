@@ -1,37 +1,49 @@
-# backtest 模块实现说明
+# Backtest 模块说明（主线）
 
 ## 模块定位
 
-`deepsearch.backtest` 提供回测引擎与相关组件，支持在离线数据上验证策略表现。模块设计与实时执行保持一致接口，确保策略无需修改即可切换场景。
+`deepsearch.backtest` 负责将 DeepSearch 策略接口与 Backtrader 执行引擎对接，提供统一的 A 股回测能力。
 
-## 目录结构
+当前主线能力：
 
-- `engines/`：核心回测循环，实现撮合、撮合延迟、费用模型等。
-- `adapters/`：适配不同数据源与格式（CSV、Parquet、DuckDB 等）。
-- `components/`：回测专用组件，例如撮合器、资金账户、订单队列。
-- `data/`：样例数据与数据加载器。
-- `interfaces/`：定义回测上下文、撮合接口、绩效评估器。
-- `utils/`：辅助方法（复权、指标计算、结果导出）。
-- `tests/`：单元与集成测试样例。
-- 顶层 `README.md`：说明运行方法与配置。
+1. 通用策略订单桥（策略 `buy/sell` -> Backtrader 订单）。
+2. 多标的逐 bar 回调与持仓同步。
+3. A 股约束接入（T+1 / 涨跌停 / 停牌）。
+4. 统一结果 DTO（`metrics`、`equity_curve`、`trades`、`blocked_summary`）。
 
-## 核心数据结构
+## 关键链路
 
-- `BacktestContext`：封装初始资金、滑点、交易日历、策略列表。
-- `BarData`/`TickData`：标准化行情数据结构，与实时模块共用。
-- `OrderBookSimulator`：撮合模型，支持 A 股 T+1、港股 T+0 等规则。
-- `PerformanceReport`：回测结果，包含收益率、夏普率、最大回撤等。
+1. `UnifiedBacktraderAdapter` 拉取并标准化行情数据。
+2. `DataBridge` 将 DataFrame 转换为 Backtrader Feed；若存在状态列则启用 A 股状态 Feed。
+3. `BacktraderStrategyAdapter` 负责：
+   - `on_bar(bar)` 调用
+   - 策略订单映射与状态回写
+   - A 股约束拦截与阻断统计
+4. `BacktestService` 负责运行、分析器汇总与结果序列化。
 
-## 关键流程
+## 统一回测接口（当前）
 
-1. 读取配置或 CLI 参数，初始化 `BacktestContext` 与数据适配器。
-2. 加载策略实现，复用 `strategies` 模块接口，与事件引擎交互。
-3. 撮合器按时间推进，生成成交与资金变动事件。
-4. 结果通过 `utils` 导出为报告或写入数据库，供 WebUI/CLI 展示。
+主入口：`/api/strategy/backtest`
 
-## 扩展与集成
+请求关键字段：
 
-- 新数据格式需在 `adapters/` 中实现加载器，并在 README 中记录使用方法。
-- 费用模型、撮合规则建议以策略配置项形式提供，保持可配置。
-- 大规模回测可结合 `workers` 模块并发执行，同时监控内存开销。
-- 回测结果可写入 `infrastructure.repositories`，供前端可视化调用。
+1. `timeframe`: `1d | 1m | 1w`
+2. `adjust`: `qfq | hfq | none`
+3. `slippage`: 浮点滑点
+4. `enforce_a_share_rules`: 是否开启 A 股约束
+5. 交易费用参数：`commission`、`min_commission`、`commission_exempt_min`、`stamp_tax_rate`、`transfer_fee_rate`
+
+响应关键字段：
+
+1. `final_value`
+2. `metrics`
+3. `equity_curve`（`date/equity`）
+4. `trades`（逐笔）
+5. `blocked_summary`、`blocked_events`
+6. `warnings`、`version`、`meta`
+
+## 能力边界
+
+1. v1 优先覆盖“通用 A 股回测闭环”。
+2. 公司行为对现金与持仓的高保真重算（分红、配股、送转）不在本阶段。
+3. `/api/analytics/backtest` 为委托包装，不作为新增能力入口。

@@ -4,11 +4,12 @@ Strategy API Endpoints
 FastAPI routes for strategy management and backtesting.
 """
 
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Literal, cast
 
 from core.strategies.implementations.mean_reversion import MeanReversionStrategy
 from core.strategies.implementations.momentum import MomentumStrategy
 from core.strategies.implementations.moving_average import MovingAverageStrategy
+from core.strategies.interfaces.models import TradingCostConfig
 from core.strategies.managers.manager import get_strategy_manager
 from core.strategies.services.backtest_service import StrategyComparisonConfig, get_backtest_service
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -37,7 +38,16 @@ class BacktestRequest(BaseModel):
     end_date: str = Field(..., description="End date (YYYY-MM-DD)")
     initial_capital: float = Field(100000, description="Initial capital")
     strategy_params: Dict[str, Any] = Field(default_factory=dict, description="Strategy parameters")
-    commission: float = Field(0.001, description="Commission rate")
+    timeframe: Literal["1d", "1m", "1w"] = Field("1d", description="Timeframe")
+    adjust: Literal["qfq", "hfq", "none"] = Field("qfq", description="Adjust mode")
+    slippage: float = Field(0.0, ge=0.0, le=0.1, description="Slippage ratio")
+    enforce_a_share_rules: bool = Field(True, description="Enable A-share constraints")
+    plot: bool = Field(False, description="Generate chart image")
+    commission: float = Field(0.0002, ge=0.0, le=0.01, description="Commission rate")
+    min_commission: float = Field(5.0, ge=0.0, description="Minimum commission")
+    commission_exempt_min: bool = Field(False, description="Disable minimum commission")
+    stamp_tax_rate: float = Field(0.001, ge=0.0, le=0.01, description="Stamp tax rate")
+    transfer_fee_rate: float = Field(0.00001, ge=0.0, le=0.001, description="Transfer fee rate")
 
 
 class CompareRequest(BaseModel):
@@ -312,8 +322,6 @@ async def get_strategy_positions(strategy_id: str):
 @router.post("/backtest")
 async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTasks):
     """Run a strategy backtest"""
-    from core.strategies.interfaces.models import TradingCostConfig
-
     # Get strategy class
     strategy_class = STRATEGY_TYPES.get(request.strategy_type)
     if not strategy_class:
@@ -325,8 +333,14 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
         # Get backtest service
         service = get_backtest_service()
 
-        # Create cost config from commission rate
-        cost_config = TradingCostConfig(commission_rate=request.commission)
+        cost_config = TradingCostConfig(
+            commission_rate=request.commission,
+            min_commission=request.min_commission,
+            commission_exempt_min=request.commission_exempt_min,
+            stamp_tax_rate=request.stamp_tax_rate,
+            transfer_fee_rate=request.transfer_fee_rate,
+            slippage=request.slippage,
+        )
 
         # Run backtest
         result = await service.run_backtest(
@@ -337,7 +351,10 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
             initial_capital=request.initial_capital,
             strategy_params=request.strategy_params,
             cost_config=cost_config,
-            plot=True,
+            timeframe=request.timeframe,
+            adjust=request.adjust,
+            enforce_a_share_rules=request.enforce_a_share_rules,
+            plot=request.plot,
         )
 
         return result.to_dict()

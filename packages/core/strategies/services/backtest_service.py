@@ -55,9 +55,14 @@ def _create_cn_stock_commission(
     - 印花税: 千分之一，仅卖出收取
     - 过户费: 十万分之一，双向收取
     """
-    bt_module = backtester._bt_module  # type: ignore[attr-defined]
+    bt_module = getattr(backtester, "_bt_module", backtester)
+    comm_base_obj = getattr(bt_module, "CommInfoBase", None)
+    if comm_base_obj is None:
+        raise RuntimeError("Backtrader CommInfoBase 不可用，无法构建佣金模型")
+    comm_base = cast(type[Any], comm_base_obj)
+    comm_perc = getattr(comm_base, "COMM_PERC", 0)
 
-    class CNStockCommission(bt_module.CommInfoBase):  # type: ignore[name-defined]
+    class CNStockCommission(comm_base):  # type: ignore[valid-type,misc]
         """
         A股佣金计算类.
 
@@ -71,7 +76,7 @@ def _create_cn_stock_commission(
             ("stamp_tax", cost_config.stamp_tax_rate),
             ("transfer_fee", cost_config.transfer_fee_rate),
             ("stocklike", True),
-            ("commtype", bt_module.CommInfoBase.COMM_PERC),
+            ("commtype", comm_perc),
         )
 
         def _getcommission(
@@ -139,12 +144,12 @@ class EquityPoint:
     """权益曲线中的单个节点."""
 
     date: str
-    value: float
+    equity: float
 
     def to_dict(self) -> dict[str, object]:
         """转换为可序列化字典."""
 
-        return {"date": self.date, "value": self.value}
+        return {"date": self.date, "equity": self.equity}
 
 
 @dataclass
@@ -167,10 +172,44 @@ class BacktestResult:
     profit_factor: float = 0.0
     equity_curve: list[EquityPoint] = field(default_factory=list)
     trade_breakdown: list[TradeBreakdown] = field(default_factory=list)
+    trade_details: list[dict[str, object]] = field(default_factory=list)
+    blocked_summary: dict[str, int] = field(default_factory=dict)
+    blocked_events: list[dict[str, object]] = field(default_factory=list)
+    meta: dict[str, object] = field(default_factory=dict)
+    version: str = "backtest-v1"
+    warnings: dict[str, object] = field(default_factory=dict)
     plot_base64: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         """转换为字典结果，供 WebUI 序列化使用."""
+
+        metrics = {
+            "total_return": self.total_return,
+            "annual_return": self.annual_return,
+            "max_drawdown": self.max_drawdown,
+            "sharpe_ratio": self.sharpe_ratio,
+            "win_rate": self.win_rate,
+            "trade_count": self.total_trades,
+            "winning_trades": self.winning_trades,
+            "losing_trades": self.losing_trades,
+            "profit_factor": self.profit_factor,
+        }
+
+        deprecated_fields = [
+            "total_return",
+            "annual_return",
+            "sharpe_ratio",
+            "max_drawdown",
+            "total_trades",
+            "winning_trades",
+            "losing_trades",
+            "win_rate",
+            "profit_factor",
+        ]
+        merged_warnings = {
+            **self.warnings,
+            "deprecated_fields": deprecated_fields,
+        }
 
         return {
             "strategy_name": self.strategy_name,
@@ -178,6 +217,16 @@ class BacktestResult:
             "end_date": self.end_date.isoformat(),
             "initial_capital": self.initial_capital,
             "final_value": self.final_value,
+            "metrics": metrics,
+            "equity_curve": [point.to_dict() for point in self.equity_curve],
+            "trades": [dict(item) for item in self.trade_details],
+            "blocked_summary": {key: int(value) for key, value in self.blocked_summary.items()},
+            "blocked_events": [dict(item) for item in self.blocked_events],
+            "warnings": merged_warnings,
+            "version": self.version,
+            "meta": dict(self.meta),
+            "plot_base64": self.plot_base64,
+            # Deprecated compatibility fields (one version window).
             "total_return": self.total_return,
             "annual_return": self.annual_return,
             "sharpe_ratio": self.sharpe_ratio,
@@ -187,9 +236,7 @@ class BacktestResult:
             "losing_trades": self.losing_trades,
             "win_rate": self.win_rate,
             "profit_factor": self.profit_factor,
-            "equity_curve": [point.to_dict() for point in self.equity_curve],
-            "trades": [item.to_dict() for item in self.trade_breakdown],
-            "plot_base64": self.plot_base64,
+            "trade_breakdown": [item.to_dict() for item in self.trade_breakdown],
         }
 
 
@@ -226,6 +273,9 @@ class BacktestService:
         initial_capital: float = 100000,
         strategy_params: StrategyParameters | None = None,
         cost_config: TradingCostConfig | None = None,
+        timeframe: str = "1d",
+        adjust: str = "qfq",
+        enforce_a_share_rules: bool = True,
         plot: bool = True,
     ) -> BacktestResult:
         """
@@ -239,6 +289,9 @@ class BacktestService:
             initial_capital: 初始资金 (默认100000)
             strategy_params: 策略参数覆盖
             cost_config: 交易费用配置 (默认使用A股万二不免五)
+            timeframe: 时间周期 (默认 1d)
+            adjust: 复权模式 (默认 qfq)
+            enforce_a_share_rules: 是否启用 A 股约束 (默认开启)
             plot: 是否生成图表
 
         Returns:
@@ -269,13 +322,17 @@ class BacktestService:
             cost_config.stamp_tax_rate,
         )
 
+        if cost_config.slippage > 0:
+            cerebro.broker.set_slippage_perc(cost_config.slippage)
+
+        loaded_symbols: list[str] = []
         for symbol in symbols:
             df = await self.adapter.get_data(
                 symbol=symbol,
                 start_date=start_date,
                 end_date=end_date,
-                timeframe="1d",
-                adjust="qfq",
+                timeframe=timeframe,
+                adjust=adjust,
             )
 
             if df.empty:
@@ -283,12 +340,19 @@ class BacktestService:
                 continue
 
             data_feed = self.adapter.create_backtrader_feed(df, name=symbol)
+            if data_feed is None:
+                logger.warning(f"{symbol} DataFeed 创建失败，已跳过")
+                continue
             cerebro.adddata(data_feed, name=symbol)
+            loaded_symbols.append(symbol)
             logger.info(f"已加载 {symbol} 的 {len(df)} 条数据")
 
-        strategy_instance = strategy_class(
-            params=dict(strategy_params) if strategy_params else None
-        )
+        if not loaded_symbols:
+            raise RuntimeError("所有标的均无可用数据，回测已终止")
+
+        resolved_strategy_params = dict(strategy_params) if strategy_params else {}
+        resolved_strategy_params.setdefault("enforce_a_share_rules", enforce_a_share_rules)
+        strategy_instance = strategy_class(params=resolved_strategy_params)
         bt_strategy_class = BacktraderStrategyAdapter.create_backtrader_strategy(strategy_instance)
         cerebro.addstrategy(bt_strategy_class)
 
@@ -304,9 +368,15 @@ class BacktestService:
             start_date=datetime.strptime(start_date, "%Y-%m-%d"),
             end_date=datetime.strptime(end_date, "%Y-%m-%d"),
             initial_capital=initial_capital,
+            meta={
+                "symbols": list(loaded_symbols),
+                "timeframe": timeframe,
+                "adjust": adjust,
+                "enforce_a_share_rules": enforce_a_share_rules,
+            },
         )
 
-        logger.info(f"开始回测 {strategy_class.__name__}，标的：{', '.join(symbols)}")
+        logger.info(f"开始回测 {strategy_class.__name__}，标的：{', '.join(loaded_symbols)}")
 
         strategies = cerebro.run()
         if not strategies:
@@ -355,6 +425,10 @@ class BacktestService:
                 equity *= 1.0 + _to_float(daily_return)
                 equity_curve.append(EquityPoint(_format_date_label(date_value), round(equity, 2)))
             result.equity_curve = equity_curve
+
+        result.trade_details = _extract_trade_details(strategy)
+        result.blocked_summary = _extract_blocked_summary(strategy)
+        result.blocked_events = _extract_blocked_events(strategy)
 
         if plot:
             result.plot_base64 = self._generate_plot(cerebro)
@@ -506,6 +580,74 @@ def _extract_analysis(strategy: StrategyProto, name: str) -> Mapping[object, obj
         if isinstance(analysis, Mapping):
             return analysis
     return {}
+
+
+def _extract_trade_details(strategy: StrategyProto) -> list[dict[str, object]]:
+    """从适配策略实例提取逐笔成交明细。"""
+
+    raw_trades = getattr(strategy, "_executed_trades", [])
+    if not isinstance(raw_trades, list):
+        return []
+
+    normalized: list[dict[str, object]] = []
+    for item in raw_trades:
+        if not isinstance(item, Mapping):
+            continue
+        trade = dict(item)
+        timestamp = trade.get("timestamp")
+        if isinstance(timestamp, datetime):
+            trade["timestamp"] = timestamp.isoformat()
+        date_value = trade.get("date")
+        if not date_value and isinstance(timestamp, str):
+            trade["date"] = timestamp
+        normalized.append(_json_safe_mapping(trade))
+    return normalized
+
+
+def _extract_blocked_summary(strategy: StrategyProto) -> dict[str, int]:
+    """从策略实例提取阻断摘要。"""
+
+    raw_summary = getattr(strategy, "_blocked_summary", {})
+    if not isinstance(raw_summary, Mapping):
+        return {}
+    return {str(key): int(value) for key, value in raw_summary.items()}
+
+
+def _extract_blocked_events(strategy: StrategyProto) -> list[dict[str, object]]:
+    """从策略实例提取阻断事件。"""
+
+    raw_events = getattr(strategy, "_blocked_events", [])
+    if not isinstance(raw_events, list):
+        return []
+    result: list[dict[str, object]] = []
+    for event in raw_events:
+        if isinstance(event, Mapping):
+            result.append(_json_safe_mapping(dict(event)))
+    return result
+
+
+def _json_safe_mapping(payload: Mapping[str, object]) -> dict[str, object]:
+    """将 datatime 等对象转换为 JSON 友好的结构。"""
+
+    safe: dict[str, object] = {}
+    for key, value in payload.items():
+        if isinstance(value, datetime):
+            safe[str(key)] = value.isoformat()
+        elif isinstance(value, Mapping):
+            safe[str(key)] = _json_safe_mapping(cast(Mapping[str, object], value))
+        elif isinstance(value, list):
+            normalized_items: list[object] = []
+            for item in value:
+                if isinstance(item, datetime):
+                    normalized_items.append(item.isoformat())
+                elif isinstance(item, Mapping):
+                    normalized_items.append(_json_safe_mapping(cast(Mapping[str, object], item)))
+                else:
+                    normalized_items.append(item)
+            safe[str(key)] = normalized_items
+        else:
+            safe[str(key)] = value
+    return safe
 
 
 def _extract_ratio(

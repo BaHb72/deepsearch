@@ -21,34 +21,47 @@ export interface StrategyType {
 }
 
 export interface BacktestTrade {
-    date: string;
-    type: 'buy' | 'sell';
+    trade_id: string;
+    order_id: string;
+    symbol: string;
+    side: 'BUY' | 'SELL';
     price: number;
-    shares: number;
-    value: number;
-    profit?: number;
+    size: number;
+    fee: number;
+    pnl: number;
+    timestamp: string;
+    action?: 'BUY' | 'SELL';
+    date?: string;
+    commission?: number;
 }
 
 export interface BacktestMetrics {
-    totalReturn: number;
-    annualizedReturn: number;
-    maxDrawdown: number;
-    sharpeRatio: number;
-    winRate: number;
-    tradeCount: number;
+    total_return: number;
+    annual_return: number;
+    max_drawdown: number;
+    sharpe_ratio: number;
+    win_rate: number;
+    trade_count: number;
+    winning_trades: number;
+    losing_trades: number;
+    profit_factor: number;
 }
 
 export interface BacktestResult {
-    totalReturn: number;
-    annualizedReturn: number;
-    maxDrawdown: number;
-    sharpeRatio: number;
-    winRate: number;
-    tradeCount: number;
-    dailyReturns: Array<{ date: string; value: number }>;
+    strategy_name: string;
+    start_date: string;
+    end_date: string;
+    initial_capital: number;
+    final_value: number;
+    metrics: BacktestMetrics;
+    equity_curve: Array<{ date: string; equity: number }>;
     trades: BacktestTrade[];
-    metrics?: BacktestMetrics;
-    equity_curve?: Array<{ date: string; equity: number }>;
+    blocked_summary: Record<string, number>;
+    blocked_events: Array<Record<string, unknown>>;
+    warnings?: { deprecated_fields?: string[] };
+    version: string;
+    meta?: Record<string, unknown>;
+    plot_base64?: string | null;
 }
 
 export interface StrategyTypesResponse {
@@ -72,7 +85,16 @@ const runBacktest = async (params: {
     start_date: string;
     end_date: string;
     initial_capital: number;
+    timeframe: '1d' | '1m' | '1w';
+    adjust: 'qfq' | 'hfq' | 'none';
+    slippage: number;
+    enforce_a_share_rules: boolean;
+    plot: boolean;
     commission: number;
+    min_commission: number;
+    commission_exempt_min: boolean;
+    stamp_tax_rate: number;
+    transfer_fee_rate: number;
     strategy_params?: Record<string, unknown>;
 }): Promise<BacktestResult> => {
     const res = await request.post('/strategy/backtest', params);

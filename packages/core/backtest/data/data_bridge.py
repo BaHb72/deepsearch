@@ -392,10 +392,31 @@ class DataBridge:
 
         try:
             assert bt is not None
+            feed_class: Any = bt.feeds.PandasData
+            use_a_share_lines = all(
+                field in df.columns for field in ("high_limited", "low_limited", "is_suspended")
+            )
+
+            if use_a_share_lines:
+
+                class AShareStatusFeed(bt.feeds.PandasData):  # type: ignore[misc]
+                    """A-share status-aware feed (limit/suspension lines)."""
+
+                    lines = ("high_limited", "low_limited", "is_suspended")
+                    params = (
+                        ("high_limited", "high_limited"),
+                        ("low_limited", "low_limited"),
+                        ("is_suspended", "is_suspended"),
+                    )
+
+                feed_class = AShareStatusFeed
+                df = df.copy()
+                df["is_suspended"] = df["is_suspended"].fillna(False).astype(int)
+
             # 创建 Backtrader 数据源
             data = cast(
                 BacktraderPandasData,
-                bt.feeds.PandasData(
+                feed_class(
                     dataname=df,
                     datetime=None,  # 使用索引作为日期
                     open="open" if "open" in df.columns else -1,

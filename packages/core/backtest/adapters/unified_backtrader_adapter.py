@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import pandas as pd
+from core.backtest.rules import is_a_share_symbol
 from core.infrastructure.providers.managers.data_source_manager import get_data_manager
 from core.ports.data_sources import DataSourceType
 from loguru import logger
@@ -69,53 +70,7 @@ class UnifiedBacktraderAdapter:
 
     @classmethod
     def _is_a_share_symbol(cls, symbol: str) -> bool:
-        normalized = cls._normalize_symbol(symbol)
-        if not normalized:
-            return False
-
-        def _is_a_stock_code(code_part: str, market: Optional[str] = None) -> bool:
-            if not (code_part.isdigit() and len(code_part) == 6):
-                return False
-
-            prefix = code_part[:3]
-            if market == "SH":
-                return prefix in {"600", "601", "603", "605", "688", "689"}
-            if market == "SZ":
-                return prefix in {"000", "001", "002", "003", "300", "301"}
-            if market == "BJ":
-                return code_part.startswith(("4", "8"))
-
-            # 无交易所后缀时按常见 A 股号段兜底判定。
-            return prefix in {
-                "000",
-                "001",
-                "002",
-                "003",
-                "300",
-                "301",
-                "600",
-                "601",
-                "603",
-                "605",
-                "688",
-                "689",
-            } or code_part.startswith(("4", "8"))
-
-        if "." in normalized:
-            code_part, market = normalized.split(".", 1)
-            return market in {"SH", "SZ", "BJ"} and _is_a_stock_code(code_part, market)
-
-        if normalized.endswith(("SH", "SZ", "BJ")) and len(normalized) > 2:
-            code_part = normalized[:-2]
-            market = normalized[-2:]
-            return _is_a_stock_code(code_part, market)
-
-        if normalized.startswith(("SH", "SZ", "BJ")) and len(normalized) > 2:
-            market = normalized[:2]
-            code_part = normalized[2:]
-            return _is_a_stock_code(code_part, market)
-
-        return _is_a_stock_code(normalized)
+        return is_a_share_symbol(symbol)
 
     @staticmethod
     async def _await_if_needed(value: Any) -> Any:

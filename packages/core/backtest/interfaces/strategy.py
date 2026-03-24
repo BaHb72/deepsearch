@@ -9,11 +9,13 @@ BaseStrategy - 统一的策略基类
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from logging import Logger
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Type, cast
 
+from core.backtest.rules import AShareOrderConstraintInput, evaluate_a_share_order_constraints
 from core.observability import get_logger
 from core.strategies.interfaces.protocols import BacktestStrategy
 from core.strategies.interfaces.types import (
@@ -28,6 +30,7 @@ from core.strategies.interfaces.types import (
     StrategyTrade,
     TickData,
 )
+from core.strategies.ttrading.backtest_blocked_reasons import get_blocked_reason_label
 
 if TYPE_CHECKING:
 
@@ -502,6 +505,22 @@ class BacktraderStrategyAdapter:
 
                 self.deepsearch_strategy.is_backtest = True
 
+                self._data_by_symbol: dict[str, Any] = {}
+                self._last_bar_dt_by_symbol: dict[str, datetime] = {}
+                self._strategy_to_bt_order_ref: dict[str, int] = {}
+                self._bt_ref_to_strategy_order: dict[int, str] = {}
+                self._intraday_bought_qty: dict[tuple[str, str], float] = defaultdict(float)
+                self._blocked_summary: dict[str, int] = {}
+                self._blocked_events: list[dict[str, object]] = []
+                self._executed_trades: list[StrategyTrade] = []
+                self._max_blocked_events = int(
+                    self.deepsearch_strategy.params.get("max_blocked_events", 200) or 200
+                )
+                self._enforce_a_share_rules = bool(
+                    self.deepsearch_strategy.params.get("enforce_a_share_rules", True)
+                )
+                self._index_data_feeds()
+
                 # 调用策略初始化
 
                 self.deepsearch_strategy.on_init()
@@ -514,29 +533,34 @@ class BacktraderStrategyAdapter:
             def next(self):
                 """处理新的K线"""
 
-                # 构造K线数据字典
-
-                bar: MarketBarData = {
-                    "symbol": self.datas[0]._name,
-                    "datetime": self.datas[0].datetime.datetime(0),
-                    "open": float(self.datas[0].open[0]),
-                    "high": float(self.datas[0].high[0]),
-                    "low": float(self.datas[0].low[0]),
-                    "close": float(self.datas[0].close[0]),
-                    "volume": float(self.datas[0].volume[0]),
-                }
-
-                # 更新持仓信息
-
+                self._index_data_feeds()
                 self._update_positions()
+                active_trade_days: dict[str, str] = {}
 
-                # 调用策略的 on_bar 方法
+                for data in self.datas:
+                    symbol = self._resolve_data_symbol(data)
+                    current_dt = data.datetime.datetime(0)
+                    if self._last_bar_dt_by_symbol.get(symbol) == current_dt:
+                        continue
 
-                self.deepsearch_strategy.on_bar(bar)
+                    self._last_bar_dt_by_symbol[symbol] = current_dt
+                    active_trade_days[symbol] = current_dt.date().isoformat()
 
-                # 处理策略产生的订单
+                    bar: MarketBarData = {
+                        "symbol": symbol,
+                        "datetime": current_dt,
+                        "open": float(data.open[0]),
+                        "high": float(data.high[0]),
+                        "low": float(data.low[0]),
+                        "close": float(data.close[0]),
+                        "volume": float(data.volume[0]),
+                    }
 
-                self._process_strategy_orders()
+                    self.deepsearch_strategy.on_bar(bar)
+                    self._process_strategy_orders()
+
+                self._cleanup_intraday_bought(active_trade_days)
+                self._persist_runtime_state()
 
             def notify_order(self, order):
                 """订单通知"""
@@ -547,99 +571,197 @@ class BacktraderStrategyAdapter:
 
                 remaining = max(size_value - executed_size, 0.0)
 
-                order_type = getattr(
-                    getattr(order, "info", {}), "get", lambda *args, **kwargs: "UNKNOWN"
-                )("order_type", "UNKNOWN")
+                info_getter = getattr(getattr(order, "info", {}), "get", None)
+                order_type = (
+                    info_getter("order_type", "UNKNOWN") if callable(info_getter) else "UNKNOWN"
+                )
 
                 order_symbol = getattr(getattr(order, "data", None), "_name", "")
+                strategy_order_id = self._bt_ref_to_strategy_order.get(
+                    int(order.ref), str(order.ref)
+                )
+                status = self._get_order_status(order)
+                existing_order = dict(self.deepsearch_strategy.orders.get(strategy_order_id, {}))
+                existing_metadata = dict(existing_order.get("metadata", {}))
 
                 order_info: StrategyOrder = {
-                    "id": str(order.ref),
-                    "order_id": str(order.ref),
+                    "id": strategy_order_id,
+                    "order_id": strategy_order_id,
                     "strategy_id": self.deepsearch_strategy.strategy_id,
                     "symbol": order_symbol,
                     "side": "BUY" if order.isbuy() else "SELL",
                     "size": size_value,
                     "price": float(order.price) if order.price is not None else None,
                     "type": str(order_type),
-                    "status": self._get_order_status(order),
+                    "status": status,
                     "filled": executed_size,
                     "remaining": remaining,
+                    "create_time": existing_order.get("create_time"),
                     "update_time": datetime.now(),
                     "metadata": {
+                        **existing_metadata,
+                        "bt_order_ref": int(order.ref),
                         "executed_price": float(getattr(order.executed, "price", 0.0) or 0.0),
                         "commission": float(getattr(order.executed, "comm", 0.0) or 0.0),
                     },
                 }
 
+                self.deepsearch_strategy.orders[strategy_order_id] = order_info
                 self.deepsearch_strategy.on_order(order_info)
+
+                if status in {"FILLED", "CANCELED", "EXPIRED", "REJECTED"}:
+                    self._strategy_to_bt_order_ref.pop(strategy_order_id, None)
+                    self._bt_ref_to_strategy_order.pop(int(order.ref), None)
 
             def notify_trade(self, trade):
                 """成交通知"""
 
                 trade_order = getattr(trade, "order", None)
 
-                order_id = str(getattr(trade_order, "ref", ""))
+                bt_order_ref = int(getattr(trade_order, "ref", 0))
+                strategy_order_id = self._bt_ref_to_strategy_order.get(
+                    bt_order_ref, str(getattr(trade_order, "ref", ""))
+                )
 
                 trade_id = str(
-                    getattr(trade, "ref", order_id or f"trade_{datetime.now().timestamp():.0f}")
+                    getattr(
+                        trade, "ref", strategy_order_id or f"trade_{datetime.now().timestamp():.0f}"
+                    )
                 )
 
                 side = "BUY" if float(trade.size) >= 0 else "SELL"
+                timestamp = datetime.now()
+                symbol = getattr(trade.data, "_name", "")
 
                 trade_info: StrategyTrade = {
                     "trade_id": trade_id,
-                    "order_id": order_id,
+                    "order_id": strategy_order_id,
                     "strategy_id": self.deepsearch_strategy.strategy_id,
-                    "symbol": getattr(trade.data, "_name", ""),
+                    "symbol": symbol,
                     "side": side,
                     "size": abs(float(trade.size)),
                     "price": float(trade.price),
                     "pnl": float(trade.pnl),
                     "fee": float(trade.commission or 0.0),
-                    "timestamp": datetime.now(),
+                    "timestamp": timestamp,
                     "metadata": {
                         "value": float(trade.value),
                         "pnl_comm": float(trade.pnlcomm),
                     },
                 }
+                trade_info["date"] = timestamp.isoformat()
+                trade_info["action"] = side
+                trade_info["commission"] = float(trade.commission or 0.0)
 
+                self._executed_trades.append(trade_info)
                 self.deepsearch_strategy.on_trade(trade_info)
+                self._track_intraday_buy_qty(side=side, symbol=symbol, size=abs(float(trade.size)))
+                self._persist_runtime_state()
 
             def stop(self):
                 """策略停止"""
 
+                self._persist_runtime_state()
                 self.deepsearch_strategy.on_stop()
 
             def _update_positions(self):
                 """更新持仓信息"""
 
-                position = self.getposition(self.datas[0])
-
-                if position:
-
+                for data in self.datas:
+                    symbol = self._resolve_data_symbol(data)
+                    position = self.getposition(data)
+                    current_price = float(data.close[0]) if len(data.close) else 0.0
+                    position_size = float(getattr(position, "size", 0.0) or 0.0)
+                    avg_price = float(getattr(position, "price", 0.0) or 0.0)
+                    market_value = position_size * current_price
+                    unrealized_pnl = (current_price - avg_price) * position_size
                     position_data: StrategyPosition = {
-                        "symbol": self.datas[0]._name,
-                        "size": float(position.size),
-                        "avg_cost": float(position.price),
-                        "market_value": float(position.value),
-                        "unrealized_pnl": float(position.pnl),
+                        "symbol": symbol,
+                        "size": position_size,
+                        "avg_cost": avg_price,
+                        "market_value": market_value,
+                        "unrealized_pnl": unrealized_pnl,
                         "metadata": {
-                            "pnl_comm": float(position.pnlcomm),
+                            "pnl_comm": float(getattr(position, "pnlcomm", unrealized_pnl) or 0.0),
                         },
                         "last_update": datetime.now(),
                     }
-
-                    self.deepsearch_strategy.positions[self.datas[0]._name] = position_data
+                    self.deepsearch_strategy.positions[symbol] = position_data
 
             def _process_strategy_orders(self):
                 """处理策略产生的订单"""
 
-                # 这里可以检查策略的 buy/sell 调用
+                for strategy_order_id, strategy_order in list(
+                    self.deepsearch_strategy.orders.items()
+                ):
+                    status = str(strategy_order.get("status", "")).upper()
+                    if status != "PENDING":
+                        continue
 
-                # 并转换为 Backtrader 订单
+                    symbol = str(strategy_order.get("symbol", "")).strip()
+                    data_feed = self._data_by_symbol.get(symbol)
+                    if data_feed is None:
+                        self._reject_local_order(
+                            strategy_order_id,
+                            reason_code="unknown_symbol",
+                            reason_message=f"未找到标的 {symbol} 对应的数据源",
+                        )
+                        continue
 
-                pass
+                    try:
+                        size = float(strategy_order.get("size", 0.0))
+                    except (TypeError, ValueError):
+                        size = 0.0
+                    if size <= 0:
+                        self._reject_local_order(
+                            strategy_order_id,
+                            reason_code="invalid_size",
+                            reason_message="订单数量无效",
+                        )
+                        continue
+
+                    side = str(strategy_order.get("side", "BUY")).upper()
+                    order_type = str(strategy_order.get("type", "MARKET")).upper()
+                    price_value = strategy_order.get("price")
+                    try:
+                        price = float(price_value) if price_value is not None else None
+                    except (TypeError, ValueError):
+                        price = None
+
+                    blocked_reason = self._check_a_share_constraints(
+                        symbol=symbol,
+                        side=side,
+                        size=size,
+                        data_feed=data_feed,
+                    )
+                    if blocked_reason is not None:
+                        self._block_local_order(strategy_order_id, blocked_reason)
+                        continue
+
+                    bt_order = self._submit_bt_order(
+                        data_feed=data_feed,
+                        side=side,
+                        size=size,
+                        order_type=order_type,
+                        price=price,
+                    )
+                    if bt_order is None:
+                        self._reject_local_order(
+                            strategy_order_id,
+                            reason_code="submit_failed",
+                            reason_message="Backtrader 下单失败",
+                        )
+                        continue
+
+                    order_ref = int(bt_order.ref)
+                    self._strategy_to_bt_order_ref[strategy_order_id] = order_ref
+                    self._bt_ref_to_strategy_order[order_ref] = strategy_order_id
+                    self._update_local_order(
+                        strategy_order_id,
+                        status="SUBMITTED",
+                        metadata_updates={"bt_order_ref": order_ref, "order_type": order_type},
+                    )
+                self._persist_runtime_state()
 
             def _get_order_status(self, order):
                 """获取订单状态"""
@@ -658,7 +780,7 @@ class BacktraderStrategyAdapter:
 
                 elif order.status == order.Completed:
 
-                    return "COMPLETED"
+                    return "FILLED"
 
                 elif order.status == order.Canceled:
 
@@ -675,6 +797,192 @@ class BacktraderStrategyAdapter:
                 else:
 
                     return "UNKNOWN"
+
+            def _resolve_data_symbol(self, data: Any) -> str:
+                symbol = str(getattr(data, "_name", "")).strip()
+                if symbol:
+                    return symbol
+                return f"DATA_{id(data)}"
+
+            def _index_data_feeds(self) -> None:
+                self._data_by_symbol = {
+                    self._resolve_data_symbol(data): data for data in self.datas
+                }
+
+            def _cleanup_intraday_bought(self, active_trade_days: Mapping[str, str]) -> None:
+                if not self._intraday_bought_qty:
+                    return
+                stale_keys = [
+                    key
+                    for key in self._intraday_bought_qty
+                    if active_trade_days.get(key[0]) != key[1]
+                ]
+                for key in stale_keys:
+                    self._intraday_bought_qty.pop(key, None)
+
+            def _safe_numeric_line(self, data_feed: Any, line_name: str) -> float | None:
+                line = getattr(data_feed, line_name, None)
+                if line is None:
+                    return None
+                try:
+                    raw_value = float(line[0])
+                except Exception:
+                    return None
+                if raw_value != raw_value:  # NaN guard
+                    return None
+                return raw_value
+
+            def _check_a_share_constraints(
+                self,
+                *,
+                symbol: str,
+                side: str,
+                size: float,
+                data_feed: Any,
+            ) -> str | None:
+                if not self._enforce_a_share_rules:
+                    return None
+
+                high_limited = self._safe_numeric_line(data_feed, "high_limited")
+                low_limited = self._safe_numeric_line(data_feed, "low_limited")
+                suspended_value = self._safe_numeric_line(data_feed, "is_suspended")
+                is_suspended = bool(int(suspended_value)) if suspended_value is not None else False
+                current_price = float(getattr(data_feed, "close")[0])
+                position_size = float(self.getposition(data_feed).size)
+                trade_day = data_feed.datetime.date(0).isoformat()
+                intraday_bought_qty = float(self._intraday_bought_qty.get((symbol, trade_day), 0.0))
+
+                constraint_input = AShareOrderConstraintInput(
+                    symbol=symbol,
+                    side=side,
+                    size=size,
+                    current_price=current_price,
+                    position_size=position_size,
+                    intraday_bought_qty=intraday_bought_qty,
+                    high_limited=high_limited,
+                    low_limited=low_limited,
+                    is_suspended=is_suspended,
+                )
+                return evaluate_a_share_order_constraints(constraint_input)
+
+            def _submit_bt_order(
+                self,
+                *,
+                data_feed: Any,
+                side: str,
+                size: float,
+                order_type: str,
+                price: float | None,
+            ) -> Any:
+                order_type_upper = order_type.upper()
+                try:
+                    if side == "BUY":
+                        if order_type_upper == "LIMIT" and price is not None:
+                            return self.buy(
+                                data=data_feed, size=size, price=price, exectype=bt.Order.Limit
+                            )
+                        if order_type_upper == "STOP" and price is not None:
+                            return self.buy(
+                                data=data_feed, size=size, price=price, exectype=bt.Order.Stop
+                            )
+                        return self.buy(data=data_feed, size=size)
+
+                    if side == "SELL":
+                        if order_type_upper == "LIMIT" and price is not None:
+                            return self.sell(
+                                data=data_feed, size=size, price=price, exectype=bt.Order.Limit
+                            )
+                        if order_type_upper == "STOP" and price is not None:
+                            return self.sell(
+                                data=data_feed, size=size, price=price, exectype=bt.Order.Stop
+                            )
+                        return self.sell(data=data_feed, size=size)
+                except Exception as exc:
+                    self.log(f"Backtrader 下单异常: {exc}", level="ERROR")
+                return None
+
+            def _update_local_order(
+                self,
+                strategy_order_id: str,
+                *,
+                status: str,
+                metadata_updates: Mapping[str, object] | None = None,
+            ) -> None:
+                existing = dict(self.deepsearch_strategy.orders.get(strategy_order_id, {}))
+                metadata = dict(existing.get("metadata", {}))
+                if metadata_updates:
+                    metadata.update(dict(metadata_updates))
+
+                size_value = float(existing.get("size", 0.0) or 0.0)
+                filled_value = float(existing.get("filled", 0.0) or 0.0)
+                existing.update(
+                    {
+                        "id": strategy_order_id,
+                        "order_id": strategy_order_id,
+                        "status": status,
+                        "filled": filled_value,
+                        "remaining": max(size_value - filled_value, 0.0),
+                        "update_time": datetime.now(),
+                        "metadata": metadata,
+                    }
+                )
+                typed_order = cast(StrategyOrder, existing)
+                self.deepsearch_strategy.orders[strategy_order_id] = typed_order
+                self.deepsearch_strategy.on_order(typed_order)
+
+            def _reject_local_order(
+                self,
+                strategy_order_id: str,
+                *,
+                reason_code: str,
+                reason_message: str,
+            ) -> None:
+                self._update_local_order(
+                    strategy_order_id,
+                    status="REJECTED",
+                    metadata_updates={
+                        "reason_code": reason_code,
+                        "reason": reason_message,
+                    },
+                )
+
+            def _block_local_order(self, strategy_order_id: str, reason_code: str) -> None:
+                self._blocked_summary[reason_code] = self._blocked_summary.get(reason_code, 0) + 1
+                if len(self._blocked_events) < self._max_blocked_events:
+                    event_order = self.deepsearch_strategy.orders.get(strategy_order_id, {})
+                    self._blocked_events.append(
+                        {
+                            "order_id": strategy_order_id,
+                            "symbol": event_order.get("symbol"),
+                            "side": event_order.get("side"),
+                            "reason_code": reason_code,
+                            "reason": get_blocked_reason_label(reason_code),
+                            "time": datetime.now().isoformat(),
+                        }
+                    )
+                self._update_local_order(
+                    strategy_order_id,
+                    status="REJECTED",
+                    metadata_updates={
+                        "reason_code": reason_code,
+                        "reason": get_blocked_reason_label(reason_code),
+                    },
+                )
+
+            def _track_intraday_buy_qty(self, *, side: str, symbol: str, size: float) -> None:
+                if side != "BUY" or size <= 0:
+                    return
+                data_feed = self._data_by_symbol.get(symbol)
+                if data_feed is None:
+                    return
+                trade_day = data_feed.datetime.date(0).isoformat()
+                key = (symbol, trade_day)
+                self._intraday_bought_qty[key] = self._intraday_bought_qty.get(key, 0.0) + size
+
+            def _persist_runtime_state(self) -> None:
+                self.deepsearch_strategy.data_cache["blocked_summary"] = dict(self._blocked_summary)
+                self.deepsearch_strategy.data_cache["blocked_events"] = list(self._blocked_events)
+                self.deepsearch_strategy.data_cache["executed_trades"] = list(self._executed_trades)
 
         return BTStrategy
 

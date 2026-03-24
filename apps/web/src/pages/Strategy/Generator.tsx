@@ -110,7 +110,16 @@ const StrategyGenerator: React.FC = () => {
                 start_date: dateRange[0].format('YYYY-MM-DD'),
                 end_date: dateRange[1].format('YYYY-MM-DD'),
                 initial_capital,
+                timeframe: '1d' as const,
+                adjust: 'qfq' as const,
+                slippage: 0,
+                enforce_a_share_rules: true,
+                plot: false,
                 commission,
+                min_commission: 5,
+                commission_exempt_min: false,
+                stamp_tax_rate: 0.001,
+                transfer_fee_rate: 0.00001,
                 strategy_params: resolvedParams,
             };
 
@@ -156,8 +165,8 @@ const StrategyGenerator: React.FC = () => {
         { title: '标的', dataIndex: 'symbol', key: 'symbol' },
         {
             title: '操作',
-            dataIndex: 'action',
-            key: 'action',
+            dataIndex: 'side',
+            key: 'side',
             render: (text: string) => (
                 <Text type={text === 'BUY' ? 'danger' : 'success'} strong>
                     {text === 'BUY' ? '买入' : '卖出'}
@@ -166,7 +175,7 @@ const StrategyGenerator: React.FC = () => {
         },
         { title: '价格', dataIndex: 'price', key: 'price', render: (val: number) => val.toFixed(2) },
         { title: '数量', dataIndex: 'size', key: 'size' },
-        { title: '佣金', dataIndex: 'commission', key: 'commission', render: (val: number) => val.toFixed(2) },
+        { title: '佣金', dataIndex: 'fee', key: 'fee', render: (val: number) => val.toFixed(2) },
         {
             title: '盈亏',
             dataIndex: 'pnl',
@@ -254,26 +263,26 @@ const StrategyGenerator: React.FC = () => {
                             <ProCard bordered>
                                 <Statistic
                                     title="总收益率"
-                                    value={(backtestResult.metrics?.totalReturn ?? 0) * 100}
+                                    value={(backtestResult.metrics?.total_return ?? 0) * 100}
                                     precision={2}
                                     suffix="%"
-                                    valueStyle={{ color: (backtestResult.metrics?.totalReturn ?? 0) >= 0 ? '#cf1322' : '#3f8600' }}
-                                    prefix={(backtestResult.metrics?.totalReturn ?? 0) >= 0 ? <RiseOutlined /> : <FallOutlined />}
+                                    valueStyle={{ color: (backtestResult.metrics?.total_return ?? 0) >= 0 ? '#cf1322' : '#3f8600' }}
+                                    prefix={(backtestResult.metrics?.total_return ?? 0) >= 0 ? <RiseOutlined /> : <FallOutlined />}
                                 />
                             </ProCard>
                             <ProCard bordered>
                                 <Statistic
                                     title="年化收益"
-                                    value={(backtestResult.metrics?.annualizedReturn ?? 0) * 100}
+                                    value={(backtestResult.metrics?.annual_return ?? 0) * 100}
                                     precision={2}
                                     suffix="%"
-                                    valueStyle={{ color: (backtestResult.metrics?.annualizedReturn ?? 0) >= 0 ? '#cf1322' : '#3f8600' }}
+                                    valueStyle={{ color: (backtestResult.metrics?.annual_return ?? 0) >= 0 ? '#cf1322' : '#3f8600' }}
                                 />
                             </ProCard>
                             <ProCard bordered>
                                 <Statistic
                                     title="最大回撤"
-                                    value={(backtestResult.metrics?.maxDrawdown ?? 0) * 100}
+                                    value={(backtestResult.metrics?.max_drawdown ?? 0) * 100}
                                     precision={2}
                                     suffix="%"
                                     valueStyle={{ color: '#3f8600' }}
@@ -282,7 +291,7 @@ const StrategyGenerator: React.FC = () => {
                             <ProCard bordered>
                                 <Statistic
                                     title="夏普比率"
-                                    value={backtestResult.metrics?.sharpeRatio ?? 0}
+                                    value={backtestResult.metrics?.sharpe_ratio ?? 0}
                                     precision={2}
                                 />
                             </ProCard>
@@ -305,7 +314,7 @@ const StrategyGenerator: React.FC = () => {
                         <Table
                             dataSource={backtestResult?.trades || []}
                             columns={tradeColumns}
-                            rowKey={(record: BacktestTrade, index) => `${record.date}-${index}`}
+                            rowKey={(record: BacktestTrade, index) => `${record.trade_id || record.order_id || index}`}
                             size="small"
                             pagination={{ pageSize: 10 }}
                         />
