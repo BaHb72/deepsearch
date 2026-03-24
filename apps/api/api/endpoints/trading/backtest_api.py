@@ -10,15 +10,14 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, cast
 
-from core.backtest.engines.backtest_engine import get_backtest_engine
 from core.backtest.utils.parameter_converter import DataValidator, ParameterConverter
 from core.observability import get_logger
-from core.strategies.implementations import (
-    MeanReversionStrategy,
-    MomentumStrategy,
-    SimpleMAStrategy,
-    TurtleTradingStrategy,
-)
+from core.strategies.implementations.mean_reversion import MeanReversionStrategy
+from core.strategies.implementations.momentum import MomentumStrategy
+from core.strategies.implementations.moving_average import MovingAverageStrategy
+from core.strategies.implementations.turtle_trading import TurtleTradingStrategy
+from core.strategies.interfaces.models import TradingCostConfig
+from core.strategies.services.backtest_service import get_backtest_service
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -38,10 +37,10 @@ router = APIRouter(prefix="/api/backtest", tags=["backtest"])
 
 # 策略映射
 STRATEGY_MAP = {
-    "simple_ma": SimpleMAStrategy,
-    "turtle": TurtleTradingStrategy,
+    "simple_ma": MovingAverageStrategy,
     "mean_reversion": MeanReversionStrategy,
     "momentum": MomentumStrategy,
+    "turtle": TurtleTradingStrategy,
 }
 
 
@@ -176,29 +175,50 @@ class BacktestResult(BaseModel):
 @router.get("/strategies")
 async def get_strategies():
     """获取可用策略列表"""
-    strategies = []
+    defaults_by_strategy: Dict[str, Dict[str, Any]] = {
+        "simple_ma": {
+            "short_period": 10,
+            "long_period": 30,
+            "position_size": 100,
+            "max_positions": 5,
+        },
+        "mean_reversion": {
+            "lookback_period": 20,
+            "entry_threshold": 2.0,
+            "exit_threshold": 0.35,
+            "stop_loss": 0.03,
+            "position_size": 100,
+        },
+        "momentum": {
+            "momentum_period": 20,
+            "volume_period": 20,
+            "breakout_period": 50,
+            "momentum_threshold": 0.05,
+            "position_size": 100,
+        },
+        "turtle": {
+            "entry_period_s1": 20,
+            "exit_period_s1": 10,
+            "atr_period": 20,
+            "risk_percent": 0.02,
+            "max_units": 4,
+        },
+    }
 
-    for key, strategy_class in STRATEGY_MAP.items():
-        # 获取策略参数
-        params = {}
-        if hasattr(strategy_class, "params"):
-            for param_name, param_value in strategy_class.params._getitems():
-                if param_name != "printlog":  # 排除日志参数
-                    params[param_name] = {
-                        "default": param_value,
-                        "type": type(param_value).__name__,
-                    }
-
-        # 添加参数类型信息
-        param_types = ParameterConverter.get_strategy_param_info(key)
-
+    strategies: List[Dict[str, Any]] = []
+    for strategy_key, strategy_cls in STRATEGY_MAP.items():
+        defaults = defaults_by_strategy.get(strategy_key, {})
+        params = {
+            key: {"default": value, "type": type(value).__name__} for key, value in defaults.items()
+        }
         strategies.append(
             {
-                "id": key,
-                "name": strategy_class.__name__,
-                "description": strategy_class.__doc__.strip() if strategy_class.__doc__ else "",
+                "id": strategy_key,
+                "name": strategy_cls.__name__,
+                "description": f"统一 Backtrader 主线策略（{strategy_key}）",
                 "parameters": params,
-                "parameter_types": param_types,  # 添加类型信息供前端参考
+                "parameter_types": ParameterConverter.get_strategy_param_info(strategy_key),
+                "engine": "backtrader-mainline",
             }
         )
 
@@ -258,83 +278,40 @@ async def execute_backtest(backtest_id: str, config: BacktestConfig):
         logger.error(f"回测 {backtest_id} 结果对象不存在（可能已过期）")
         return
 
-    engine = None
     try:
         logger.info(f"开始执行回测 {backtest_id}")
+        service = get_backtest_service()
+        strategy_class = STRATEGY_MAP[config.strategy]
 
-        # 获取回测引擎
-        engine = await get_backtest_engine()
-
-        # 创建Cerebro
-        engine.create_cerebro(
-            initial_cash=config.initial_cash, commission=config.commission, slippage=config.slippage
+        cost_config = TradingCostConfig(
+            commission_rate=config.commission,
+            slippage=config.slippage,
         )
 
-        # 添加数据
-        await engine.add_data(
+        unified_result = await service.run_backtest(
+            strategy_class=strategy_class,
             symbols=config.symbols,
             start_date=config.start_date,
             end_date=config.end_date,
+            initial_capital=config.initial_cash,
+            strategy_params=config.strategy_params,
+            cost_config=cost_config,
             timeframe=config.timeframe,
             adjust=config.adjust,
+            enforce_a_share_rules=True,
+            plot=True,
         )
-
-        # 添加策略
-        strategy_class = STRATEGY_MAP[config.strategy]
-        engine.add_strategy(strategy_class, **config.strategy_params)
-
-        # 运行回测
-        engine.run()
-
-        # 获取结果
-        metrics = engine.get_performance_metrics()
-        trades = engine.get_trade_list()
-
-        # 获取权益曲线并清理NaN值
-        equity_df = engine.get_equity_curve()
-        # 填充NaN值为0或None
-        equity_df = equity_df.fillna(
-            0
-        )  # 或使用 fillna(value={'returns': 0, 'cumulative_returns': 0, 'drawdown': 0})
-        equity_curve = equity_df.to_dict(orient="records")
-
-        # 进一步清理数据以确保没有NaN或Infinity
-        equity_curve_sanitized: List[Dict[str, Any]] = cast(
-            List[Dict[str, Any]], sanitize_data(equity_curve)
-        )
-
-        # 生成Backtrader原生图表（使用缓存避免重复生成）
-        chart_key = f"{config.strategy}_{config.symbols}_{config.start_date}_{config.end_date}"
-        chart: Optional[str] = None
-
-        # 检查缓存
-        cached_chart = chart_cache.get(chart_key)
-        if cached_chart is not None:
-            logger.info(f"使用缓存的图表: {chart_key}")
-            chart = cached_chart
-        else:
-            logger.info(f"生成新图表: {chart_key}")
-            try:
-                # 调用plot_results，内部已经有超时保护
-                generated_chart = engine.plot_results(use_backtrader_plot=True)
-
-                # 如果图表生成成功，缓存它（TTLCache 自动管理大小）
-                if generated_chart:
-                    chart_cache.set(chart_key, generated_chart)
-                    chart = generated_chart
-                else:
-                    logger.warning("图表生成失败，使用空图表")
-                    chart = None
-            except Exception as e:
-                logger.error(f"图表生成异常: {e}")
-                chart = None  # 如果出错，不阻止回测结果返回
+        dto = unified_result.to_dict()
 
         # 更新结果
         result.status = "completed"
-        result.metrics = metrics
-        result.trades = trades
-        result.equity_curve = equity_curve_sanitized
-        result.chart = chart
+        result.metrics = cast(Optional[Dict[str, Any]], dto.get("metrics"))
+        result.trades = cast(Optional[List[Dict[str, Any]]], dto.get("trades"))
+        result.equity_curve = cast(
+            Optional[List[Dict[str, Any]]],
+            sanitize_data(dto.get("equity_curve", [])),
+        )
+        result.chart = cast(Optional[str], dto.get("plot_base64"))
         result.completed_at = datetime.now()
 
         logger.info(f"回测 {backtest_id} 完成")
@@ -347,15 +324,6 @@ async def execute_backtest(backtest_id: str, config: BacktestConfig):
         result.status = "failed"
         result.error = str(e)
         result.completed_at = datetime.now()
-
-    finally:
-        # 清理资源，帮助垃圾回收器尽快释放内存
-        if engine is not None:
-            # 清除 engine 持有的大对象引用
-            if hasattr(engine, "cerebro"):
-                engine.cerebro = None
-            engine = None
-            logger.debug(f"回测 {backtest_id} 资源已清理")
 
 
 @router.get("/results/{backtest_id}")
@@ -415,55 +383,17 @@ async def list_backtest_results(
 @router.post("/optimize")
 async def optimize_parameters(config: OptimizationConfig, background_tasks: BackgroundTasks):
     """参数优化"""
-    # 验证策略
-    if config.strategy not in STRATEGY_MAP:
-        raise HTTPException(400, f"未知策略: {config.strategy}")
-
-    # 生成任务ID
-    task_id = str(uuid.uuid4())
-
-    # 在后台运行优化
-    background_tasks.add_task(execute_optimization, task_id, config)
-
-    return {"id": task_id, "message": "参数优化任务已提交", "status": "running"}
+    _ = (config, background_tasks)
+    raise HTTPException(
+        status_code=501,
+        detail="统一 Backtrader 主线暂未开放 /api/backtest/optimize，请使用 /api/strategy/compare",
+    )
 
 
 async def execute_optimization(task_id: str, config: OptimizationConfig):
     """执行参数优化"""
-    engine = None
-    try:
-        logger.info(f"开始参数优化 {task_id}")
-
-        # 获取回测引擎
-        engine = await get_backtest_engine()
-
-        # 运行优化
-        strategy_class = STRATEGY_MAP[config.strategy]
-
-        results = engine.optimize_parameters(
-            strategy_class=strategy_class,
-            param_grid=config.param_grid,
-            symbols=config.symbols,
-            start_date=config.start_date,
-            end_date=config.end_date,
-            metric=config.metric,
-            initial_cash=config.initial_cash,
-            commission=config.commission,
-        )
-
-        # 保存结果（这里简化处理，实际应保存到数据库）
-        logger.info(f"优化完成: {results['best_params']}")
-
-    except Exception as e:
-        logger.error(f"参数优化 {task_id} 失败: {e}")
-
-    finally:
-        # 清理资源
-        if engine is not None:
-            if hasattr(engine, "cerebro"):
-                engine.cerebro = None
-            engine = None
-            logger.debug(f"参数优化 {task_id} 资源已清理")
+    _ = (task_id, config)
+    logger.warning("execute_optimization 已停用：主线统一到 /api/strategy/compare")
 
 
 @router.delete("/results/{backtest_id}")
@@ -497,21 +427,9 @@ async def get_backtest_plot(
 
     if result.status != "completed":
         raise HTTPException(400, "回测尚未完成")
-
-    try:
-        # 重新创建引擎并加载结果以生成图表
-        await get_backtest_engine()
-
-        # 如果有保存的cerebro对象，使用它来生成图表
-        if hasattr(result, "chart") and result.chart:
-            return {"chart": result.chart, "type": "backtrader" if use_native else "custom"}
-
-        # 否则返回已有的图表
-        return {"chart": result.chart or None, "type": "cached"}
-
-    except Exception as e:
-        logger.error(f"生成图表失败: {e}")
-        raise HTTPException(500, f"生成图表失败: {str(e)}")
+    if hasattr(result, "chart") and result.chart:
+        return {"chart": result.chart, "type": "backtrader" if use_native else "custom"}
+    return {"chart": None, "type": "none"}
 
 
 @router.get("/sample_config/{strategy}")
@@ -528,31 +446,12 @@ async def get_sample_config(strategy: str):
             "start_date": "2023-01-01",
             "end_date": "2024-01-01",
             "initial_cash": 100000,
-            "commission": 0.001,
+            "commission": 0.0002,
             "strategy_params": {
                 "short_period": 10,
                 "long_period": 30,
-                "position_pct": 0.95,  # 使用95%的资金
-                "stop_loss": 0.05,
-                "take_profit": 0.15,
-                "printlog": True,  # 开启日志以便调试
-            },
-        },
-        "turtle": {
-            "strategy": "turtle",
-            "symbols": ["000001"],
-            "start_date": "2023-01-01",
-            "end_date": "2024-01-01",
-            "initial_cash": 100000,
-            "commission": 0.001,
-            "strategy_params": {
-                "entry_period_s1": 20,
-                "exit_period_s1": 10,
-                "atr_period": 20,
-                "risk_percent": 0.02,
-                "max_units": 4,
-                "stop_n": 2,
-                "use_system": 1,
+                "position_size": 100,
+                "max_positions": 5,
             },
         },
         "mean_reversion": {
@@ -561,15 +460,13 @@ async def get_sample_config(strategy: str):
             "start_date": "2023-01-01",
             "end_date": "2024-01-01",
             "initial_cash": 100000,
-            "commission": 0.001,
+            "commission": 0.0002,
             "strategy_params": {
-                "bb_period": 20,
-                "bb_devfactor": 2.0,
-                "rsi_period": 14,
-                "rsi_oversold": 30,
-                "rsi_overbought": 70,
-                "position_pct": 0.95,  # 使用95%的资金
+                "lookback_period": 20,
+                "entry_threshold": 2.0,
+                "exit_threshold": 0.35,
                 "stop_loss": 0.03,
+                "position_size": 100,
             },
         },
         "momentum": {
@@ -578,17 +475,29 @@ async def get_sample_config(strategy: str):
             "start_date": "2023-01-01",
             "end_date": "2024-01-01",
             "initial_cash": 100000,
-            "commission": 0.001,
+            "commission": 0.0002,
             "strategy_params": {
                 "momentum_period": 20,
                 "volume_period": 20,
                 "breakout_period": 50,
-                "atr_period": 14,
-                "atr_multiplier": 2.0,
                 "momentum_threshold": 0.05,
-                "volume_multiplier": 1.5,
-                "max_holding_period": 60,
-                "position_pct": 0.95,  # 使用95%的资金
+                "position_size": 100,
+            },
+        },
+        "turtle": {
+            "strategy": "turtle",
+            "symbols": ["000001"],
+            "start_date": "2023-01-01",
+            "end_date": "2024-01-01",
+            "initial_cash": 100000,
+            "commission": 0.0002,
+            "strategy_params": {
+                "entry_period_s1": 20,
+                "exit_period_s1": 10,
+                "atr_period": 20,
+                "risk_percent": 0.02,
+                "max_units": 4,
+                "stop_n": 2.0,
             },
         },
     }

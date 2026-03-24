@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Literal, cast
 from core.strategies.implementations.mean_reversion import MeanReversionStrategy
 from core.strategies.implementations.momentum import MomentumStrategy
 from core.strategies.implementations.moving_average import MovingAverageStrategy
+from core.strategies.implementations.turtle_trading import TurtleTradingStrategy
 from core.strategies.interfaces.models import TradingCostConfig
 from core.strategies.managers.manager import get_strategy_manager
 from core.strategies.services.backtest_service import StrategyComparisonConfig, get_backtest_service
@@ -66,6 +67,21 @@ STRATEGY_TYPES = {
     "MovingAverage": MovingAverageStrategy,
     "MeanReversion": MeanReversionStrategy,
     "Momentum": MomentumStrategy,
+    "Turtle": TurtleTradingStrategy,
+    "turtle": TurtleTradingStrategy,
+}
+
+# 回测主线当前仅支持已迁移到 BaseStrategy 协议的策略
+BACKTEST_STRATEGY_TYPES = {
+    "MA": MovingAverageStrategy,
+    "MovingAverage": MovingAverageStrategy,
+    "simple_ma": MovingAverageStrategy,
+    "MeanReversion": MeanReversionStrategy,
+    "mean_reversion": MeanReversionStrategy,
+    "Momentum": MomentumStrategy,
+    "momentum": MomentumStrategy,
+    "Turtle": TurtleTradingStrategy,
+    "turtle": TurtleTradingStrategy,
 }
 
 
@@ -143,6 +159,42 @@ async def get_strategy_types():
                         "default": 0.02,
                         "description": "Stop loss %",
                     },
+                },
+            },
+            {
+                "type": "Turtle",
+                "name": "Turtle Trading",
+                "description": "Donchian breakout with ATR risk control and pyramiding",
+                "params": {
+                    "entry_period_s1": {
+                        "type": "int",
+                        "default": 20,
+                        "description": "System 1 entry period",
+                    },
+                    "exit_period_s1": {
+                        "type": "int",
+                        "default": 10,
+                        "description": "System 1 exit period",
+                    },
+                    "entry_period_s2": {
+                        "type": "int",
+                        "default": 55,
+                        "description": "System 2 entry period",
+                    },
+                    "exit_period_s2": {
+                        "type": "int",
+                        "default": 20,
+                        "description": "System 2 exit period",
+                    },
+                    "atr_period": {"type": "int", "default": 20, "description": "ATR period"},
+                    "risk_percent": {
+                        "type": "float",
+                        "default": 0.02,
+                        "description": "Risk per unit",
+                    },
+                    "max_units": {"type": "int", "default": 4, "description": "Max pyramid units"},
+                    "stop_n": {"type": "float", "default": 2.0, "description": "ATR stop multiple"},
+                    "use_system": {"type": "int", "default": 1, "description": "System selector"},
                 },
             },
         ]
@@ -322,11 +374,16 @@ async def get_strategy_positions(strategy_id: str):
 @router.post("/backtest")
 async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTasks):
     """Run a strategy backtest"""
+    _ = background_tasks
     # Get strategy class
-    strategy_class = STRATEGY_TYPES.get(request.strategy_type)
+    strategy_class = BACKTEST_STRATEGY_TYPES.get(request.strategy_type)
     if not strategy_class:
         raise HTTPException(
-            status_code=400, detail=f"Unknown strategy type: {request.strategy_type}"
+            status_code=400,
+            detail=(
+                f"回测暂不支持策略: {request.strategy_type}。"
+                f"当前支持: {', '.join(BACKTEST_STRATEGY_TYPES.keys())}"
+            ),
         )
 
     try:
@@ -377,10 +434,13 @@ async def compare_strategies(request: CompareRequest):
             strategy_type_value = strategy_config.get("type")
             if not isinstance(strategy_type_value, str):
                 raise ValueError(f"Unknown strategy type: {strategy_type_value!r}")
-            strategy_class = STRATEGY_TYPES.get(strategy_type_value)
+            strategy_class = BACKTEST_STRATEGY_TYPES.get(strategy_type_value)
 
             if not strategy_class:
-                raise ValueError(f"Unknown strategy type: {strategy_type_value}")
+                raise ValueError(
+                    f"回测暂不支持策略: {strategy_type_value}。"
+                    f"当前支持: {', '.join(BACKTEST_STRATEGY_TYPES.keys())}"
+                )
 
             strategies.append(
                 {

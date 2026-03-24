@@ -10,15 +10,13 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 from core.infrastructure.persistence.duckdb_analytics import get_analytics_db
 from core.infrastructure.providers.managers.data_sync_service import get_sync_service
-from core.strategies.implementations import (
-    MeanReversionStrategy,
-    MomentumStrategy,
-    SimpleMAStrategy,
-    TurtleTradingStrategy,
-)
+from core.strategies.implementations import MeanReversionStrategy, MomentumStrategy
+from core.strategies.implementations.moving_average import MovingAverageStrategy
+from core.strategies.implementations.turtle_trading import TurtleTradingStrategy
 from core.strategies.interfaces.models import TradingCostConfig
 from core.strategies.services.backtest_service import get_backtest_service
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi.params import Body as BodyParam
 from loguru import logger
 
 from apps.api.api.utils import sanitize_for_json
@@ -27,11 +25,22 @@ from apps.api.auth import optional_auth
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 ANALYTICS_BACKTEST_STRATEGY_MAP: dict[str, type] = {
-    "simple_ma": SimpleMAStrategy,
-    "turtle": TurtleTradingStrategy,
+    "simple_ma": MovingAverageStrategy,
+    "ma": MovingAverageStrategy,
+    "movingaverage": MovingAverageStrategy,
+    "moving_average": MovingAverageStrategy,
     "mean_reversion": MeanReversionStrategy,
     "momentum": MomentumStrategy,
+    "turtle": TurtleTradingStrategy,
 }
+
+
+def _resolve_body_value(value: Any, default: Any) -> Any:
+    """兼容直接函数调用场景，避免默认 Body 对象泄漏到业务逻辑。"""
+
+    if isinstance(value, BodyParam):
+        return default
+    return value
 
 
 @router.get("/indicators/{symbol}")
@@ -135,6 +144,16 @@ async def run_backtest(
     end_date: str = Body(..., description="结束日期"),
     initial_capital: float = Body(100000, description="初始资金"),
     parameters: Dict[str, Any] = Body({}, description="策略参数"),
+    timeframe: str = Body("1d", description="周期: 1d / 1m / 1w"),
+    adjust: str = Body("qfq", description="复权方式: qfq / hfq / none"),
+    slippage: float = Body(0.0, description="滑点比例"),
+    enforce_a_share_rules: bool = Body(True, description="是否启用A股交易规则"),
+    plot: bool = Body(False, description="是否生成图表"),
+    commission: float = Body(0.0002, description="手续费率"),
+    min_commission: float = Body(5.0, description="最低佣金"),
+    commission_exempt_min: bool = Body(False, description="是否免最低佣金"),
+    stamp_tax_rate: float = Body(0.001, description="印花税率"),
+    transfer_fee_rate: float = Body(0.00001, description="过户费率"),
 ):
     """
     运行回测
@@ -151,8 +170,25 @@ async def run_backtest(
             raise HTTPException(status_code=400, detail=f"不支持的策略ID: {strategy_id}")
 
         service = get_backtest_service()
-        commission_rate = float(parameters.get("commission", 0.001)) if parameters else 0.001
-        cost_config = TradingCostConfig(commission_rate=commission_rate)
+        timeframe_value = str(_resolve_body_value(timeframe, "1d"))
+        adjust_value = str(_resolve_body_value(adjust, "qfq"))
+        slippage_value = float(_resolve_body_value(slippage, 0.0))
+        enforce_a_share_rules_value = bool(_resolve_body_value(enforce_a_share_rules, True))
+        plot_value = bool(_resolve_body_value(plot, False))
+        commission_value = float(_resolve_body_value(commission, 0.0002))
+        min_commission_value = float(_resolve_body_value(min_commission, 5.0))
+        commission_exempt_min_value = bool(_resolve_body_value(commission_exempt_min, False))
+        stamp_tax_rate_value = float(_resolve_body_value(stamp_tax_rate, 0.001))
+        transfer_fee_rate_value = float(_resolve_body_value(transfer_fee_rate, 0.00001))
+
+        cost_config = TradingCostConfig(
+            commission_rate=commission_value,
+            min_commission=min_commission_value,
+            commission_exempt_min=commission_exempt_min_value,
+            stamp_tax_rate=stamp_tax_rate_value,
+            transfer_fee_rate=transfer_fee_rate_value,
+            slippage=slippage_value,
+        )
         strategy_params = parameters if isinstance(parameters, dict) else {}
 
         result = await service.run_backtest(
@@ -163,7 +199,10 @@ async def run_backtest(
             initial_capital=initial_capital,
             strategy_params=strategy_params,
             cost_config=cost_config,
-            plot=False,
+            timeframe=timeframe_value,
+            adjust=adjust_value,
+            enforce_a_share_rules=enforce_a_share_rules_value,
+            plot=plot_value,
         )
 
         analytics_db = get_analytics_db()
@@ -186,6 +225,12 @@ async def run_backtest(
         )
         await analytics_db.import_from_dataframe(result_df, "backtest_results", if_exists="append")
 
+        to_dict = getattr(result, "to_dict", None)
+        if callable(to_dict):
+            response_payload = to_dict()
+            return sanitize_for_json(response_payload)
+
+        # 兼容旧结果对象（例如测试桩或历史调用）
         return sanitize_for_json(
             {
                 "strategy_id": strategy_key,

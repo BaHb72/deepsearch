@@ -1,209 +1,270 @@
 """
-均值回归策略
-基于布林带和RSI的统计套利策略
+均值回归策略（统一策略协议实现）。
+
+基于布林带 + RSI 的长仓均值回归：
+1. 价格偏离均值达到阈值且 RSI 超卖时开仓；
+2. 回归均值附近或触发止损时平仓。
 """
 
-import backtrader as bt
+from __future__ import annotations
+
+from collections import deque
+from statistics import fmean, pstdev
+from typing import Any
+
+from core.strategies.interfaces.base import BaseStrategy
+from core.strategies.interfaces.types import MarketBarData, StrategyOrder, StrategyTrade, TickData
 
 
-class MeanReversionStrategy(bt.Strategy):
-    """
-    均值回归策略
+class MeanReversionStrategy(BaseStrategy):
+    """A股回测主线可用的均值回归策略。"""
 
-    策略逻辑：
-    1. 价格触及布林带下轨且RSI超卖时买入
-    2. 价格触及布林带上轨且RSI超买时卖出
-    3. 价格回归到均线附近时平仓
-    4. 使用标准差倍数作为入场和出场信号
-    """
-
-    params = (
-        ("bb_period", 20),  # 布林带周期
-        ("bb_devfactor", 2.0),  # 布林带标准差倍数
-        ("rsi_period", 14),  # RSI周期
-        ("rsi_oversold", 30),  # RSI超卖阈值
-        ("rsi_overbought", 70),  # RSI超买阈值
-        ("position_size", None),  # 固定仓位大小（None表示使用百分比）
-        ("position_pct", 0.95),  # 使用资金的百分比
-        ("stop_loss", 0.03),  # 止损 3%
-        ("take_profit_ratio", 0.5),  # 止盈位置（相对于布林带宽度）
-        ("min_bb_width", 0.01),  # 最小布林带宽度（避免低波动期）
-        ("printlog", False),  # 打印日志
-    )
-
-    def __init__(self):
-        """初始化策略"""
-        self.dataclose = self.datas[0].close
-
-        # 布林带
-        self.bbands = bt.indicators.BollingerBands(
-            self.datas[0], period=self.params.bb_period, devfactor=self.params.bb_devfactor
+    def on_init(self) -> None:
+        self.lookback_period = self._as_int(
+            self.params.get("lookback_period", self.params.get("bb_period", 20)),
+            default=20,
+        )
+        self.entry_threshold = self._as_float(
+            self.params.get("entry_threshold", self.params.get("bb_devfactor", 2.0)),
+            default=2.0,
+        )
+        self.exit_threshold = self._as_float(self.params.get("exit_threshold", 0.35), default=0.35)
+        self.stop_loss = self._as_float(self.params.get("stop_loss", 0.03), default=0.03)
+        self.position_size = self.params.get("position_size")
+        self.position_pct = self._as_float(self.params.get("position_pct", 0.95), default=0.95)
+        self.use_volume_filter = bool(self.params.get("use_volume_filter", False))
+        self.volume_factor = self._as_float(self.params.get("volume_factor", 1.2), default=1.2)
+        self.rsi_period = self._as_int(self.params.get("rsi_period", 14), default=14)
+        self.rsi_oversold = self._as_float(self.params.get("rsi_oversold", 30), default=30.0)
+        self.rsi_overbought = self._as_float(
+            self.params.get("rsi_overbought", 70),
+            default=70.0,
         )
 
-        # RSI
-        self.rsi = bt.indicators.RSI(self.datas[0], period=self.params.rsi_period)
+        self.close_history: dict[str, deque[float]] = {}
+        self.volume_history: dict[str, deque[float]] = {}
+        self.pending_side: dict[str, str] = {}
+        self.entry_price: dict[str, float] = {}
 
-        # 布林带宽度（用于判断市场波动性）
-        self.bb_width = self.bbands.top - self.bbands.bot
-        self.bb_width_pct = self.bb_width / self.bbands.mid
-
-        # Z-Score（标准化指标）
-        self.zscore = (self.dataclose - self.bbands.mid) / (self.bbands.top - self.bbands.mid)
-
-        # 成交量指标
-        self.volume_sma = bt.indicators.SMA(self.datas[0].volume, period=20)
-
-        # MACD用于趋势确认
-        self.macd = bt.indicators.MACD(self.datas[0])
-
-        # 记录
-        self.order = None
-        self.entry_price = 0
-        self.entry_type = None  # 'long' or 'short'
-        self.trades_count = 0
-
-    def notify_order(self, order):
-        """订单通知"""
-        if order.status in [order.Submitted, order.Accepted]:
-            return
-
-        if order.status in [order.Completed]:
-            if order.isbuy():
-                self.entry_price = order.executed.price
-                self.entry_type = "long"
-                if self.params.printlog:
-                    self.log(
-                        f"买入执行: 价格={order.executed.price:.2f}, " f"RSI={self.rsi[0]:.2f}"
-                    )
-            else:
-                if self.params.printlog:
-                    self.log(f"卖出执行: 价格={order.executed.price:.2f}")
-                self.entry_type = None
-                self.entry_price = 0
-
-        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
-            if self.params.printlog:
-                self.log("订单取消/保证金不足/拒绝")
-
-        self.order = None
-
-    def notify_trade(self, trade):
-        """交易通知"""
-        if trade.isclosed:
-            self.trades_count += 1
-            if self.params.printlog:
-                self.log(
-                    f"交易关闭 #{self.trades_count}: "
-                    f"毛利润={trade.pnl:.2f}, 净利润={trade.pnlcomm:.2f}"
-                )
-
-    def next(self):
-        """策略主逻辑"""
-        # 检查待处理订单
-        if self.order:
-            return
-
-        # 检查布林带宽度（避免在低波动期交易）
-        if self.bb_width_pct[0] < self.params.min_bb_width:
-            return
-
-        # 当前价格位置
-        price = self.dataclose[0]
-        bb_upper = self.bbands.top[0]
-        bb_middle = self.bbands.mid[0]
-        bb_lower = self.bbands.bot[0]
-        rsi_value = self.rsi[0]
-
-        # 没有持仓
-        if not self.position:
-            # 买入信号：价格接近下轨且RSI超卖
-            if price <= bb_lower * 1.01 and rsi_value < self.params.rsi_oversold:
-                # 额外确认：成交量放大
-                if self.datas[0].volume[0] > self.volume_sma[0] * 1.2:
-                    if self.params.printlog:
-                        self.log(
-                            f"买入信号: 价格{price:.2f}接近下轨{bb_lower:.2f}, "
-                            f"RSI={rsi_value:.2f}"
-                        )
-
-                    size = self.calculate_position_size()
-                    self.order = self.buy(size=size)
-
-            # 做空信号（如果支持）：价格接近上轨且RSI超买
-            # 注意：A股不支持做空，这里仅作示例
-            elif price >= bb_upper * 0.99 and rsi_value > self.params.rsi_overbought:
-                if self.params.printlog:
-                    self.log(
-                        f"卖空信号: 价格{price:.2f}接近上轨{bb_upper:.2f}, " f"RSI={rsi_value:.2f}"
-                    )
-                # 如果支持做空：self.order = self.sell(size=size)
-
-        else:
-            # 有多头持仓
-            if self.entry_type == "long":
-                # 止损
-                if price < self.entry_price * (1 - self.params.stop_loss):
-                    if self.params.printlog:
-                        self.log(
-                            f"多头止损: 价格{price:.2f} < "
-                            f"止损价{self.entry_price * (1 - self.params.stop_loss):.2f}"
-                        )
-                    self.order = self.close()
-
-                # 止盈：价格回归到中线附近
-                elif price >= bb_middle * 0.98:
-                    profit_pct = (price - self.entry_price) / self.entry_price
-                    if profit_pct > 0.01:  # 至少1%利润
-                        if self.params.printlog:
-                            self.log(
-                                f"均值回归止盈: 价格{price:.2f}接近中线{bb_middle:.2f}, "
-                                f"利润{profit_pct*100:.2f}%"
-                            )
-                        self.order = self.close()
-
-                # 反转信号：触及上轨
-                elif price >= bb_upper and rsi_value > self.params.rsi_overbought:
-                    if self.params.printlog:
-                        self.log("反转信号平仓: 价格触及上轨")
-                    self.order = self.close()
-
-    def calculate_position_size(self):
-        """计算仓位大小"""
-        # 如果指定了固定仓位且不为None，使用固定值
-        if self.params.position_size is not None:
-            return self.params.position_size
-
-        # 否则使用百分比方式
-        cash = self.broker.getcash()
-        price = self.dataclose[0]
-
-        # 使用position_pct参数（默认0.95，即95%）
-        position_value = cash * self.params.position_pct
-        size = int(position_value / price / 100) * 100
-
-        # 根据RSI调整仓位（RSI越低，仓位越大）
-        if self.rsi[0] < 20:
-            size = int(size * 1.5 / 100) * 100
-        elif self.rsi[0] < 25:
-            size = int(size * 1.2 / 100) * 100
-
-        return max(size, 100)  # 至少100股
-
-    def log(self, txt, dt=None):
-        """日志记录"""
-        dt = dt or self.datas[0].datetime.date(0)
-        print(f"{dt.isoformat()}, {txt}")
-
-    def stop(self):
-        """策略结束"""
-        if self.params.printlog:
-            if self.trades_count > 0:
-                # 计算胜率等统计信息
-                pass
-
-            self.log(
-                f"均值回归策略结束 - BB周期: {self.params.bb_period}, "
-                f"RSI周期: {self.params.rsi_period}, "
-                f"最终价值: {self.broker.getvalue():.2f}, "
-                f"交易次数: {self.trades_count}"
+        self.log(
+            (
+                "MeanReversion 初始化: "
+                f"lookback={self.lookback_period}, entry={self.entry_threshold}, "
+                f"exit={self.exit_threshold}, stop_loss={self.stop_loss}"
             )
+        )
+
+    def on_start(self) -> None:
+        self.log("MeanReversion 策略启动")
+
+    def on_bar(self, bar: MarketBarData) -> None:
+        symbol = str(bar.get("symbol", "")).strip()
+        if not symbol:
+            return
+
+        close_price = float(bar.get("close", 0.0) or 0.0)
+        volume = float(bar.get("volume", 0.0) or 0.0)
+        if close_price <= 0:
+            return
+
+        self._ensure_symbol_state(symbol)
+        self.close_history[symbol].append(close_price)
+        self.volume_history[symbol].append(volume)
+
+        required_points = max(self.lookback_period, self.rsi_period + 1)
+        if len(self.close_history[symbol]) < required_points:
+            return
+
+        closes = list(self.close_history[symbol])
+        price_window = closes[-self.lookback_period :]
+        mean_price = fmean(price_window)
+        std_price = pstdev(price_window)
+        if std_price <= 0:
+            return
+
+        zscore = (close_price - mean_price) / std_price
+        rsi_value = self._calculate_rsi(closes, self.rsi_period)
+        volume_ok = self._is_volume_ok(symbol, volume)
+
+        position = self.get_position(symbol)
+        position_size = float(position.get("size", 0.0) or 0.0)
+        has_position = position_size > 0
+        pending = self.pending_side.get(symbol)
+
+        if not has_position:
+            if pending != "BUY" and volume_ok:
+                if zscore <= -abs(self.entry_threshold) and rsi_value <= self.rsi_oversold:
+                    order_size = self._resolve_order_size(close_price)
+                    if order_size > 0:
+                        self.buy(symbol=symbol, size=order_size, order_type="MARKET")
+                        self.pending_side[symbol] = "BUY"
+                        self.metrics["total_trades"] += 1
+                        self.log(
+                            f"BUY signal: {symbol} close={close_price:.3f}, z={zscore:.3f}, "
+                            f"rsi={rsi_value:.2f}, size={order_size}"
+                        )
+        else:
+            entry_price = self.entry_price.get(symbol, close_price)
+            stop_loss_hit = close_price <= entry_price * (1 - self.stop_loss)
+            mean_revert_exit = (
+                zscore >= -abs(self.exit_threshold)
+                and rsi_value >= (self.rsi_oversold + self.rsi_overbought) / 2
+            )
+
+            if pending != "SELL" and (stop_loss_hit or mean_revert_exit):
+                sell_size = max(position_size, 0.0)
+                if sell_size > 0:
+                    self.sell(symbol=symbol, size=sell_size, order_type="MARKET")
+                    self.pending_side[symbol] = "SELL"
+                    reason = "stop_loss" if stop_loss_hit else "mean_revert_exit"
+                    self.log(
+                        f"SELL signal: {symbol} close={close_price:.3f}, z={zscore:.3f}, "
+                        f"rsi={rsi_value:.2f}, reason={reason}"
+                    )
+
+        self.data_cache[symbol] = {
+            "price": close_price,
+            "mean": mean_price,
+            "std": std_price,
+            "zscore": zscore,
+            "rsi": rsi_value,
+            "has_position": has_position,
+            "pending": pending,
+        }
+
+    def on_tick(self, tick: TickData) -> None:
+        # 日线/分钟策略不处理逐笔
+        _ = tick
+
+    def on_order(self, order: StrategyOrder) -> None:
+        symbol = str(order.get("symbol", "")).strip()
+        status = str(order.get("status", "")).upper()
+        side = str(order.get("side", "")).upper()
+
+        if not symbol:
+            return
+
+        if status in {"SUBMITTED", "ACCEPTED", "PARTIAL"}:
+            self.pending_side[symbol] = side
+            return
+
+        if status == "FILLED":
+            self.pending_side.pop(symbol, None)
+            metadata = order.get("metadata", {})
+            executed_price = self._safe_float(
+                metadata.get("executed_price") if isinstance(metadata, dict) else None,
+                default=float(order.get("price", 0.0) or 0.0),
+            )
+            if side == "BUY" and executed_price > 0:
+                self.entry_price[symbol] = executed_price
+            elif side == "SELL":
+                self.entry_price.pop(symbol, None)
+            return
+
+        if status in {"REJECTED", "CANCELED", "EXPIRED"}:
+            self.pending_side.pop(symbol, None)
+
+    def on_trade(self, trade: StrategyTrade) -> None:
+        pnl = float(trade.get("pnl", 0.0) or 0.0)
+        self.metrics["total_pnl"] += pnl
+
+        if pnl > 0:
+            self.metrics["winning_trades"] += 1
+        elif pnl < 0:
+            self.metrics["losing_trades"] += 1
+
+        self.log(
+            (
+                f"Trade: {trade.get('symbol')} "
+                f"side={trade.get('side')} "
+                f"size={trade.get('size')} "
+                f"pnl={pnl:.2f}"
+            )
+        )
+
+    def on_stop(self) -> None:
+        total_trades = int(self.metrics.get("total_trades", 0))
+        if total_trades > 0:
+            winning = float(self.metrics.get("winning_trades", 0))
+            self.metrics["win_rate"] = winning / total_trades
+        self.log(
+            (
+                "MeanReversion 策略停止: "
+                f"trades={self.metrics.get('total_trades', 0)}, "
+                f"pnl={self.metrics.get('total_pnl', 0.0):.2f}"
+            )
+        )
+
+    def _ensure_symbol_state(self, symbol: str) -> None:
+        if symbol not in self.close_history:
+            max_close_len = max(self.lookback_period + 5, self.rsi_period + 5)
+            self.close_history[symbol] = deque(maxlen=max_close_len)
+            self.volume_history[symbol] = deque(maxlen=self.lookback_period + 5)
+
+    def _is_volume_ok(self, symbol: str, current_volume: float) -> bool:
+        if not self.use_volume_filter:
+            return True
+        history = self.volume_history.get(symbol)
+        if history is None or len(history) < self.lookback_period:
+            return False
+        avg_volume = fmean(list(history)[-self.lookback_period :])
+        return current_volume >= avg_volume * self.volume_factor
+
+    def _resolve_order_size(self, price: float) -> int:
+        raw_position_size = self.params.get("position_size")
+        if raw_position_size not in (None, "", 0):
+            explicit_size = self._as_int(raw_position_size, default=0)
+            if explicit_size > 0:
+                return explicit_size
+
+        capital_base = (
+            float(self.equity)
+            if self.equity > 0
+            else self._as_float(self.params.get("initial_capital", 100000.0), default=100000.0)
+        )
+        target_value = capital_base * max(self.position_pct, 0.0)
+        if target_value <= 0 or price <= 0:
+            return 0
+        lots = int(target_value / price / 100)
+        return max(lots * 100, 100)
+
+    @staticmethod
+    def _calculate_rsi(closes: list[float], period: int) -> float:
+        if period <= 0 or len(closes) < period + 1:
+            return 50.0
+
+        gains: list[float] = []
+        losses: list[float] = []
+        for idx in range(len(closes) - period, len(closes)):
+            change = closes[idx] - closes[idx - 1]
+            gains.append(max(change, 0.0))
+            losses.append(max(-change, 0.0))
+
+        avg_gain = fmean(gains) if gains else 0.0
+        avg_loss = fmean(losses) if losses else 0.0
+
+        if avg_loss <= 0:
+            return 100.0
+        rs = avg_gain / avg_loss
+        return 100.0 - (100.0 / (1.0 + rs))
+
+    @staticmethod
+    def _safe_float(value: Any, *, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _as_float(value: Any, *, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _as_int(value: Any, *, default: int) -> int:
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return default

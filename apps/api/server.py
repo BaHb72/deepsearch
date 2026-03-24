@@ -1107,6 +1107,7 @@ def create_app() -> FastAPI:
     from apps.api.api.endpoints.trading.market_overview import (
         router as trading_market_overview_router,
     )
+    from apps.api.api.endpoints.trading.strategy_api import router as trading_strategy_router
     from apps.api.api.errors import router as frontend_errors_router
     from apps.api.api.proxy import router as workers_proxy_router
     from apps.api.api.stock_comment import router as stock_comment_router
@@ -1306,6 +1307,11 @@ def create_app() -> FastAPI:
         logger.info("策略中心API已注册")
     except ImportError as e:
         logger.warning(f"策略中心API模块加载失败: {e}")
+
+    # Strategy API（Backtrader 主线）
+    app.include_router(
+        trading_strategy_router, tags=["Strategy"]
+    )  # 策略API，已包含 /api/strategy 前缀
 
     # Positions API (通用持仓管理)
     try:
