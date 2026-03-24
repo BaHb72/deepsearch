@@ -1,5 +1,5 @@
 (function () {
-  var BOARD_CONCEPT_MAP = {
+  const BOARD_CONCEPT_MAP = {
     ai_app: {
       title: "AI 应用",
       source: "AmazingData",
@@ -41,9 +41,9 @@
     },
   };
 
-  var INDEX_COMPARE_SERIES_ORDER = ["sse", "hsi", "dxy"];
+  const INDEX_COMPARE_SERIES_ORDER = ["sse", "hsi", "dxy"];
 
-  var INDEX_COMPARE_DATA = {
+  const INDEX_COMPARE_DATA = {
     yMin: -1.5,
     yMax: 1.5,
     chart: {
@@ -86,7 +86,7 @@
     },
   };
 
-  var SCREENER_CONFIG_PRESETS = {
+  const SCREENER_CONFIG_PRESETS = {
     batch_balanced: {
       title: "模板：批量均衡（3 策略加权）",
       endpoint: "POST /api/strategy-center/screener/batch",
@@ -141,7 +141,7 @@
   }
 
   function formatTs(offsetMinutes) {
-    var d = new Date(Date.now() + offsetMinutes * 60 * 1000);
+    const d = new Date(Date.now() + offsetMinutes * 60 * 1000);
     return (
       d.getFullYear() +
       "-" +
@@ -158,17 +158,17 @@
   }
 
   function hydrateTimestamps(root) {
-    var nowNodes = root.querySelectorAll("[data-now]");
+    const nowNodes = root.querySelectorAll("[data-now]");
     nowNodes.forEach(function (el) {
-      var offset = Number(el.getAttribute("data-now-offset") || 0);
+      const offset = Number(el.getAttribute("data-now-offset") || 0);
       el.textContent = formatTs(offset);
     });
   }
 
   function bindSegmented(root) {
-    var groups = root.querySelectorAll("[data-toggle-group]");
+    const groups = root.querySelectorAll("[data-toggle-group]");
     groups.forEach(function (group) {
-      var buttons = Array.from(group.querySelectorAll(".seg-btn"));
+      const buttons = Array.from(group.querySelectorAll(".seg-btn"));
       buttons.forEach(function (btn) {
         btn.addEventListener("click", function () {
           buttons.forEach(function (item) {
@@ -181,15 +181,15 @@
   }
 
   function bindQuickActions(root) {
-    var toast = root.querySelector("[data-demo-toast]");
+    const toast = root.querySelector("[data-demo-toast]");
     if (!toast) {
       return;
     }
 
-    var actionBtns = root.querySelectorAll("[data-demo-action]");
+    const actionBtns = root.querySelectorAll("[data-demo-action]");
     actionBtns.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var text = btn.getAttribute("data-demo-action") || "已记录操作";
+        const text = btn.getAttribute("data-demo-action") || "已记录操作";
         toast.textContent = text + "（概念图演示）";
         toast.style.display = "block";
         clearTimeout(window.__dsToastTimer__);
@@ -204,7 +204,7 @@
     if (typeof text !== "string") {
       return "muted";
     }
-    var value = text.trim();
+    const value = text.trim();
     if (value.startsWith("+")) {
       return "text-up";
     }
@@ -231,7 +231,7 @@
     if (typeof value !== "number" || Number.isNaN(value)) {
       return "--";
     }
-    var prefix = value > 0 ? "+" : "";
+    const prefix = value > 0 ? "+" : "";
     return prefix + value.toFixed(2) + "%";
   }
 
@@ -240,8 +240,8 @@
   }
 
   function toChartY(value, chart, yMin, yMax) {
-    var bounded = clamp(value, yMin, yMax);
-    var ratio = (yMax - bounded) / (yMax - yMin);
+    const bounded = clamp(value, yMin, yMax);
+    const ratio = (yMax - bounded) / (yMax - yMin);
     return chart.top + ratio * (chart.bottom - chart.top);
   }
 
@@ -249,23 +249,23 @@
     if (!Array.isArray(values) || values.length < 2) {
       return "";
     }
-    var step = (chart.right - chart.left) / (values.length - 1);
+    const step = (chart.right - chart.left) / (values.length - 1);
     return values
       .map(function (value, idx) {
-        var x = chart.left + idx * step;
-        var y = toChartY(value, chart, yMin, yMax);
+        const x = chart.left + idx * step;
+        const y = toChartY(value, chart, yMin, yMax);
         return x.toFixed(2) + "," + y.toFixed(2);
       })
       .join(" ");
   }
 
   function buildIndexInsight(activeKeys, latest) {
-    var hasSse = activeKeys.indexOf("sse") !== -1;
-    var hasHsi = activeKeys.indexOf("hsi") !== -1;
-    var hasDxy = activeKeys.indexOf("dxy") !== -1;
-    var sse = latest.sse;
-    var hsi = latest.hsi;
-    var dxy = latest.dxy;
+    const hasSse = activeKeys.indexOf("sse") !== -1;
+    const hasHsi = activeKeys.indexOf("hsi") !== -1;
+    const hasDxy = activeKeys.indexOf("dxy") !== -1;
+    const sse = latest.sse;
+    const hsi = latest.hsi;
+    const dxy = latest.dxy;
 
     if (hasSse && hasHsi && hasDxy) {
       if (sse > 0.3 && hsi < -0.3 && dxy > 0.15) {
@@ -280,7 +280,7 @@
     }
 
     if (hasSse && hasHsi) {
-      var diff = sse - hsi;
+      const diff = sse - hsi;
       if (Math.abs(diff) > 0.8) {
         return "A/H 背离较明显，优先观察北向与南向资金是否出现修复共振。";
       }
@@ -295,50 +295,50 @@
   }
 
   function renderIndexCompare(root, activeKeys) {
-    var shell = root.querySelector("#m3");
+    const shell = root.querySelector("#m3");
     if (!shell) {
       return;
     }
 
-    var linesLayer = shell.querySelector("[data-index-lines]");
+    const linesLayer = shell.querySelector("[data-index-lines]");
     if (!linesLayer) {
       return;
     }
 
-    var seriesMap = INDEX_COMPARE_DATA.series;
-    var orderedActiveKeys = INDEX_COMPARE_SERIES_ORDER.filter(function (key) {
+    const seriesMap = INDEX_COMPARE_DATA.series;
+    let orderedActiveKeys = INDEX_COMPARE_SERIES_ORDER.filter(function (key) {
       return activeKeys.indexOf(key) !== -1 && !!seriesMap[key];
     });
     if (!orderedActiveKeys.length) {
       orderedActiveKeys = ["sse"];
     }
 
-    var chart = INDEX_COMPARE_DATA.chart;
-    var yMin = INDEX_COMPARE_DATA.yMin;
-    var yMax = INDEX_COMPARE_DATA.yMax;
-    var baselineY = toChartY(0, chart, yMin, yMax);
-    var latest = {};
+    const chart = INDEX_COMPARE_DATA.chart;
+    const yMin = INDEX_COMPARE_DATA.yMin;
+    const yMax = INDEX_COMPARE_DATA.yMax;
+    const baselineY = toChartY(0, chart, yMin, yMax);
+    const latest = {};
     INDEX_COMPARE_SERIES_ORDER.forEach(function (key) {
-      var series = seriesMap[key];
+      const series = seriesMap[key];
       latest[key] = series.values[series.values.length - 1];
     });
 
     linesLayer.innerHTML = "";
 
-    var ssePoints = "";
+    let ssePoints = "";
     if (orderedActiveKeys.indexOf("sse") !== -1) {
       ssePoints = buildPolylinePoints(seriesMap.sse.values, chart, yMin, yMax);
     }
     if (ssePoints) {
-      var sseArea = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+      const sseArea = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
       sseArea.setAttribute("points", ssePoints + " " + chart.right + "," + baselineY.toFixed(2) + " " + chart.left + "," + baselineY.toFixed(2));
       sseArea.setAttribute("fill", "url(#sseFill)");
       linesLayer.appendChild(sseArea);
     }
 
     orderedActiveKeys.forEach(function (key) {
-      var series = seriesMap[key];
-      var line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      const series = seriesMap[key];
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
       line.setAttribute("points", buildPolylinePoints(series.values, chart, yMin, yMax));
       line.setAttribute("fill", "none");
       line.setAttribute("stroke", series.color);
@@ -350,8 +350,8 @@
     });
 
     INDEX_COMPARE_SERIES_ORDER.forEach(function (key) {
-      var valueEl = shell.querySelector('[data-index-meta-value="' + key + '"]');
-      var itemEl = shell.querySelector('[data-index-meta-item="' + key + '"]');
+      const valueEl = shell.querySelector('[data-index-meta-value="' + key + '"]');
+      const itemEl = shell.querySelector('[data-index-meta-item="' + key + '"]');
       if (valueEl) {
         valueEl.textContent = formatSignedPct(latest[key]);
         valueEl.classList.remove("text-up", "text-down", "muted");
@@ -362,11 +362,11 @@
       }
     });
 
-    var spreadItemEl = shell.querySelector('[data-index-meta-item="spread"]');
-    var spreadValueEl = shell.querySelector('[data-index-meta-value="spread"]');
+    const spreadItemEl = shell.querySelector('[data-index-meta-item="spread"]');
+    const spreadValueEl = shell.querySelector('[data-index-meta-value="spread"]');
     if (spreadItemEl && spreadValueEl) {
       if (orderedActiveKeys.indexOf("sse") !== -1 && orderedActiveKeys.indexOf("hsi") !== -1) {
-        var spread = latest.sse - latest.hsi;
+        const spread = latest.sse - latest.hsi;
         spreadValueEl.textContent = formatSignedPct(spread);
         spreadValueEl.classList.remove("text-up", "text-down", "muted");
         spreadValueEl.classList.add(getTrendClassByNumber(spread));
@@ -379,35 +379,35 @@
       }
     }
 
-    var sourceNoteEl = shell.querySelector("[data-index-source-note]");
+    const sourceNoteEl = shell.querySelector("[data-index-source-note]");
     if (sourceNoteEl) {
-      var sourceText = orderedActiveKeys
+      const sourceText = orderedActiveKeys
         .map(function (key) {
-          var series = seriesMap[key];
+          const series = seriesMap[key];
           return series.shortName + "：" + series.source + "（" + series.mode + "）";
         })
         .join(" | ");
       sourceNoteEl.textContent = "当前叠加：" + sourceText;
     }
 
-    var insightEl = shell.querySelector("[data-index-insight]");
+    const insightEl = shell.querySelector("[data-index-insight]");
     if (insightEl) {
       insightEl.textContent = buildIndexInsight(orderedActiveKeys, latest);
     }
   }
 
   function bindIndexCompare(root) {
-    var shell = root.querySelector("#m3");
+    const shell = root.querySelector("#m3");
     if (!shell) {
       return;
     }
 
-    var toggles = Array.from(shell.querySelectorAll("[data-index-toggle][data-index-key]"));
+    const toggles = Array.from(shell.querySelectorAll("[data-index-toggle][data-index-key]"));
     if (!toggles.length) {
       return;
     }
 
-    var activeKeys = INDEX_COMPARE_SERIES_ORDER.filter(function (key) {
+    let activeKeys = INDEX_COMPARE_SERIES_ORDER.filter(function (key) {
       return toggles.some(function (btn) {
         return btn.getAttribute("data-index-key") === key && btn.classList.contains("is-active");
       });
@@ -418,8 +418,8 @@
 
     function syncToggleState() {
       toggles.forEach(function (btn) {
-        var key = btn.getAttribute("data-index-key");
-        var active = activeKeys.indexOf(key) !== -1;
+        const key = btn.getAttribute("data-index-key");
+        const active = activeKeys.indexOf(key) !== -1;
         btn.classList.toggle("is-active", active);
         btn.setAttribute("aria-pressed", active ? "true" : "false");
       });
@@ -438,9 +438,9 @@
 
     toggles.forEach(function (btn) {
       btn.addEventListener("click", function () {
-        var key = btn.getAttribute("data-index-key");
-        var next = activeKeys.slice();
-        var idx = next.indexOf(key);
+        const key = btn.getAttribute("data-index-key");
+        const next = activeKeys.slice();
+        const idx = next.indexOf(key);
         if (idx === -1) {
           next.push(key);
         } else if (next.length > 1) {
@@ -454,48 +454,48 @@
   }
 
   function renderScreenerConfig(root, configKey) {
-    var data = SCREENER_CONFIG_PRESETS[configKey];
+    const data = SCREENER_CONFIG_PRESETS[configKey];
     if (!data) {
       return;
     }
 
-    var shell = root.querySelector("#d3");
+    const shell = root.querySelector("#d3");
     if (!shell) {
       return;
     }
 
-    var titleEl = shell.querySelector("[data-screener-title]");
+    const titleEl = shell.querySelector("[data-screener-title]");
     if (titleEl) {
       titleEl.textContent = data.title;
     }
 
-    var endpointEl = shell.querySelector("[data-screener-endpoint]");
+    const endpointEl = shell.querySelector("[data-screener-endpoint]");
     if (endpointEl) {
       endpointEl.textContent = data.endpoint;
     }
 
-    var chipsEl = shell.querySelector("[data-screener-chips]");
+    const chipsEl = shell.querySelector("[data-screener-chips]");
     if (chipsEl) {
       chipsEl.innerHTML = "";
       data.chips.forEach(function (chip, idx) {
-        var span = document.createElement("span");
+        const span = document.createElement("span");
         span.className = idx === 0 ? "source-chip primary" : "source-chip";
         span.textContent = chip;
         chipsEl.appendChild(span);
       });
     }
 
-    var payloadEl = shell.querySelector("[data-screener-payload]");
+    const payloadEl = shell.querySelector("[data-screener-payload]");
     if (payloadEl) {
       payloadEl.textContent = JSON.stringify(data.payload, null, 2);
     }
 
-    var backendNoteEl = shell.querySelector("[data-screener-backend-note]");
+    const backendNoteEl = shell.querySelector("[data-screener-backend-note]");
     if (backendNoteEl) {
       backendNoteEl.textContent = data.backendNote;
     }
 
-    var runBtn = shell.querySelector("[data-screener-run-btn]");
+    const runBtn = shell.querySelector("[data-screener-run-btn]");
     if (runBtn) {
       runBtn.textContent = data.actionText;
       runBtn.setAttribute("data-demo-action", data.actionText);
@@ -503,7 +503,7 @@
   }
 
   function bindScreenerConfig(root) {
-    var rows = Array.from(root.querySelectorAll("#d3 .screener-row[data-screener-key]"));
+    const rows = Array.from(root.querySelectorAll("#d3 .screener-row[data-screener-key]"));
     if (!rows.length) {
       return;
     }
@@ -515,7 +515,7 @@
       });
       targetRow.classList.add("is-active");
       targetRow.setAttribute("aria-selected", "true");
-      var key = targetRow.getAttribute("data-screener-key");
+      const key = targetRow.getAttribute("data-screener-key");
       if (key) {
         renderScreenerConfig(root, key);
       }
@@ -534,54 +534,54 @@
       });
     });
 
-    var initialRow = root.querySelector("#d3 .screener-row.is-active[data-screener-key]") || rows[0];
+    const initialRow = root.querySelector("#d3 .screener-row.is-active[data-screener-key]") || rows[0];
     activateRow(initialRow);
   }
 
   function renderBoardConcept(root, boardKey) {
-    var data = BOARD_CONCEPT_MAP[boardKey];
+    const data = BOARD_CONCEPT_MAP[boardKey];
     if (!data) {
       return;
     }
 
-    var titleEl = root.querySelector("#m5 [data-board-title]");
+    const titleEl = root.querySelector("#m5 [data-board-title]");
     if (titleEl) {
       titleEl.textContent = "当前选中板块：" + data.title;
     }
 
-    var sourceEl = root.querySelector("#m5 [data-board-source]");
+    const sourceEl = root.querySelector("#m5 [data-board-source]");
     if (sourceEl) {
       sourceEl.textContent = "来源：" + data.source + "（" + data.mode + "）";
     }
 
-    var detailBtn = root.querySelector("#m5 [data-board-detail-btn]");
+    const detailBtn = root.querySelector("#m5 [data-board-detail-btn]");
     if (detailBtn) {
-      var actionText = "进入 " + data.title + "概念股详情";
+      const actionText = "进入 " + data.title + "概念股详情";
       detailBtn.textContent = actionText;
       detailBtn.setAttribute("data-demo-action", actionText);
     }
 
-    var updatedEl = root.querySelector("#m5 [data-board-updated]");
+    const updatedEl = root.querySelector("#m5 [data-board-updated]");
     if (updatedEl) {
       updatedEl.textContent = formatTs(data.updatedOffset || 0);
     }
 
-    var tagsEl = root.querySelector("#m5 [data-board-tags]");
+    const tagsEl = root.querySelector("#m5 [data-board-tags]");
     if (tagsEl) {
       tagsEl.innerHTML = "";
       data.tags.forEach(function (tag) {
-        var span = document.createElement("span");
+        const span = document.createElement("span");
         span.className = "link-chip";
         span.textContent = tag;
         tagsEl.appendChild(span);
       });
     }
 
-    var stocksEl = root.querySelector("#m5 [data-board-stocks]");
+    const stocksEl = root.querySelector("#m5 [data-board-stocks]");
     if (stocksEl) {
       stocksEl.innerHTML = "";
       data.stocks.forEach(function (stock) {
-        var tr = document.createElement("tr");
+        const tr = document.createElement("tr");
         tr.innerHTML =
           '<td class="mono">' +
           stock.code +
@@ -605,7 +605,7 @@
   }
 
   function bindBoardConceptLinkage(root) {
-    var rows = Array.from(root.querySelectorAll("#m5 .board-row[data-board-key]"));
+    const rows = Array.from(root.querySelectorAll("#m5 .board-row[data-board-key]"));
     if (!rows.length) {
       return;
     }
@@ -617,7 +617,7 @@
       });
       targetRow.classList.add("is-active");
       targetRow.setAttribute("aria-selected", "true");
-      var boardKey = targetRow.getAttribute("data-board-key");
+      const boardKey = targetRow.getAttribute("data-board-key");
       if (boardKey) {
         renderBoardConcept(root, boardKey);
       }
@@ -636,16 +636,16 @@
       });
     });
 
-    var initialRow = root.querySelector("#m5 .board-row.is-active[data-board-key]") || rows[0];
+    const initialRow = root.querySelector("#m5 .board-row.is-active[data-board-key]") || rows[0];
     activateRow(initialRow);
   }
 
   function bindAnnotationJump(root) {
-    var links = root.querySelectorAll(".annotation-item a[href^='#']");
+    const links = root.querySelectorAll(".annotation-item a[href^='#']");
     links.forEach(function (link) {
       link.addEventListener("click", function () {
-        var id = link.getAttribute("href");
-        var target = id ? root.querySelector(id) : null;
+        const id = link.getAttribute("href");
+        const target = id ? root.querySelector(id) : null;
         if (!target) {
           return;
         }
@@ -670,8 +670,8 @@
   }
 
   window.DSConcepts = {
-    formatTs: formatTs,
-    bootstrap: bootstrap,
+    formatTs,
+    bootstrap,
   };
 
   document.addEventListener("DOMContentLoaded", function () {
