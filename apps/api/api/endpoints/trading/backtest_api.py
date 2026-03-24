@@ -124,6 +124,10 @@ backtest_results = TTLCache(maxsize=100, ttl_seconds=3600)
 # 图表缓存保留 30 分钟，最多 50 个
 chart_cache = TTLCache(maxsize=50, ttl_seconds=1800)
 
+# 参数优化结果缓存
+# 优化结果保留 1 小时，最多 100 个
+optimization_results = TTLCache(maxsize=100, ttl_seconds=3600)
+
 
 # 请求/响应模型
 class BacktestConfig(BaseModel):
@@ -151,7 +155,17 @@ class OptimizationConfig(BaseModel):
     param_grid: Dict[str, List[Any]] = Field(..., description="参数网格")
     metric: str = Field("sharpe_ratio", description="优化指标")
     initial_cash: float = Field(100000, description="初始资金")
-    commission: float = Field(0.001, description="手续费率")
+    timeframe: str = Field("1d", description="数据周期")
+    adjust: str = Field("qfq", description="复权方式")
+    enforce_a_share_rules: bool = Field(True, description="是否启用 A 股约束")
+    top_n: int = Field(20, ge=1, le=200, description="返回前 N 个参数组合")
+    max_combinations: int = Field(256, ge=1, le=2048, description="参数组合数量上限")
+    commission: float = Field(0.0002, description="手续费率")
+    min_commission: float = Field(5.0, description="最低佣金")
+    commission_exempt_min: bool = Field(False, description="是否免最低佣金")
+    stamp_tax_rate: float = Field(0.001, description="印花税率")
+    transfer_fee_rate: float = Field(0.00001, description="过户费率")
+    slippage: float = Field(0.0, description="滑点")
 
 
 class BacktestResult(BaseModel):
@@ -167,6 +181,29 @@ class BacktestResult(BaseModel):
     trades: Optional[List[Dict[str, Any]]] = None
     equity_curve: Optional[List[Dict[str, Any]]] = None
     chart: Optional[str] = None  # Base64编码的图表
+    error: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+
+class OptimizationResult(BaseModel):
+    """参数优化结果"""
+
+    id: str
+    status: str  # running, completed, failed
+    strategy: str
+    symbols: List[str]
+    start_date: str
+    end_date: str
+    metric: str
+    best_params: Optional[Dict[str, Any]] = None
+    best_score: Optional[float] = None
+    best_result: Optional[Dict[str, Any]] = None
+    ranked_results: Optional[List[Dict[str, Any]]] = None
+    combination_count: Optional[int] = None
+    evaluated_count: Optional[int] = None
+    failed_count: Optional[int] = None
+    failed_cases: Optional[List[Dict[str, Any]]] = None
     error: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
@@ -383,17 +420,123 @@ async def list_backtest_results(
 @router.post("/optimize")
 async def optimize_parameters(config: OptimizationConfig, background_tasks: BackgroundTasks):
     """参数优化"""
-    _ = (config, background_tasks)
-    raise HTTPException(
-        status_code=501,
-        detail="统一 Backtrader 主线暂未开放 /api/backtest/optimize，请使用 /api/strategy/compare",
+    if config.strategy not in STRATEGY_MAP:
+        raise HTTPException(400, f"未知策略: {config.strategy}")
+    if not config.param_grid:
+        raise HTTPException(400, "param_grid 不能为空")
+
+    task_id = str(uuid.uuid4())
+    result = OptimizationResult(
+        id=task_id,
+        status="running",
+        strategy=config.strategy,
+        symbols=config.symbols,
+        start_date=config.start_date,
+        end_date=config.end_date,
+        metric=config.metric,
+        created_at=datetime.now(),
     )
+    optimization_results.set(task_id, result)
+
+    background_tasks.add_task(execute_optimization, task_id, config)
+    return {"id": task_id, "message": "参数优化任务已提交", "status": "running"}
 
 
 async def execute_optimization(task_id: str, config: OptimizationConfig):
     """执行参数优化"""
-    _ = (task_id, config)
-    logger.warning("execute_optimization 已停用：主线统一到 /api/strategy/compare")
+    result = optimization_results.get(task_id)
+    if result is None:
+        logger.error(f"参数优化任务 {task_id} 结果对象不存在（可能已过期）")
+        return
+
+    try:
+        logger.info(f"开始执行参数优化 {task_id}")
+        service = get_backtest_service()
+        strategy_class = STRATEGY_MAP[config.strategy]
+
+        cost_config = TradingCostConfig(
+            commission_rate=config.commission,
+            min_commission=config.min_commission,
+            commission_exempt_min=config.commission_exempt_min,
+            stamp_tax_rate=config.stamp_tax_rate,
+            transfer_fee_rate=config.transfer_fee_rate,
+            slippage=config.slippage,
+        )
+
+        optimize_result = await service.optimize_parameters(
+            strategy_class=strategy_class,
+            symbols=config.symbols,
+            start_date=config.start_date,
+            end_date=config.end_date,
+            param_grid=config.param_grid,
+            metric=config.metric,
+            initial_capital=config.initial_cash,
+            cost_config=cost_config,
+            timeframe=config.timeframe,
+            adjust=config.adjust,
+            enforce_a_share_rules=config.enforce_a_share_rules,
+            top_n=config.top_n,
+            max_combinations=config.max_combinations,
+        )
+
+        result.status = "completed"
+        result.best_params = cast(Optional[Dict[str, Any]], optimize_result.get("best_params"))
+        result.best_score = cast(Optional[float], optimize_result.get("best_score"))
+        result.best_result = cast(
+            Optional[Dict[str, Any]],
+            sanitize_data(cast(Dict[str, Any], optimize_result.get("best_result", {}))),
+        )
+        result.ranked_results = cast(
+            Optional[List[Dict[str, Any]]],
+            sanitize_data(cast(List[Dict[str, Any]], optimize_result.get("ranked_results", []))),
+        )
+        result.combination_count = cast(Optional[int], optimize_result.get("combination_count"))
+        result.evaluated_count = cast(Optional[int], optimize_result.get("evaluated_count"))
+        result.failed_count = cast(Optional[int], optimize_result.get("failed_count"))
+        result.failed_cases = cast(
+            Optional[List[Dict[str, Any]]],
+            sanitize_data(cast(List[Dict[str, Any]], optimize_result.get("failed_cases", []))),
+        )
+        result.completed_at = datetime.now()
+        logger.info(f"参数优化 {task_id} 完成")
+
+    except Exception as exc:
+        import traceback
+
+        error_trace = traceback.format_exc()
+        logger.error(f"参数优化 {task_id} 失败: {exc}\n{error_trace}")
+        result.status = "failed"
+        result.error = str(exc)
+        result.completed_at = datetime.now()
+
+
+@router.get("/optimize/results/{task_id}")
+async def get_optimization_result(task_id: str):
+    """获取参数优化结果"""
+    result = optimization_results.get(task_id)
+    if result is None:
+        raise HTTPException(404, "参数优化结果不存在或已过期")
+
+    return {
+        "id": result.id,
+        "status": result.status,
+        "strategy": result.strategy,
+        "symbols": result.symbols,
+        "start_date": result.start_date,
+        "end_date": result.end_date,
+        "metric": result.metric,
+        "best_params": result.best_params,
+        "best_score": result.best_score,
+        "best_result": result.best_result,
+        "ranked_results": result.ranked_results,
+        "combination_count": result.combination_count,
+        "evaluated_count": result.evaluated_count,
+        "failed_count": result.failed_count,
+        "failed_cases": result.failed_cases,
+        "error": result.error,
+        "created_at": result.created_at.isoformat(),
+        "completed_at": result.completed_at.isoformat() if result.completed_at else None,
+    }
 
 
 @router.delete("/results/{backtest_id}")

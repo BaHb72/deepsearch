@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from importlib import import_module
 from importlib.util import find_spec
+from itertools import product
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence, TypedDict, cast
 
 from core.backtest.adapters.unified_backtrader_adapter import UnifiedBacktraderAdapter
@@ -511,6 +512,128 @@ class BacktestService:
 
         return results
 
+    async def optimize_parameters(
+        self,
+        *,
+        strategy_class: type[BacktestStrategy],
+        symbols: Sequence[str],
+        start_date: str,
+        end_date: str,
+        param_grid: Mapping[str, Sequence[object]],
+        metric: str = "sharpe_ratio",
+        initial_capital: float = 100000,
+        cost_config: TradingCostConfig | None = None,
+        timeframe: str = "1d",
+        adjust: str = "qfq",
+        enforce_a_share_rules: bool = True,
+        top_n: int = 20,
+        max_combinations: int = 256,
+    ) -> dict[str, object]:
+        """执行参数网格优化（统一主线）。"""
+
+        if not param_grid:
+            raise ValueError("参数网格不能为空")
+
+        normalized_grid: dict[str, list[object]] = {}
+        for key, values in param_grid.items():
+            value_list = list(values)
+            if not value_list:
+                raise ValueError(f"参数 {key} 的候选列表不能为空")
+            normalized_grid[str(key)] = value_list
+
+        grid_keys = list(normalized_grid.keys())
+        combination_count = 1
+        for value_list in normalized_grid.values():
+            combination_count *= len(value_list)
+        if combination_count > max_combinations:
+            raise ValueError(f"参数组合数量过大: {combination_count}，超过限制 {max_combinations}")
+
+        metric_key = metric.strip().lower()
+        maximize = metric_key not in {"max_drawdown", "drawdown"}
+        top_n_value = max(int(top_n), 1)
+
+        candidates: list[dict[str, object]] = []
+        failed_cases: list[dict[str, object]] = []
+
+        for idx, values in enumerate(
+            product(*(normalized_grid[key] for key in grid_keys)),
+            start=1,
+        ):
+            candidate_params = dict(zip(grid_keys, values, strict=False))
+            try:
+                backtest_result = await self.run_backtest(
+                    strategy_class=strategy_class,
+                    symbols=symbols,
+                    start_date=start_date,
+                    end_date=end_date,
+                    initial_capital=initial_capital,
+                    strategy_params=candidate_params,
+                    cost_config=cost_config,
+                    timeframe=timeframe,
+                    adjust=adjust,
+                    enforce_a_share_rules=enforce_a_share_rules,
+                    plot=False,
+                )
+                score = _resolve_optimization_metric(backtest_result, metric_key)
+                candidates.append(
+                    {
+                        "params": candidate_params,
+                        "score": score,
+                        "result": backtest_result,
+                    }
+                )
+            except Exception as exc:
+                failed_cases.append(
+                    {
+                        "index": idx,
+                        "params": candidate_params,
+                        "error": str(exc),
+                    }
+                )
+
+        if not candidates:
+            raise RuntimeError("参数优化未得到可用结果，请检查参数网格与数据区间")
+
+        ranked_candidates = sorted(
+            candidates,
+            key=lambda item: _to_float(item.get("score")),
+            reverse=maximize,
+        )
+        best_candidate = ranked_candidates[0]
+        best_result = cast(BacktestResult, best_candidate["result"])
+
+        ranked_results: list[dict[str, object]] = []
+        for rank, candidate in enumerate(ranked_candidates[:top_n_value], start=1):
+            result = cast(BacktestResult, candidate["result"])
+            ranked_results.append(
+                {
+                    "rank": rank,
+                    "score": _to_float(candidate.get("score")),
+                    "params": dict(cast(Mapping[str, object], candidate["params"])),
+                    "final_value": result.final_value,
+                    "total_return": result.total_return,
+                    "annual_return": result.annual_return,
+                    "sharpe_ratio": result.sharpe_ratio,
+                    "max_drawdown": result.max_drawdown,
+                    "win_rate": result.win_rate,
+                    "profit_factor": result.profit_factor,
+                    "trade_count": result.total_trades,
+                }
+            )
+
+        return {
+            "metric": metric_key,
+            "maximize": maximize,
+            "combination_count": combination_count,
+            "evaluated_count": len(candidates),
+            "failed_count": len(failed_cases),
+            "best_params": dict(cast(Mapping[str, object], best_candidate["params"])),
+            "best_score": _to_float(best_candidate.get("score")),
+            "best_result": best_result.to_dict(),
+            "ranked_results": ranked_results,
+            "failed_cases": failed_cases[:20],
+        }
+
     def get_cached_result(self, cache_key: str) -> BacktestResult | None:
         """根据缓存键获取历史回测结果."""
 
@@ -745,3 +868,30 @@ def _build_trade_breakdown(
         total=_to_int(section.get("total")),
         pnl_total=_to_float(pnl_mapping.get("total")),
     )
+
+
+def _resolve_optimization_metric(result: BacktestResult, metric_key: str) -> float:
+    """从回测结果中解析优化指标。"""
+
+    if metric_key in {"total_return", "return"}:
+        return result.total_return
+    if metric_key in {"annual_return"}:
+        return result.annual_return
+    if metric_key in {"sharpe", "sharpe_ratio"}:
+        return result.sharpe_ratio
+    if metric_key in {"max_drawdown", "drawdown"}:
+        return result.max_drawdown
+    if metric_key in {"win_rate"}:
+        return result.win_rate
+    if metric_key in {"profit_factor"}:
+        return result.profit_factor
+    if metric_key in {"final_value", "equity"}:
+        return result.final_value
+    if metric_key in {"trade_count", "total_trades"}:
+        return float(result.total_trades)
+    if metric_key in {"winning_trades"}:
+        return float(result.winning_trades)
+    if metric_key in {"losing_trades"}:
+        return float(result.losing_trades)
+    logger.warning(f"未知优化指标 {metric_key}，已回退到 sharpe_ratio")
+    return result.sharpe_ratio

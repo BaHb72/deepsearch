@@ -52,4 +52,4 @@
 
 1. v1 优先覆盖“通用 A 股回测闭环”。
 2. 公司行为对现金与持仓的高保真重算（分红、配股、送转）不在本阶段。
-3. `/api/backtest/optimize` 在主线下暂未开放（返回 `501`），策略对比请使用 `/api/strategy/compare`。
+3. `/api/backtest/optimize` 已接回统一主线（后台任务），结果通过 `/api/backtest/optimize/results/{task_id}` 查询。

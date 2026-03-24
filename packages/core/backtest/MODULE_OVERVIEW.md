@@ -23,6 +23,9 @@
    - `mean_reversion`（均值回归）
    - `momentum`（动量突破）
    - `turtle`（唐奇安突破）
+6. 参数优化能力：
+   - `BacktestService.optimize_parameters` 复用统一主线执行网格搜索
+   - 兼容入口 `/api/backtest/optimize` 与查询接口 `/api/backtest/optimize/results/{task_id}`
 
 ## 输出契约（由 BacktestService 汇总）
 

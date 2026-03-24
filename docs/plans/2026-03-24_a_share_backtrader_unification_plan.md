@@ -62,3 +62,9 @@
 1. v1 目标是“通用 A 股日线闭环 + 分钟级规则可用”，不包含公司行为现金/持仓重算高保真模拟。
 2. 旧兼容字段计划保留一个版本周期，随后移除。
 3. `/api/analytics/backtest` 与 `/api/backtest/run` 均为主线委托包装；唯一能力定义入口仍为 `/api/strategy/backtest`。
+
+## 6. 后续增量（2026-03-24）
+
+1. 恢复 `/api/backtest/optimize` 到统一 Backtrader 主线，支持参数网格优化后台任务执行。
+2. 新增 `/api/backtest/optimize/results/{task_id}` 查询接口，统一返回最优参数、评分、排名结果和失败样本。
+3. 优化过程复用 `BacktestService.run_backtest`，确保 A 股规则、费用模型、数据周期与主链路口径一致。
