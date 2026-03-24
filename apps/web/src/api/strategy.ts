@@ -147,6 +147,33 @@ const normalizeBacktestStrategyType = (strategyType: string): string => {
     return strategyType;
 };
 
+const unwrapApiPayload = <T>(raw: unknown): T | null => {
+    if (raw === null || raw === undefined) {
+        return null;
+    }
+
+    if (typeof raw !== 'object' || Array.isArray(raw)) {
+        return raw as T;
+    }
+
+    const body = raw as Record<string, unknown>;
+    const data = body.data;
+    if (data === null || data === undefined) {
+        return raw as T;
+    }
+
+    if (typeof data !== 'object' || Array.isArray(data)) {
+        return data as T;
+    }
+
+    const nested = data as Record<string, unknown>;
+    if (nested.data !== undefined && nested.data !== null) {
+        return nested.data as T;
+    }
+
+    return data as T;
+};
+
 const sleep = async (ms: number): Promise<void> => {
     await new Promise<void>((resolve) => {
         window.setTimeout(resolve, ms);
@@ -158,7 +185,7 @@ const sleep = async (ms: number): Promise<void> => {
  */
 const getStrategyTypes = async (): Promise<StrategyTypesResponse> => {
     const res = await request.get('/strategy/types');
-    return res?.data?.data ?? res?.data ?? { strategies: [] };
+    return unwrapApiPayload<StrategyTypesResponse>(res) ?? { strategies: [] };
 };
 
 /**
@@ -183,7 +210,11 @@ const runBacktest = async (params: {
     strategy_params?: Record<string, unknown>;
 }): Promise<BacktestResult> => {
     const res = await request.post('/strategy/backtest', params);
-    return res?.data?.data ?? res?.data ?? null;
+    const payload = unwrapApiPayload<BacktestResult>(res);
+    if (!payload) {
+        throw new Error('回测接口返回空结果');
+    }
+    return payload;
 };
 
 /**
@@ -213,7 +244,11 @@ const submitBacktestOptimization = async (
         slippage: params.slippage ?? 0,
     };
     const res = await request.post('/backtest/optimize', payload);
-    return res?.data?.data ?? res?.data ?? res;
+    const payloadData = unwrapApiPayload<BacktestOptimizationTaskResponse>(res);
+    if (!payloadData) {
+        throw new Error('参数优化任务提交失败：接口返回空结果');
+    }
+    return payloadData;
 };
 
 /**
@@ -223,7 +258,11 @@ const getBacktestOptimizationResult = async (
     taskId: string
 ): Promise<BacktestOptimizationResult> => {
     const res = await request.get(`/backtest/optimize/results/${taskId}`);
-    return res?.data?.data ?? res?.data ?? res;
+    const payload = unwrapApiPayload<BacktestOptimizationResult>(res);
+    if (!payload) {
+        throw new Error(`参数优化结果为空: ${taskId}`);
+    }
+    return payload;
 };
 
 /**

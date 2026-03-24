@@ -1,6 +1,7 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, type ReactNode } from 'react'
 import { message, notification } from 'antd'
 import { useNavigate } from 'react-router-dom'
+import request from '@/api/request'
 import systemAPI from '@/api/system'
 import { storage } from '@/utils/storage'
 
@@ -180,14 +181,23 @@ export const AppProvider = ({ children }: AppProviderProps) => {
       storage.setItem('token', token)
     }, []),
 
-    login: useCallback(async (_credentials: unknown) => {
+    login: useCallback(async (credentials: unknown) => {
       try {
         dispatch({ type: ActionTypes.SET_LOADING, payload: true })
-        // 这里应该调用登录 API
-        const response = { token: 'mock-token', user: { name: 'Admin' } }
+        const raw = await request.post('/auth/login', credentials as Record<string, unknown>)
+        const payload = (raw && typeof raw === 'object' && 'data' in (raw as Record<string, unknown>))
+          ? (raw as { data: unknown }).data
+          : raw
+        const response = payload as { token?: string; user?: User } | null
+        const token = response?.token
+        const user = response?.user
 
-        actions.setToken(response.token)
-        actions.setUser(response.user)
+        if (!token || !user) {
+          throw new Error('登录接口返回缺少 token 或 user 字段')
+        }
+
+        actions.setToken(token)
+        actions.setUser(user)
 
         message.success('登录成功')
         navigate('/')

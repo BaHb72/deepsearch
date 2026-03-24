@@ -18,6 +18,7 @@ from core.strategies.ttrading.analyzers import (
 from core.strategies.ttrading.engine import (
     MockIntradayDataProvider,
     TTradingEngine,
+    UnavailableIntradayDataProvider,
     get_ttrading_engine,
     run_quick_analysis,
 )
@@ -76,6 +77,7 @@ __all__ = [
     # Engine
     "MockIntradayDataProvider",
     "TTradingEngine",
+    "UnavailableIntradayDataProvider",
     "get_ttrading_engine",
     "run_quick_analysis",
     # Providers

@@ -68,3 +68,12 @@
 1. 恢复 `/api/backtest/optimize` 到统一 Backtrader 主线，支持参数网格优化后台任务执行。
 2. 新增 `/api/backtest/optimize/results/{task_id}` 查询接口，统一返回最优参数、评分、排名结果和失败样本。
 3. 优化过程复用 `BacktestService.run_backtest`，确保 A 股规则、费用模型、数据周期与主链路口径一致。
+
+## 7. 无 Mock 数据链路收敛（2026-03-24）
+
+1. `strategy_center/ttrading` 启动引擎入口改为强制真实数据链路（MiniQMT → AmazingData → AkShare），不再允许运行时回退 Mock。
+2. `/ttrading/datasource/status` 的 `active_provider` 默认值从 `mock` 调整为 `none`，并统一返回真实 provider 可用性探测结果。
+3. `TTradingEngine` 默认 Provider 从 `MockIntradayDataProvider` 切换为 `UnavailableIntradayDataProvider`，未注入真实 Provider 时直接报错。
+4. 前端 `AppContext.login` 删除硬编码 `mock-token`，改为调用真实 `/api/auth/login` 接口并校验返回字段。
+5. 新增后端通用认证接口 `/api/auth/login`（JWT），并在 `apps/api/server.py` 注册路由，形成前后端真实登录闭环。
+6. 修复前端 `apps/web/src/api/strategy.ts` 的响应解包逻辑，保证 `/api/strategy/backtest` 与 `/api/backtest/optimize*` 在“直接返回 DTO”模式下可正确消费，不再误判为空结果。

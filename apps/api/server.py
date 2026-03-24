@@ -1095,6 +1095,7 @@ def create_app() -> FastAPI:
     # AmazingData API已移动到第819行单独注册，避免重复注册
     # from apps.api.api.endpoints.amazingdata import router as amazingdata_api
     from apps.api.api.endpoints.route_adapter import router as route_adapter_router
+    from apps.api.api.endpoints.system.auth import router as auth_router
     from apps.api.api.endpoints.system.config import router as system_config_router
     from apps.api.api.endpoints.system.dask_status import router as dask_status_router
     from apps.api.api.endpoints.system.health import router as system_health_router
@@ -1113,6 +1114,7 @@ def create_app() -> FastAPI:
     from apps.api.api.stock_comment import router as stock_comment_router
 
     app.include_router(monitor_api_router, prefix="/api/monitor", tags=["Monitor"])
+    app.include_router(auth_router, tags=["Auth"])
     app.include_router(system_config_router, prefix="/api/system/config", tags=["Config"])
     app.include_router(system_router, prefix="/api/system", tags=["System"])
     app.include_router(system_info_router)  # 系统信息路由

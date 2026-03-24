@@ -83,9 +83,6 @@ SHADOW_DIFF_THRESHOLDS: dict[str, float] = {
     "blocked_total": 3.0,
 }
 
-# Global MiniQMT provider instance
-_miniqmt_provider = None
-
 
 @dataclass(frozen=True)
 class TTradingBacktestContext:
@@ -778,8 +775,8 @@ class EngineStartRequest(BaseModel):
     grid_enabled: bool = True
     grid_step_ratio: float = 2.0
     grid_levels: int = 5
-    # 数据源选择
-    use_real_data: bool = False  # 是否使用真实 MiniQMT 数据
+    # 兼容字段：当前主线已强制真实数据，不再允许 Mock 回退
+    use_real_data: bool = True
 
 
 class EngineStatusResponse(BaseModel):
@@ -1878,7 +1875,7 @@ async def quick_analyze(request: QuickAnalyzeRequest):
     """
     执行快速分析 (无需启动引擎)
 
-    优先使用实盘数据（MiniQMT），不可用时回退到Mock
+    优先使用 MiniQMT，失败后回退 AmazingData / AkShare（均为真实数据源）
     """
     try:
         data_provider = _FailoverIntradayDataProvider()
@@ -1955,27 +1952,28 @@ async def start_engine(
     request: Request = cast(Request, None),
 ):
     """启动做T引擎"""
-    global _miniqmt_provider
 
     try:
-        # 确定数据提供者
-        data_provider = None
-        data_source = "mock"
+        if not payload.use_real_data:
+            logger.warning(
+                "收到 use_real_data=false 请求，当前版本已强制真实数据链路；"
+                "将继续按 MiniQMT → AmazingData → AkShare 执行。"
+            )
 
-        if payload.use_real_data:
-            data_provider = _FailoverIntradayDataProvider()
-            probe_quote = await _get_current_quote_compat(data_provider, request, symbol)
-            probe_bars = await _get_intraday_bars_compat(data_provider, request, symbol, minutes=30)
-            if probe_quote is None and (probe_bars is None or probe_bars.empty):
-                raise HTTPException(
-                    status_code=503,
-                    detail={
-                        "message": "所有实时数据源均不可用",
-                        "attempts": data_provider.attempts,
-                        "fallback_order": ["miniqmt", "amazingdata", "akshare"],
-                    },
-                )
-            data_source = data_provider.active_source or "fallback"
+        # 强制真实数据链路，不再允许回退 Mock
+        data_provider = _FailoverIntradayDataProvider()
+        probe_quote = await _get_current_quote_compat(data_provider, request, symbol)
+        probe_bars = await _get_intraday_bars_compat(data_provider, request, symbol, minutes=30)
+        if probe_quote is None and (probe_bars is None or probe_bars.empty):
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": "所有实时数据源均不可用",
+                    "attempts": data_provider.attempts,
+                    "fallback_order": ["miniqmt", "amazingdata", "akshare"],
+                },
+            )
+        data_source = data_provider.active_source or "none"
 
         engine = get_ttrading_engine(symbol, cast(Optional[IntradayDataProvider], data_provider))
 
@@ -2131,34 +2129,30 @@ async def get_datasource_status(request: Request = cast(Request, None)):
     status = {
         "miniqmt_available": MINIQMT_AVAILABLE,
         "miniqmt_connected": False,
-        "active_provider": "mock",
+        "active_provider": "none",
     }
 
-    if not MINIQMT_AVAILABLE:
-        return status
-
-    # 先做进程级可达性检测，避免“客户端未启动”时误报已连接。
-    tcp_probe_result = _probe_miniqmt_tcp_connection()
-    if isinstance(tcp_probe_result, tuple) and len(tcp_probe_result) == 3:
-        reachable, probe_host, probe_port = tcp_probe_result
-    else:
-        # 兼容旧测试/旧调用方：允许只返回 bool。
-        reachable = bool(tcp_probe_result)
-        probe_host, probe_port = "127.0.0.1", 7777
-    status["miniqmt_probe"] = {"host": probe_host, "port": probe_port, "reachable": reachable}
-    if not reachable:
-        return status
-
-    # 状态接口只依据真实探活结果，不再依赖“可导入即连接”的本地标志位。
-    connected = await _probe_miniqmt_actor_connection_compat(
-        request,
-        probe_host=probe_host,
-        probe_port=probe_port,
-    )
-    if connected:
-        status["miniqmt_connected"] = True
-        status["active_provider"] = "miniqmt"
-        return status
+    if MINIQMT_AVAILABLE:
+        # 先做进程级可达性检测，避免“客户端未启动”时误报已连接。
+        tcp_probe_result = _probe_miniqmt_tcp_connection()
+        if isinstance(tcp_probe_result, tuple) and len(tcp_probe_result) == 3:
+            reachable, probe_host, probe_port = tcp_probe_result
+        else:
+            # 兼容旧测试/旧调用方：允许只返回 bool。
+            reachable = bool(tcp_probe_result)
+            probe_host, probe_port = "127.0.0.1", 7777
+        status["miniqmt_probe"] = {"host": probe_host, "port": probe_port, "reachable": reachable}
+        if reachable:
+            # 状态接口只依据真实探活结果，不再依赖“可导入即连接”的本地标志位。
+            connected = await _probe_miniqmt_actor_connection_compat(
+                request,
+                probe_host=probe_host,
+                probe_port=probe_port,
+            )
+            if connected:
+                status["miniqmt_connected"] = True
+                status["active_provider"] = "miniqmt"
+                return status
 
     amazingdata = await _get_provider_with_soft_fail_compat(request, "amazingdata")
     if amazingdata is not None:
@@ -2170,7 +2164,7 @@ async def get_datasource_status(request: Request = cast(Request, None)):
     akshare = await _get_provider_with_soft_fail_compat(request, "akshare")
     if akshare is not None:
         status["akshare_available"] = True
-        if status["active_provider"] == "mock":
+        if status["active_provider"] == "none":
             status["active_provider"] = "akshare"
     else:
         status["akshare_available"] = False

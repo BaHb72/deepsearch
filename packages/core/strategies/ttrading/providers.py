@@ -29,7 +29,7 @@ class MiniQMTIntradayDataProvider(IntradayDataProvider):
     MiniQMT 分时数据提供者
 
     直接使用 MiniQMTPollingStreamPort（经过验证的实现）获取实时数据
-    所有方法都是 async 以匹配 MockIntradayDataProvider 接口
+    所有方法均为 async，与 IntradayDataProvider 协议保持一致
     """
 
     def __init__(self):
@@ -231,7 +231,7 @@ def get_best_data_provider() -> Optional[IntradayDataProvider]:
     """
     获取最佳可用的数据提供者（带回退机制）
 
-    回退顺序: MiniQMT → None (调用方使用Mock)
+    回退顺序: MiniQMT → None（调用方需显式处理不可用场景）
 
     Returns:
         可用的 IntradayDataProvider 实例，或 None

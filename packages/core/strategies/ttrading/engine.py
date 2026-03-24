@@ -111,6 +111,36 @@ class MockIntradayDataProvider(IntradayDataProvider):
             self._subscriptions.pop(symbol, None)
 
 
+class UnavailableIntradayDataProvider(IntradayDataProvider):
+    """运行时兜底 Provider：明确禁止回退到 Mock。"""
+
+    _ERROR_MESSAGE = (
+        "实时数据提供者未配置或不可用。"
+        "当前版本已禁用 Mock 数据回退，请接入 MiniQMT/AmazingData/AkShare。"
+    )
+
+    async def get_intraday_bars(
+        self,
+        symbol: str,
+        minutes: int = 240,
+    ) -> pd.DataFrame:
+        raise RuntimeError(f"{self._ERROR_MESSAGE} symbol={symbol}, minutes={minutes}")
+
+    async def get_current_quote(self, symbol: str) -> Optional[QuoteSnapshot]:
+        raise RuntimeError(f"{self._ERROR_MESSAGE} symbol={symbol}")
+
+    async def subscribe(
+        self,
+        symbols: Sequence[str],
+        callback: Any,
+    ) -> None:
+        _ = callback
+        raise RuntimeError(f"{self._ERROR_MESSAGE} symbols={list(symbols)}")
+
+    async def unsubscribe(self, symbols: Sequence[str]) -> None:
+        raise RuntimeError(f"{self._ERROR_MESSAGE} symbols={list(symbols)}")
+
+
 # ============================================
 # T-Trading Engine
 # ============================================
@@ -136,9 +166,11 @@ class TTradingEngine:
         初始化引擎
 
         Args:
-            data_provider: 分时数据提供者 (None则使用Mock)
+            data_provider: 分时数据提供者 (None 时使用不可用占位 Provider，禁止 Mock 回退)
         """
-        self._data_provider: IntradayDataProvider = data_provider or MockIntradayDataProvider()
+        self._data_provider: IntradayDataProvider = (
+            data_provider or UnavailableIntradayDataProvider()
+        )
         self._config: Optional[TTradingConfig] = None
         self._is_running = False
 
@@ -434,7 +466,7 @@ async def run_quick_analysis(
     Args:
         symbol: 股票代码
         config: 配置 (可选)
-        data_provider: 数据提供者 (可选，None则使用Mock)
+        data_provider: 数据提供者 (可选，None 时将触发不可用错误)
 
     Returns:
         分析结果字典
