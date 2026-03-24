@@ -18,6 +18,11 @@
    - A 股约束阻断统计
 4. 规则模块：`rules/a_share_constraints.py`
    - T+1、涨跌停、停牌判定
+5. 已接入策略族：
+   - `simple_ma`（均线交叉）
+   - `mean_reversion`（均值回归）
+   - `momentum`（动量突破）
+   - `turtle`（唐奇安突破）
 
 ## 输出契约（由 BacktestService 汇总）
 
@@ -32,3 +37,4 @@
 1. 不新增第二套回测引擎；Backtrader 为唯一主线。
 2. A 股规则在主链路统一执行，不在接口层重复实现。
 3. 保留兼容字段一个版本周期，后续删除。
+4. `/api/backtest/run` 与 `/api/analytics/backtest` 仅作兼容包装，能力以 `/api/strategy/backtest` 为准。

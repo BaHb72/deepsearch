@@ -10,6 +10,7 @@
 2. 多标的逐 bar 回调与持仓同步。
 3. A 股约束接入（T+1 / 涨跌停 / 停牌）。
 4. 统一结果 DTO（`metrics`、`equity_curve`、`trades`、`blocked_summary`）。
+5. 已迁移策略：`simple_ma`、`mean_reversion`、`momentum`、`turtle`。
 
 ## 关键链路
 
@@ -24,6 +25,11 @@
 ## 统一回测接口（当前）
 
 主入口：`/api/strategy/backtest`
+
+兼容入口（同一主线委托）：
+
+1. `/api/analytics/backtest`
+2. `/api/backtest/run`
 
 请求关键字段：
 
@@ -46,4 +52,4 @@
 
 1. v1 优先覆盖“通用 A 股回测闭环”。
 2. 公司行为对现金与持仓的高保真重算（分红、配股、送转）不在本阶段。
-3. `/api/analytics/backtest` 为委托包装，不作为新增能力入口。
+3. `/api/backtest/optimize` 在主线下暂未开放（返回 `501`），策略对比请使用 `/api/strategy/compare`。

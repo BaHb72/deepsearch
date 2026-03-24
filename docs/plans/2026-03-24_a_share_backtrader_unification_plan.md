@@ -41,18 +41,24 @@
 1. 新增本实施记录文档。
 2. 修订 `docs/modules/backtest.md` 与 `packages/core/backtest/MODULE_OVERVIEW.md`，对齐当前真实能力边界。
 
-## 3. 验收与测试（待补）
+## 3. 验收与测试（已执行，2026-03-24）
 
-本阶段优先完成功能闭环，测试补充拆分到下一阶段执行，计划覆盖：
+已执行回归命令：
 
-1. 通用主线真实成交与多标的回测。
-2. T+1 同日卖出阻断。
-3. 涨停买入阻断与停牌阻断。
-4. `/api/strategy/backtest` 新契约字段透传。
-5. A 股状态列 Feed 生效（`high_limited/low_limited/is_suspended`）。
+1. `uv run --python .\.venv\Scripts\python.exe pytest tests/unit/backtest/test_history_status_overlay.py tests/unit/backtest/test_unified_backtrader_adapter_extended.py tests/api/test_analytics_backtest_delegate.py tests/api/test_strategy_center_ttrading_backtest.py -q`
 
-## 4. 已知边界
+结果：
+
+1. `33 passed, 1 skipped`
+2. 覆盖 A 股状态叠加、统一适配器、多入口委托行为、T+1/涨跌停阻断逻辑。
+
+## 4. 提交记录（2026-03-24）
+
+1. `d46cb33`：A 股 Backtrader 主线打通（订单桥、A 股规则、统一 DTO）。
+2. `7733b64`：`mean_reversion / momentum / turtle` 迁移到统一策略协议并接入主线 API。
+
+## 5. 已知边界
 
 1. v1 目标是“通用 A 股日线闭环 + 分钟级规则可用”，不包含公司行为现金/持仓重算高保真模拟。
 2. 旧兼容字段计划保留一个版本周期，随后移除。
-3. `/api/analytics/backtest` 保留委托语义，不作为新增回测能力入口。
+3. `/api/analytics/backtest` 与 `/api/backtest/run` 均为主线委托包装；唯一能力定义入口仍为 `/api/strategy/backtest`。
