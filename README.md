@@ -336,7 +336,10 @@ dask:
 # 一键检查（推荐）
 uv run python scripts/run_all_tests.py
 
-# 单元测试（并行）
+# 单元测试（串行，默认可执行）
+uv run pytest tests/unit
+
+# 单元测试（并行，需要安装 pytest-xdist）
 uv run pytest tests/unit -n auto
 
 # 集成测试

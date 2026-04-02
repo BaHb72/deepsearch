@@ -2440,6 +2440,17 @@ async def get_kline_data(
                 except Exception as e:
                     logger.debug(f"Failed to parse time value {time_val}: {e}")
 
+                high_limited_raw = (
+                    bar.get("high_limited")
+                    if bar.get("high_limited") is not None
+                    else bar.get("HIGH_LIMITED")
+                )
+                low_limited_raw = (
+                    bar.get("low_limited")
+                    if bar.get("low_limited") is not None
+                    else bar.get("LOW_LIMITED")
+                )
+
                 bars.append(
                     KLineBar(
                         timestamp=ts,
@@ -2452,22 +2463,10 @@ async def get_kline_data(
                         date=date_str,
                         time_str=time_str,
                         high_limited=(
-                            float(bar.get("high_limited"))
-                            if bar.get("high_limited") is not None
-                            else (
-                                float(bar.get("HIGH_LIMITED"))
-                                if bar.get("HIGH_LIMITED") is not None
-                                else None
-                            )
+                            float(high_limited_raw) if high_limited_raw is not None else None
                         ),
                         low_limited=(
-                            float(bar.get("low_limited"))
-                            if bar.get("low_limited") is not None
-                            else (
-                                float(bar.get("LOW_LIMITED"))
-                                if bar.get("LOW_LIMITED") is not None
-                                else None
-                            )
+                            float(low_limited_raw) if low_limited_raw is not None else None
                         ),
                         is_suspended=bool(
                             bar.get("is_suspended")

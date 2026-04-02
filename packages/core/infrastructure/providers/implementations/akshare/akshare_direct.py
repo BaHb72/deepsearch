@@ -68,6 +68,7 @@ class AkShareProvider(ILifecycleProvider):
         self._cache: Dict[str, CacheEntry] = {}
         self._cache_ttl: Dict[str, int] = {
             "realtime": 10,  # 实时数据缓存10秒
+            "market_spot": 120,  # 全市场快照缓存120秒
             "hist": 300,  # 历史数据缓存5分钟
             "info": 3600,  # 股票信息缓存1小时
         }
@@ -603,6 +604,60 @@ class AkShareProvider(ILifecycleProvider):
             logger.error(f"获取实时行情失败: {e}")
             return {"error": str(e)}
 
+    def _fetch_market_spot_dataframe_sync(self) -> Any:
+        """获取全市场快照，优先东方财富，失败时回退新浪接口，并做短期缓存。"""
+        cache_key = "market_spot_snapshot"
+        cached_entry = self._cache.get(cache_key)
+        if cached_entry:
+            cached_time, cached_data = cached_entry
+            ttl = self._cache_ttl.get("market_spot", self._cache_ttl.get("realtime", 10))
+            if (
+                time.time() - cached_time < ttl
+                and isinstance(cached_data, dict)
+                and cached_data.get("df") is not None
+            ):
+                return cached_data["df"]
+
+        module = self._akshare
+        if module is None:
+            raise RuntimeError("AkShare 未安装或未注入")
+
+        em_error: Exception | None = None
+        try:
+            df = module.stock_zh_a_spot_em()
+            if df is not None and not df.empty:
+                self._cache[cache_key] = (time.time(), {"df": df})
+                return df
+        except Exception as exc:
+            em_error = exc
+            logger.debug("stock_zh_a_spot_em 失败，准备回退 stock_zh_a_spot: {}", exc)
+
+        spot_error: Exception | None = None
+        try:
+            with temporarily_unpatch_akshare_requests():
+                stock_zh_a_spot = getattr(module, "stock_zh_a_spot", None)
+                if not callable(stock_zh_a_spot):
+                    raise AttributeError("stock_zh_a_spot is not available")
+                df = stock_zh_a_spot()
+            if df is not None and not df.empty:
+                self._cache[cache_key] = (time.time(), {"df": df})
+                return df
+        except Exception as exc:
+            spot_error = exc
+            logger.debug("stock_zh_a_spot 失败: {}", exc)
+
+        raise RuntimeError(
+            "全市场快照拉取失败（stock_zh_a_spot_em 与 stock_zh_a_spot 均不可用）"
+            f"; em_error={em_error}; spot_error={spot_error}"
+        )
+
+    @staticmethod
+    def _normalize_symbol_code(value: Any) -> str:
+        text = str(value or "").strip().upper()
+        if "." in text:
+            text = text.split(".", 1)[0]
+        return text.zfill(6) if text.isdigit() else text
+
     def _fetch_realtime_quote_sync(self, symbol: str) -> Dict[str, Any]:
         """同步获取实时行情（在线程池中执行）"""
         module = self._akshare
@@ -610,6 +665,7 @@ class AkShareProvider(ILifecycleProvider):
             return {"error": "AkShare 未安装或未注入"}
         try:
             logger.info(f"[AKShare] 开始获取 {symbol} 实时行情")
+            normalized_symbol = self._normalize_symbol_code(symbol)
 
             # 方法1: 尝试使用个股信息接口（更快）
             try:
@@ -622,7 +678,7 @@ class AkShareProvider(ILifecycleProvider):
 
                     logger.info(f"[AKShare] 通过个股信息接口获取 {symbol} 成功")
                     return {
-                        "symbol": symbol,
+                        "symbol": normalized_symbol,
                         "name": info_dict.get("股票简称", ""),
                         "current": self._safe_float(info_dict.get("最新", 0)),
                         "prev_close": self._safe_float(info_dict.get("昨收", 0)),
@@ -641,18 +697,19 @@ class AkShareProvider(ILifecycleProvider):
 
             # 方法2: 降级到全市场查询（慢，约20秒）
             logger.warning("[AKShare] 降级到全市场查询（慢）")
-            df = module.stock_zh_a_spot_em()
+            df = self._fetch_market_spot_dataframe_sync()
+            normalized_codes = df["代码"].map(self._normalize_symbol_code)
 
             # 查找指定股票
-            stock_data = df[df["代码"] == symbol]
+            stock_data = df[normalized_codes == normalized_symbol]
 
             if stock_data.empty:
-                return {"error": f"未找到股票 {symbol}"}
+                return {"error": f"未找到股票 {normalized_symbol}"}
 
             row = stock_data.iloc[0]
 
             return {
-                "symbol": symbol,
+                "symbol": normalized_symbol,
                 "name": row.get("名称", ""),
                 "current": self._safe_float(row.get("最新价", 0)),
                 "prev_close": self._safe_float(row.get("昨收", 0)),
@@ -744,26 +801,29 @@ class AkShareProvider(ILifecycleProvider):
         try:
             logger.info(f"[AKShare] 开始批量获取 {len(symbols)} 只股票的实时行情")
 
-            # 直接使用全市场查询
-            df = module.stock_zh_a_spot_em()
+            # 直接使用全市场查询（自动在东方财富/新浪之间切换）
+            df = self._fetch_market_spot_dataframe_sync()
 
             if df is None or df.empty:
                 return []
 
             result = []
-            # 创建代码索引以加速查找
-            df_indexed = df.set_index("代码")
+            # 创建标准化代码索引以加速查找（兼容 int/string/000001 三种形态）
+            df_indexed = df.copy()
+            df_indexed["__symbol_norm"] = df_indexed["代码"].map(self._normalize_symbol_code)
+            df_indexed = df_indexed.set_index("__symbol_norm")
 
             for symbol in symbols:
-                if symbol in df_indexed.index:
-                    row = df_indexed.loc[symbol]
+                normalized_symbol = self._normalize_symbol_code(symbol)
+                if normalized_symbol in df_indexed.index:
+                    row = df_indexed.loc[normalized_symbol]
                     # 如果有重复代码，loc可能返回DataFrame，取第一行
                     if isinstance(row, pd.DataFrame):  # type: ignore[union-attr]
                         row = row.iloc[0]
 
                     result.append(
                         {
-                            "symbol": symbol,
+                            "symbol": normalized_symbol,
                             "name": row.get("名称", ""),
                             "current": self._safe_float(row.get("最新价", 0)),
                             "prev_close": self._safe_float(row.get("昨收", 0)),
@@ -787,7 +847,11 @@ class AkShareProvider(ILifecycleProvider):
                 else:
                     # 未找到的股票返回错误信息或空数据
                     result.append(
-                        {"symbol": symbol, "error": "Not found", "source": "akshare_direct_batch"}
+                        {
+                            "symbol": normalized_symbol,
+                            "error": "Not found",
+                            "source": "akshare_direct_batch",
+                        }
                     )
 
             return result
@@ -1114,43 +1178,64 @@ class AkShareProvider(ILifecycleProvider):
             logger.error("AkShare 未安装或未注入，无法获取股票列表")
             return []
         try:
-            # 尝试多种方式获取股票列表，提高容错性
-            df = None
-
-            # 方法1: 使用stock_zh_a_spot_em (东方财富实时行情)
+            # 方法1: 复用全市场快照回退链路（stock_zh_a_spot_em -> stock_zh_a_spot）
+            # 避免股票列表与实时行情走不同容错路径。
             try:
-                logger.debug("尝试使用东方财富接口获取股票列表...")
-                df = module.stock_zh_a_spot_em()
+                logger.debug("尝试通过全市场快照获取股票列表...")
+                df = self._fetch_market_spot_dataframe_sync()
                 if df is not None and not df.empty:
-                    stocks = []
+                    stocks: list[dict[str, str]] = []
                     for _, row in df.iterrows():
-                        stocks.append(
-                            {"代码": str(row.get("代码", "")), "名称": str(row.get("名称", ""))}
+                        code = (
+                            row.get("代码")
+                            or row.get("symbol")
+                            or row.get("证券代码")
+                            or row.get("code")
                         )
-                    logger.info(f"通过东方财富接口获取到 {len(stocks)} 只股票")
-                    return stocks
+                        symbol = self._normalize_symbol_code(code)
+                        if not symbol:
+                            continue
+                        name = row.get("名称") or row.get("股票简称") or row.get("name") or symbol
+                        stocks.append({"代码": symbol, "名称": str(name)})
+                    if stocks:
+                        logger.info(f"通过全市场快照获取到 {len(stocks)} 只股票")
+                        return stocks
             except Exception as e1:
-                logger.warning(f"东方财富接口失败: {e1}")
+                logger.warning(f"全市场快照获取股票列表失败: {e1}")
 
-            # 方法2: 使用原来的stock_info_a_code_name
+            # 方法2: 使用 stock_info_a_code_name
             try:
                 logger.debug("尝试使用stock_info_a_code_name获取股票列表...")
                 df = module.stock_info_a_code_name()
                 if df is not None and not df.empty:
                     stocks = []
                     for _, row in df.iterrows():
-                        stocks.append(
-                            {"代码": str(row.get("code", "")), "名称": str(row.get("name", ""))}
+                        symbol = self._normalize_symbol_code(
+                            row.get("code") or row.get("代码") or row.get("SECURITY_CODE")
                         )
-                    logger.info(f"通过stock_info_a_code_name获取到 {len(stocks)} 只股票")
-                    return stocks
+                        if not symbol:
+                            continue
+                        stocks.append(
+                            {
+                                "代码": symbol,
+                                "名称": str(
+                                    row.get("name")
+                                    or row.get("名称")
+                                    or row.get("SECURITY_NAME")
+                                    or symbol
+                                ),
+                            }
+                        )
+                    if stocks:
+                        logger.info(f"通过stock_info_a_code_name获取到 {len(stocks)} 只股票")
+                        return stocks
             except Exception as e2:
                 logger.warning(f"stock_info_a_code_name失败: {e2}")
 
             # 所有 API 都失败，抛出异常让上层调用者处理（尝试其他数据源）
             raise ProviderDataError(
                 provider="akshare",
-                message="所有股票列表 API 都失败（stock_zh_a_spot_em, stock_info_a_code_name）",
+                message=("所有股票列表 API 都失败（market_spot_snapshot, stock_info_a_code_name）"),
             )
 
         except ProviderDataError:

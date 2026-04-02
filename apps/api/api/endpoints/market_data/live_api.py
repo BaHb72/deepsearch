@@ -8,7 +8,7 @@ from datetime import datetime
 from datetime import time as time_type
 from datetime import timezone
 from time import perf_counter
-from typing import Any, Awaitable, Callable, Iterable, Sequence
+from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from core.infrastructure.providers.utils.retry import CircuitBreaker, CircuitBreakerOpenError
@@ -34,15 +34,20 @@ MODULE_STORAGE_MAP: dict[str, str] = {
     "auction_quality": "auction_quality",
 }
 _CONCEPT_FLOW_SINGLEFLIGHT = RequestDeduplicator(ttl_seconds=1)
-_LIVE_FALLBACK_TIMEOUT_SECONDS = 4.0
+_LIVE_FALLBACK_TIMEOUT_SECONDS = 30.0
+_LIVE_FALLBACK_COLD_START_TIMEOUT_SECONDS = 90.0
+_LIVE_FALLBACK_AKSHARE_TIMEOUT_SECONDS = 150.0
+_LIVE_REFRESH_TIMEOUT_SECONDS = 10.0
 _CONCEPT_STRENGTH_TIMEOUT_SECONDS = 6.0
 _CONCEPT_FLOW_PRIMARY_TIMEOUT_SECONDS = 6.0
 _CONCEPT_FLOW_FALLBACK_TIMEOUT_SECONDS = 5.0
 _CONCEPT_FLOW_THS_FALLBACK_TIMEOUT_SECONDS = 5.0
 _CONCEPT_FLOW_BREAKER_FAILURE_THRESHOLD = 3
 _CONCEPT_FLOW_BREAKER_RECOVERY_SECONDS = 180.0
-_RECENT_SUCCESS_CACHE_TTL_SECONDS = 300.0
+_OFF_HOURS_PHASES = {"no_trade", "off_day"}
+_RECENT_SUCCESS_CACHE_TTL_SECONDS = 24 * 60 * 60.0
 _RECENT_SUCCESS_CACHE_MAX_SIZE = 32
+_AKSHARE_GUARD_PRIMARY_SOURCES = ("amazingdata", "miniqmt")
 _RECENT_SUCCESS_PAYLOADS: dict[str, dict[str, Any]] = {}
 _CONCEPT_FLOW_BREAKERS: dict[str, CircuitBreaker] = {}
 _AKSHARE_DIRECT_FALLBACK_PROVIDER: Any | None = None
@@ -87,6 +92,26 @@ def _is_trading_hours() -> bool:
     return morning_session or afternoon_session
 
 
+def _resolve_market_phase() -> str:
+    """按本地交易时段推断当前阶段，用于 fallback 规则匹配。"""
+    try:
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    except Exception:
+        now = datetime.now()
+
+    if now.weekday() >= 5:
+        return "off_day"
+
+    current_time = now.time()
+    if time_type(9, 15) <= current_time <= time_type(9, 25):
+        return "auction"
+    morning_session = time_type(9, 30) <= current_time <= time_type(11, 30)
+    afternoon_session = time_type(13, 0) <= current_time <= time_type(15, 0)
+    if morning_session or afternoon_session:
+        return "continuous"
+    return "no_trade"
+
+
 def _resolve_data_source_name(app_state: Any) -> str:
     active = getattr(app_state, "market_data_active_source", None)
     if isinstance(active, str) and active.strip():
@@ -115,6 +140,131 @@ def _normalize_source_param(value: str | None) -> str | None:
     return normalized
 
 
+def _source_family(source: str | None) -> str | None:
+    normalized = _normalize_source_param(source) if source is not None else None
+    if normalized is None and isinstance(source, str):
+        normalized = source.strip().lower() or None
+    if not normalized:
+        return None
+    if normalized.startswith("amazingdata"):
+        return "amazingdata"
+    if normalized.startswith("miniqmt") or normalized == "qmt":
+        return "miniqmt"
+    if normalized.startswith("akshare"):
+        return "akshare"
+    return normalized
+
+
+def _is_akshare_source(source: str | None) -> bool:
+    return _source_family(source) == "akshare"
+
+
+def _normalize_failure_code(code: str | None) -> str | None:
+    if not isinstance(code, str):
+        return None
+    normalized = code.strip().upper()
+    return normalized or None
+
+
+def _is_timeout_failure_code(code: str | None) -> bool:
+    normalized = _normalize_failure_code(code)
+    if not normalized:
+        return False
+    return "TIMEOUT" in normalized
+
+
+def _failure_code_from_detail(detail: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(detail, Mapping):
+        return None
+    code_value = detail.get("code")
+    if isinstance(code_value, str):
+        normalized = _normalize_failure_code(code_value)
+        if normalized:
+            return normalized
+    message = detail.get("message")
+    if isinstance(message, str) and "timeout" in message.lower():
+        return "UPSTREAM_TIMEOUT"
+    return None
+
+
+def _record_source_failure_code(
+    failures: dict[str, str],
+    *,
+    source: str | None,
+    code: str | None,
+) -> None:
+    family = _source_family(source)
+    normalized_code = _normalize_failure_code(code)
+    if family is None or normalized_code is None:
+        return
+
+    existing = failures.get(family)
+    if existing and _is_timeout_failure_code(existing):
+        return
+    if _is_timeout_failure_code(normalized_code):
+        failures[family] = normalized_code
+        return
+    if not existing:
+        failures[family] = normalized_code
+
+
+def _prioritize_akshare_last(sources: Sequence[str]) -> list[str]:
+    ordered = _unique(sources)
+    non_akshare = [source for source in ordered if not _is_akshare_source(source)]
+    akshare = [source for source in ordered if _is_akshare_source(source)]
+    return non_akshare + akshare
+
+
+def _akshare_guard_state(
+    settings: Any | None,
+    source_failures: Mapping[str, str],
+) -> dict[str, Any]:
+    enabled_sources = {item.lower() for item in _enabled_adapter_names(settings)}
+    required_sources = [
+        source for source in _AKSHARE_GUARD_PRIMARY_SOURCES if source in enabled_sources
+    ]
+    if not required_sources:
+        required_sources = list(_AKSHARE_GUARD_PRIMARY_SOURCES)
+
+    missing_sources: list[str] = []
+    timeout_sources: list[str] = []
+    failed_sources: dict[str, str] = {}
+    for source in required_sources:
+        code = _normalize_failure_code(source_failures.get(source))
+        if code is None:
+            missing_sources.append(source)
+            continue
+        failed_sources[source] = code
+        if _is_timeout_failure_code(code):
+            timeout_sources.append(source)
+
+    return {
+        "allowed": (not missing_sources and not timeout_sources),
+        "required_sources": required_sources,
+        "missing_sources": missing_sources,
+        "timeout_sources": timeout_sources,
+        "failed_sources": failed_sources,
+    }
+
+
+def _akshare_guard_block_detail(
+    *,
+    source: str,
+    phase: str | None,
+    guard_state: Mapping[str, Any],
+) -> dict[str, Any]:
+    return {
+        "source": source,
+        "phase": phase,
+        "code": "AKSHARE_GUARD_BLOCKED",
+        "message": "akshare 仅在 amazingdata/miniqmt 均非超时不可用时启用",
+        "required_sources": list(guard_state.get("required_sources") or ()),
+        "missing_sources": list(guard_state.get("missing_sources") or ()),
+        "timeout_sources": list(guard_state.get("timeout_sources") or ()),
+        "failed_sources": dict(guard_state.get("failed_sources") or {}),
+    }
+
+
 def _cache_module_name(module: str) -> str:
     return MODULE_STORAGE_MAP.get(module, module)
 
@@ -132,6 +282,140 @@ def _resolve_module_config(settings: Any | None, module: str) -> Any | None:
         return None
 
 
+def _resolve_module_primary_source(
+    settings: Any | None,
+    module: str,
+    *,
+    app_state: Any | None = None,
+) -> str | None:
+    """解析模块主数据源。
+
+    规则：
+    1. 优先使用 market_data.modules.<module>.primary；
+    2. 若未配置，使用 data_sources.realtime.adapters 的首个启用源；
+    3. 若运行时 active source 可识别为已知家族（amazingdata/miniqmt/akshare），使用该值；
+    4. 否则返回 None，让调用方走默认读取路径（source=None）。
+    """
+    module_cfg = _resolve_module_config(settings, module)
+    if module_cfg is not None:
+        primary = _normalize_source_param(getattr(module_cfg, "primary", None))
+        if primary:
+            return primary
+
+    enabled = _configured_adapter_names(settings)
+    if enabled:
+        return enabled[0]
+
+    if app_state is not None:
+        resolved = _normalize_source_param(_resolve_data_source_name(app_state))
+        family = _source_family(resolved) if resolved else None
+        if resolved and family in {"amazingdata", "miniqmt", "akshare"}:
+            return resolved
+    return None
+
+
+def _auto_fallback_sources(
+    settings: Any | None,
+    module: str,
+    *,
+    app_state: Any | None = None,
+    phase: str | None = None,
+    error_code: str | None = None,
+) -> list[str]:
+    module_cfg = _resolve_module_config(settings, module)
+    if module_cfg is None:
+        return []
+    if not bool(getattr(module_cfg, "enable_auto_fallback", False)):
+        return []
+    normalized_phase = phase.strip() if isinstance(phase, str) and phase.strip() else None
+    normalized_error = (
+        error_code.strip() if isinstance(error_code, str) and error_code.strip() else None
+    )
+    candidates: list[str] = []
+    fallbacks = getattr(module_cfg, "fallbacks", None) or ()
+    for rule in fallbacks:
+        rule_source = getattr(rule, "source", None)
+        if not isinstance(rule_source, str) or not rule_source.strip():
+            continue
+        rule_phases = tuple(
+            item.strip()
+            for item in (getattr(rule, "phases", None) or ())
+            if isinstance(item, str) and item.strip()
+        )
+        if rule_phases and (normalized_phase is None or normalized_phase not in rule_phases):
+            continue
+        rule_errors = tuple(
+            item.strip()
+            for item in (getattr(rule, "trigger_errors", None) or ())
+            if isinstance(item, str) and item.strip()
+        )
+        if rule_errors and (normalized_error is None or normalized_error not in rule_errors):
+            continue
+        candidates.append(rule_source.strip())
+
+    ordered = _prioritize_akshare_last(_unique(candidates))
+    ordered = _enforce_primary_fallback_chain(
+        ordered,
+        settings=settings,
+        module=module,
+    )
+    if normalized_phase not in _OFF_HOURS_PHASES or app_state is None:
+        return ordered
+
+    # 盘后仍保持配置优先级：AmazingData/miniqmt 必须先于 AkShare 尝试。
+    # “source ready” 仅用于观测，不应改变回退顺序。
+    return ordered
+
+
+def _enforce_primary_fallback_chain(
+    sources: Sequence[str],
+    *,
+    settings: Any | None,
+    module: str,
+) -> list[str]:
+    """为关键模块补齐 fallback 顺序：amazingdata -> miniqmt -> akshare。
+
+    仅在 `strength` / `board_overview` 生效，且仅补齐已启用的数据源。
+    """
+    module_name = (module or "").strip().lower()
+    if module_name not in {"strength", "board_overview"}:
+        return list(sources)
+
+    ordered = _prioritize_akshare_last(_unique(sources))
+    enabled = _enabled_adapter_names(settings)
+
+    def _pick_enabled_by_family(family: str) -> str | None:
+        for name in enabled:
+            if _source_family(name) == family:
+                return name
+        return None
+
+    def _pick_ordered_by_family(family: str) -> str | None:
+        for name in ordered:
+            if _source_family(name) == family:
+                return name
+        return None
+
+    result: list[str] = []
+
+    for family in ("amazingdata", "miniqmt"):
+        candidate = _pick_ordered_by_family(family) or _pick_enabled_by_family(family)
+        if candidate and candidate not in result:
+            result.append(candidate)
+
+    for name in ordered:
+        if _is_akshare_source(name):
+            continue
+        if name not in result:
+            result.append(name)
+
+    akshare_candidate = _pick_ordered_by_family("akshare") or _pick_enabled_by_family("akshare")
+    if akshare_candidate and akshare_candidate not in result:
+        result.append(akshare_candidate)
+
+    return result
+
+
 def _auto_fallback_source(
     settings: Any | None,
     module: str,
@@ -139,30 +423,49 @@ def _auto_fallback_source(
     phase: str | None = None,
     error_code: str | None = None,
 ) -> str | None:
+    candidates = _auto_fallback_sources(
+        settings,
+        module,
+        phase=phase,
+        error_code=error_code,
+    )
+    return candidates[0] if candidates else None
+
+
+def _is_module_fallback_source(
+    settings: Any | None,
+    module: str,
+    source: str | None,
+) -> bool:
+    if not isinstance(source, str):
+        return False
+    normalized_source = source.strip().lower()
+    if not normalized_source:
+        return False
     module_cfg = _resolve_module_config(settings, module)
     if module_cfg is None:
-        return None
-    fallbacks = getattr(module_cfg, "fallbacks", None) or ()
-    for rule in fallbacks:
+        return False
+    for rule in getattr(module_cfg, "fallbacks", None) or ():
         rule_source = getattr(rule, "source", None)
-        if not isinstance(rule_source, str) or not rule_source.strip():
+        if not isinstance(rule_source, str):
             continue
-        rule_phases = getattr(rule, "phases", None) or ()
-        if phase and rule_phases and phase not in rule_phases:
-            continue
-        rule_errors = getattr(rule, "trigger_errors", None) or ()
-        if error_code and rule_errors and error_code not in rule_errors:
-            continue
-        return rule_source.strip()
-    return None
+        if rule_source.strip().lower() == normalized_source:
+            return True
+    return False
 
 
-async def _ensure_fallback_data(app_state: Any, module: str, target_source: str) -> dict[str, Any]:
+async def _ensure_fallback_data(
+    app_state: Any,
+    module: str,
+    target_source: str,
+    *,
+    phase: str | None = None,
+) -> dict[str, Any]:
     manager = getattr(app_state, "market_data_fallback_manager", None)
     if manager is None:
         raise HTTPException(status_code=503, detail="fallback manager unavailable")
     try:
-        result = await manager.fetch_once(module, target_source)
+        result = await manager.fetch_once(module, target_source, phase=phase)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -175,6 +478,144 @@ async def _ensure_fallback_data(app_state: Any, module: str, target_source: str)
             status_code=429, detail=detail or {"message": "fallback fetch throttled"}
         )
     raise HTTPException(status_code=502, detail=detail or {"message": "fallback fetch failed"})
+
+
+def _resolve_fallback_timeout_seconds(
+    app_state: Any,
+    target_source: str,
+    *,
+    phase: str | None,
+    warm_timeout_seconds: float = _LIVE_FALLBACK_TIMEOUT_SECONDS,
+) -> float:
+    """按 source 预热状态动态计算 fallback 拉取超时。"""
+
+    timeout_seconds = max(0.1, float(warm_timeout_seconds))
+    if phase not in _OFF_HOURS_PHASES:
+        return timeout_seconds
+    normalized_source = (target_source or "").strip().lower()
+    # AKShare 盘后首轮通常需要先构建股票列表/板块映射，句柄 warm 也可能超过常规 30s。
+    # 为避免误判“已就绪”后过早超时，盘后统一使用冷启动预算下限。
+    if normalized_source.startswith("akshare"):
+        timeout_seconds = max(timeout_seconds, _LIVE_FALLBACK_AKSHARE_TIMEOUT_SECONDS)
+
+    manager = getattr(app_state, "market_data_fallback_manager", None)
+    if normalized_source.startswith("amazingdata") and manager is None:
+        return timeout_seconds
+
+    if manager is None:
+        return timeout_seconds
+
+    source_ready: bool | None = None
+    is_source_ready = getattr(manager, "is_source_ready", None)
+    if callable(is_source_ready):
+        try:
+            source_ready = bool(is_source_ready(target_source))
+            if source_ready:
+                return timeout_seconds
+        except Exception:  # pragma: no cover - defensive
+            return timeout_seconds
+
+    is_source_warm = getattr(manager, "is_source_warm", None)
+    source_warm: bool | None = None
+    if callable(is_source_warm):
+        try:
+            source_warm = bool(is_source_warm(target_source))
+        except Exception:  # pragma: no cover - defensive
+            return timeout_seconds
+
+    # AmazingData 冷启动首轮容易触发 query_snapshot 大批量拉取，
+    # 若仍沿用 30s 默认预算会误判为 timeout，导致链路持续降级。
+    if normalized_source.startswith("amazingdata"):
+        # AmazingData 的 warm 状态可能不可观测（manager 未提供 is_source_warm），
+        # 此时不应直接升级到冷启动预算，避免盘后 fallback 被 90s 阻塞。
+        if source_warm is not False:
+            return timeout_seconds
+        return max(timeout_seconds, _LIVE_FALLBACK_COLD_START_TIMEOUT_SECONDS)
+
+    return max(timeout_seconds, _LIVE_FALLBACK_COLD_START_TIMEOUT_SECONDS)
+
+
+def _unready_source_block_detail(
+    app_state: Any,
+    *,
+    source: str,
+    phase: str | None,
+) -> dict[str, Any] | None:
+    """在进入 fallback 拉取前给出快速不可用判定，避免无意义超时。"""
+
+    family = _source_family(source)
+    if family != "amazingdata":
+        return None
+
+    manager = _resolve_dask_init_manager(app_state)
+    if manager is None:
+        return None
+
+    try:
+        runtime_ready = bool(getattr(manager, "amazingdata_ready", False))
+    except Exception:
+        runtime_ready = False
+
+    if not runtime_ready:
+        try:
+            runtime_ready = getattr(manager, "amazingdata_adapter", None) is not None
+        except Exception:
+            runtime_ready = False
+
+    if not runtime_ready:
+        provider_container = getattr(app_state, "provider_container", None)
+        if provider_container is not None:
+            has_method = getattr(provider_container, "has", None)
+            if callable(has_method):
+                try:
+                    runtime_ready = bool(has_method("amazingdata"))
+                except Exception:
+                    runtime_ready = False
+
+    if runtime_ready:
+        return None
+
+    phase_value = "unknown"
+    try:
+        manager_phase = getattr(manager, "phase", None)
+        phase_value = str(getattr(manager_phase, "value", manager_phase) or "unknown")
+    except Exception:
+        pass
+
+    return {
+        "source": source,
+        "phase": phase,
+        "code": "DATA_SOURCE_OFFLINE",
+        "message": "amazingdata actor not ready",
+        "runtime_phase": phase_value,
+    }
+
+
+def _fallback_detail_from_http_exception(
+    *,
+    source: str,
+    phase: str | None,
+    exc: HTTPException,
+) -> dict[str, Any]:
+    detail: dict[str, Any] = {"source": source, "phase": phase}
+    raw_detail = exc.detail
+    if isinstance(raw_detail, dict):
+        detail.update(raw_detail)
+    elif raw_detail is not None:
+        detail["message"] = str(raw_detail)
+    detail.setdefault("message", "fallback fetch failed")
+    detail.setdefault("status_code", exc.status_code)
+    if not isinstance(detail.get("code"), str):
+        message = str(detail.get("message") or "")
+        if "timeout" in message.lower():
+            detail["code"] = "UPSTREAM_TIMEOUT"
+        elif exc.status_code == 429:
+            detail["code"] = "FALLBACK_THROTTLED"
+        elif exc.status_code >= 500:
+            detail["code"] = "DATA_SOURCE_OFFLINE"
+        else:
+            detail["code"] = "DATA_SOURCE_FAILED"
+    return detail
 
 
 def _orchestrator_detail(app_state: Any) -> dict[str, Any] | None:
@@ -200,6 +641,13 @@ def _offline_response(app_state: Any, base_payload: dict[str, Any]) -> JSONRespo
     }
     payload.update(base_payload)
     payload.setdefault("data_source", _resolve_data_source_name(app_state))
+    detail = payload.get("detail")
+    if isinstance(detail, dict):
+        merged_detail = dict(detail)
+        merged_detail.setdefault("code", "DATA_SOURCE_OFFLINE")
+        payload["detail"] = merged_detail
+    else:
+        payload["detail"] = {"code": "DATA_SOURCE_OFFLINE"}
     if "cache" in payload and not payload["cache"]:
         payload.pop("cache")
     return JSONResponse(payload)
@@ -263,12 +711,17 @@ def _build_recent_cache_fallback_payload(
     code: str,
     message: str,
     reason: str | None = None,
+    required_source: str | None = None,
 ) -> dict[str, Any] | None:
     fallback = _get_recent_success_payload(cache_key)
     if fallback is None:
         return None
 
     payload, age_seconds = fallback
+    if required_source:
+        cached_source = str(payload.get("data_source") or "").strip().lower()
+        if not cached_source or cached_source != required_source.strip().lower():
+            return None
     detail = payload.get("detail")
     detail_payload = dict(detail) if isinstance(detail, dict) else {}
     cache_fallback: dict[str, Any] = {
@@ -281,6 +734,218 @@ def _build_recent_cache_fallback_payload(
     detail_payload["cache_fallback"] = cache_fallback
     payload["detail"] = detail_payload
     return payload
+
+
+def _candidate_cache_probe_sources(
+    settings: Any | None,
+    module: str,
+    *,
+    preferred: Sequence[str] | None = None,
+) -> list[str]:
+    candidates: list[str] = []
+
+    for source_name in preferred or ():
+        if isinstance(source_name, str):
+            normalized = source_name.strip().lower()
+            if normalized:
+                candidates.append(normalized)
+
+    module_cfg = _resolve_module_config(settings, module)
+    if module_cfg is not None:
+        for rule in getattr(module_cfg, "fallbacks", None) or ():
+            rule_source = getattr(rule, "source", None)
+            if isinstance(rule_source, str):
+                normalized = rule_source.strip().lower()
+                if normalized:
+                    candidates.append(normalized)
+
+    candidates.extend(_enabled_adapter_names(settings))
+    return _prioritize_akshare_last(_unique(candidates))
+
+
+def _strict_source_requested(requested_source: str | None) -> bool:
+    return bool(isinstance(requested_source, str) and requested_source.strip())
+
+
+def _enrich_live_detail(
+    detail: dict[str, Any],
+    *,
+    requested_source: str | None,
+    effective_source: str | None,
+    resolved_source: str,
+) -> dict[str, Any]:
+    detail["requested_source"] = requested_source or "auto"
+    detail["effective_source"] = effective_source or resolved_source
+    return detail
+
+
+def _resolve_dask_init_manager(app_state: Any) -> Any | None:
+    manager = getattr(app_state, "dask_init_manager", None)
+    if manager is None:
+        backend_runtime = getattr(app_state, "backend_runtime", None)
+        manager = getattr(backend_runtime, "dask_init_manager", None)
+    return manager
+
+
+def _normalized_source_failures(source_failures: Mapping[str, str]) -> dict[str, str]:
+    ordered: dict[str, str] = {}
+    for source_name in ("amazingdata", "miniqmt", "akshare"):
+        normalized = _normalize_failure_code(source_failures.get(source_name))
+        if normalized:
+            ordered[source_name] = normalized
+
+    for source_name, code in source_failures.items():
+        family = _source_family(source_name)
+        if family is None or family in ordered:
+            continue
+        normalized = _normalize_failure_code(code)
+        if normalized:
+            ordered[family] = normalized
+    return ordered
+
+
+def _detail_mentions_source_family(
+    detail: Mapping[str, Any],
+    *,
+    family: str,
+) -> bool:
+    def _match(value: Any) -> bool:
+        return isinstance(value, str) and _source_family(value) == family
+
+    if _match(detail.get("requested_source")) or _match(detail.get("effective_source")):
+        return True
+
+    latest_failure = detail.get("latest_failure")
+    if isinstance(latest_failure, Mapping) and _match(latest_failure.get("source")):
+        return True
+
+    fallback_detail = detail.get("fallback")
+    if isinstance(fallback_detail, Mapping):
+        if _match(fallback_detail.get("source")):
+            return True
+        attempts = fallback_detail.get("attempts")
+        if isinstance(attempts, Sequence) and not isinstance(attempts, (str, bytes)):
+            for item in attempts:
+                if isinstance(item, Mapping) and _match(item.get("source")):
+                    return True
+    return False
+
+
+def _collect_amazingdata_runtime_detail(app_state: Any) -> dict[str, Any] | None:
+    manager = _resolve_dask_init_manager(app_state)
+    if manager is None:
+        return None
+
+    runtime: dict[str, Any] = {}
+    phase_value = getattr(manager, "phase", None)
+    if phase_value is not None:
+        runtime["phase"] = str(getattr(phase_value, "value", phase_value) or "unknown")
+
+    for attr_name in (
+        "is_ready",
+        "is_partial",
+        "is_usable",
+        "scheduler_ready",
+        "amazingdata_ready",
+    ):
+        try:
+            attr_value = getattr(manager, attr_name)
+            value = attr_value() if callable(attr_value) else attr_value
+        except Exception:
+            continue
+        if isinstance(value, bool):
+            runtime[attr_name] = value
+
+    get_status = getattr(manager, "get_status", None)
+    if callable(get_status):
+        try:
+            status_obj = get_status()
+        except Exception:
+            status_obj = None
+        status_dict: Mapping[str, Any] | None = None
+        if isinstance(status_obj, Mapping):
+            status_dict = status_obj
+        else:
+            to_dict = getattr(status_obj, "to_dict", None)
+            if callable(to_dict):
+                try:
+                    payload = to_dict()
+                except Exception:
+                    payload = None
+                if isinstance(payload, Mapping):
+                    status_dict = payload
+        if status_dict:
+            message = status_dict.get("message")
+            if isinstance(message, str) and message:
+                runtime["message"] = message
+            progress = status_dict.get("progress_percent")
+            if isinstance(progress, int):
+                runtime["progress_percent"] = progress
+            components = status_dict.get("components")
+            if isinstance(components, Mapping):
+                amazingdata_component = components.get("amazingdata")
+                if isinstance(amazingdata_component, Mapping):
+                    component_error = amazingdata_component.get("error")
+                    if isinstance(component_error, str) and component_error:
+                        runtime["amazingdata_error"] = component_error
+
+    return runtime or None
+
+
+def _attach_failure_diagnostics(
+    detail: dict[str, Any],
+    *,
+    app_state: Any,
+    source_failures: Mapping[str, str],
+) -> dict[str, Any]:
+    normalized_failures = _normalized_source_failures(source_failures)
+    if normalized_failures:
+        detail["source_failures"] = normalized_failures
+
+    include_runtime_detail = "amazingdata" in normalized_failures or _detail_mentions_source_family(
+        detail,
+        family="amazingdata",
+    )
+    if include_runtime_detail and any(
+        key in detail for key in ("code", "latest_failure", "fallback", "cache_fallback")
+    ):
+        runtime_detail = _collect_amazingdata_runtime_detail(app_state)
+        if runtime_detail:
+            detail["amazingdata_runtime"] = runtime_detail
+    return detail
+
+
+async def _probe_strength_cache_from_sources(
+    reader: Any,
+    *,
+    windows: Sequence[str],
+    boards: Sequence[str] | None,
+    limit: int | None,
+    module: str,
+    sources: Sequence[str],
+    on_miss: Callable[[str], None] | None = None,
+    should_skip: Callable[[str], dict[str, Any] | None] | None = None,
+    on_skip: Callable[[dict[str, Any]], None] | None = None,
+) -> tuple[Any, str] | None:
+    for source_name in sources:
+        if callable(should_skip):
+            skip_detail = should_skip(source_name)
+            if isinstance(skip_detail, dict):
+                if callable(on_skip):
+                    on_skip(skip_detail)
+                continue
+        result = await reader.fetch_strength(
+            windows,
+            boards=boards,
+            limit=limit,
+            module=module,
+            source=source_name,
+        )
+        if result.items:
+            return result, source_name
+        if callable(on_miss):
+            on_miss(source_name)
+    return None
 
 
 def _get_concept_flow_breaker(indicator_label: str) -> CircuitBreaker:
@@ -337,7 +1002,9 @@ def _unique(sequence: Iterable[str]) -> list[str]:
     return list(seen.keys())
 
 
-def _enabled_adapter_names(settings: Any | None) -> list[str]:
+def _configured_adapter_names(settings: Any | None) -> list[str]:
+    """返回显式配置且启用的 realtime adapter 列表（无默认回填）。"""
+
     ds_cfg = getattr(settings, "data_sources", None)
     realtime_cfg = getattr(ds_cfg, "realtime", None) if ds_cfg else None
     adapters = getattr(realtime_cfg, "adapters", None) or ()
@@ -346,8 +1013,13 @@ def _enabled_adapter_names(settings: Any | None) -> list[str]:
         if getattr(spec, "enabled", False):
             names.append(getattr(spec, "name", "").strip())
     normalized = [name for name in (item.lower() for item in names) if name]
+    return _unique(normalized)
+
+
+def _enabled_adapter_names(settings: Any | None) -> list[str]:
+    normalized = _configured_adapter_names(settings)
     if normalized:
-        return _unique(normalized)
+        return normalized
     return ["amazingdata", "miniqmt", "akshare"]
 
 
@@ -388,10 +1060,10 @@ def _finalize_stage_timings(
 ) -> dict[str, Any] | None:
     stage_timings["total_ms"] = _elapsed_ms(request_started_at)
     logger.debug("{} stage_timings_ms={}", route, stage_timings)
-    if not _should_include_stage_timings(request):
-        return detail
     target = detail or {}
-    target["stage_timings_ms"] = stage_timings
+    target["stage_timings"] = dict(stage_timings)
+    if _should_include_stage_timings(request):
+        target["stage_timings_ms"] = dict(stage_timings)
     return target
 
 
@@ -441,6 +1113,151 @@ def _safe_percentage(value: Any) -> float | None:
     if -1.0 <= raw <= 1.0:
         return raw * 100
     return raw
+
+
+def _normalize_quote_symbol(symbol: Any) -> str:
+    text = str(symbol or "").strip().upper()
+    if not text:
+        return ""
+    if "." in text:
+        code, suffix = text.split(".", 1)
+        clean_code = "".join(ch for ch in code if ch.isdigit())
+        suffix = suffix.strip().upper()
+        if clean_code and suffix in {"SH", "SZ", "BJ"}:
+            return f"{clean_code}.{suffix}"
+        return text
+    clean_code = "".join(ch for ch in text if ch.isdigit())
+    if len(clean_code) == 6:
+        if clean_code.startswith("6"):
+            return f"{clean_code}.SH"
+        if clean_code.startswith(("0", "3")):
+            return f"{clean_code}.SZ"
+        if clean_code.startswith(("4", "8")):
+            return f"{clean_code}.BJ"
+    return clean_code or text
+
+
+async def _await_if_needed(value: Any) -> Any:
+    if asyncio.iscoroutine(value):
+        return await value
+    return value
+
+
+def _extract_quote_payload_map(
+    payload: Any,
+    *,
+    symbols: Sequence[str],
+) -> dict[str, dict[str, Any]]:
+    expected = {_normalize_quote_symbol(symbol) for symbol in symbols}
+    expected.discard("")
+    if not expected:
+        return {}
+
+    normalized: dict[str, dict[str, Any]] = {}
+
+    if isinstance(payload, Mapping):
+        # 映射形态: {"000001.SZ": {...}}
+        if payload and all(isinstance(item, Mapping) for item in payload.values()):
+            for key, value in payload.items():
+                if not isinstance(value, Mapping):
+                    continue
+                normalized_key = _normalize_quote_symbol(key)
+                if normalized_key and normalized_key in expected:
+                    normalized[normalized_key] = dict(value)
+            return normalized
+
+        # 单条形态: {"code":"000001.SZ", ...}
+        symbol_candidate = _normalize_quote_symbol(
+            payload.get("code") or payload.get("symbol") or payload.get("market_code")
+        )
+        if symbol_candidate and symbol_candidate in expected:
+            return {symbol_candidate: dict(payload)}
+        return {}
+
+    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
+        for item in payload:
+            if not isinstance(item, Mapping):
+                continue
+            symbol_candidate = _normalize_quote_symbol(
+                item.get("code") or item.get("symbol") or item.get("market_code")
+            )
+            if symbol_candidate and symbol_candidate in expected:
+                normalized[symbol_candidate] = dict(item)
+    return normalized
+
+
+async def _fetch_quotes_from_provider(
+    provider: Any,
+    *,
+    symbols: Sequence[str],
+    timeout_seconds: float,
+) -> tuple[dict[str, dict[str, Any]], dict[str, Any] | None]:
+    if provider is None:
+        return {}, {"code": "DATA_SOURCE_UNAVAILABLE", "message": "provider unavailable"}
+    normalized_symbols = [_normalize_quote_symbol(symbol) for symbol in symbols]
+    normalized_symbols = [item for item in normalized_symbols if item]
+    if not normalized_symbols:
+        return {}, {"code": "BOARD_COMPONENT_EMPTY", "message": "board has no component symbols"}
+
+    quote_fetcher = getattr(provider, "get_realtime_quote", None)
+    quotes_fetcher = getattr(provider, "get_realtime_quotes", None)
+    last_error: Exception | None = None
+
+    async def _try_invoke(invoke: Callable[[], Any]) -> dict[str, dict[str, Any]]:
+        raw_payload = await asyncio.wait_for(_await_if_needed(invoke()), timeout=timeout_seconds)
+        return _extract_quote_payload_map(raw_payload, symbols=normalized_symbols)
+
+    if callable(quote_fetcher):
+        for invoke in (
+            lambda: quote_fetcher(symbols=normalized_symbols),
+            lambda: quote_fetcher(normalized_symbols),
+        ):
+            try:
+                quote_map = await _try_invoke(invoke)
+                if quote_map:
+                    return quote_map, None
+            except TypeError:
+                continue
+            except asyncio.TimeoutError:
+                return {}, {
+                    "code": "UPSTREAM_TIMEOUT",
+                    "message": "quote request timeout",
+                    "timeout_seconds": timeout_seconds,
+                }
+            except Exception as exc:  # pragma: no cover - defensive logging
+                last_error = exc
+
+    if callable(quotes_fetcher):
+        try:
+            quote_map = await _try_invoke(lambda: quotes_fetcher(normalized_symbols))
+            if quote_map:
+                return quote_map, None
+        except asyncio.TimeoutError:
+            return {}, {
+                "code": "UPSTREAM_TIMEOUT",
+                "message": "quotes request timeout",
+                "timeout_seconds": timeout_seconds,
+            }
+        except Exception as exc:  # pragma: no cover - defensive logging
+            last_error = exc
+
+    if last_error is not None:
+        return {}, {"code": "UPSTREAM_FAILED", "message": str(last_error)}
+    return {}, {"code": "DATA_SOURCE_EMPTY", "message": "quotes empty"}
+
+
+def _quote_change_pct(payload: Mapping[str, Any]) -> float | None:
+    return _safe_percentage(
+        payload.get("change_pct") or payload.get("change_percent") or payload.get("pct_chg")
+    )
+
+
+def _quote_latest_time(payload: Mapping[str, Any]) -> str | None:
+    for field in ("trade_time", "time", "ts"):
+        value = payload.get(field)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
 
 
 def _extract_records(payload: Any) -> list[dict[str, Any]]:
@@ -952,6 +1769,7 @@ async def get_market_strength(
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, pipeline = _ensure_runtime_components(request)
     provider_ready = _is_provider_ready(app_state)
+    market_phase = _resolve_market_phase()
     service = getattr(app_state, "market_data_service")
     stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
 
@@ -970,9 +1788,24 @@ async def get_market_strength(
 
     board_filter = _unique(_parse_csv(boards))
     requested_source = _normalize_source_param(source)
+    strict_source_mode = _strict_source_requested(requested_source)
+    resolved_source = _resolve_data_source_name(app_state)
+    auto_primary_source = _resolve_module_primary_source(
+        settings,
+        "strength",
+        app_state=app_state,
+    )
     fallback_detail: dict[str, Any] | None = None
-    effective_source = requested_source
+    cache_probe_source: str | None = None
+    akshare_guard_detail: dict[str, Any] | None = None
+    source_failures: dict[str, str] = {}
+    effective_source = requested_source or auto_primary_source
     cache_module = _cache_module_name("strength")
+    response_cache_key = "strength:{}:{}:{}".format(
+        ",".join(window_candidates),
+        ",".join(board_filter) if board_filter else "*",
+        f"{limit if limit is not None else 'all'}:{requested_source or 'auto'}",
+    )
 
     async def _fetch(current_source: str | None):
         return await reader.fetch_strength(
@@ -990,46 +1823,261 @@ async def get_market_strength(
         return result
 
     strength_result = await _fetch_with_timing(effective_source)
+    cache_probe_attempted = False
+    if not strength_result.items:
+        _record_source_failure_code(
+            source_failures,
+            source=effective_source or resolved_source,
+            code="DATA_SOURCE_EMPTY" if provider_ready else "DATA_SOURCE_OFFLINE",
+        )
+
+    async def _probe_cached_snapshot(*, preferred_source: str | None) -> bool:
+        nonlocal strength_result
+        nonlocal cache_probe_source
+        nonlocal effective_source
+        nonlocal cache_probe_attempted
+        nonlocal akshare_guard_detail
+        cache_probe_attempted = True
+
+        cache_probe_started_at = perf_counter()
+        try:
+            if strict_source_mode:
+                probe_sources = _unique(
+                    [item for item in (preferred_source, requested_source) if item]
+                )
+            else:
+                preferred_sources = (preferred_source,) if preferred_source else None
+                probe_sources = _candidate_cache_probe_sources(
+                    settings,
+                    "strength",
+                    preferred=preferred_sources,
+                )
+
+            def _on_probe_miss(source_name: str) -> None:
+                _record_source_failure_code(
+                    source_failures,
+                    source=source_name,
+                    code="DATA_SOURCE_EMPTY",
+                )
+
+            def _should_skip_probe(source_name: str) -> dict[str, Any] | None:
+                nonlocal akshare_guard_detail
+                if strict_source_mode or not _is_akshare_source(source_name):
+                    return None
+                guard_state = _akshare_guard_state(settings, source_failures)
+                if bool(guard_state.get("allowed")):
+                    return None
+                blocked_detail = _akshare_guard_block_detail(
+                    source=source_name,
+                    phase=market_phase,
+                    guard_state=guard_state,
+                )
+                akshare_guard_detail = blocked_detail
+                return blocked_detail
+
+            cached_probe = await _probe_strength_cache_from_sources(
+                reader,
+                windows=window_candidates,
+                boards=board_filter or None,
+                limit=limit,
+                module=cache_module,
+                sources=probe_sources,
+                on_miss=_on_probe_miss,
+                should_skip=_should_skip_probe,
+            )
+            if not cached_probe:
+                return False
+            strength_result, cache_probe_source = cached_probe
+            effective_source = cache_probe_source
+            return True
+        finally:
+            stage_timings["cache_ms"] += _elapsed_ms(cache_probe_started_at)
+
+    if not strength_result.items and market_phase in _OFF_HOURS_PHASES:
+        latest_failure_code = "DATA_SOURCE_EMPTY" if provider_ready else "DATA_SOURCE_OFFLINE"
+        cached_payload = _build_recent_cache_fallback_payload(
+            response_cache_key,
+            code=latest_failure_code,
+            message="资金脉冲实时数据不可用，已回退最近缓存",
+            reason=f"strength pre-fallback empty phase={market_phase}",
+            required_source=requested_source if strict_source_mode else None,
+        )
+        if cached_payload:
+            cached_detail = cached_payload.get("detail")
+            merged_detail = dict(cached_detail) if isinstance(cached_detail, dict) else {}
+            merged_detail.setdefault(
+                "latest_failure",
+                {
+                    "code": latest_failure_code,
+                    "phase": market_phase,
+                    "source": effective_source or resolved_source,
+                },
+            )
+            _enrich_live_detail(
+                merged_detail,
+                requested_source=requested_source,
+                effective_source=effective_source,
+                resolved_source=resolved_source,
+            )
+            _attach_failure_diagnostics(
+                merged_detail,
+                app_state=app_state,
+                source_failures=source_failures,
+            )
+            finalized_cached_detail = _finalize_stage_timings(
+                request,
+                route="/api/market/live/strength",
+                request_started_at=request_started_at,
+                stage_timings=stage_timings,
+                detail=merged_detail or None,
+            )
+            if finalized_cached_detail:
+                cached_payload["detail"] = finalized_cached_detail
+            return JSONResponse(cached_payload)
+
+        await _probe_cached_snapshot(preferred_source=effective_source or resolved_source)
 
     if not strength_result.items:
-        if requested_source:
-            fallback_started_at = perf_counter()
-            try:
-                fallback_detail = await asyncio.wait_for(
-                    _ensure_fallback_data(app_state, "strength", requested_source), timeout=10.0
-                )
-                strength_result = await _fetch_with_timing(requested_source)
-                effective_source = requested_source
-            except asyncio.TimeoutError:
-                logger.warning("strength fallback 超时（5秒），返回空结果")
-            finally:
-                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
-        else:
-            auto_source = _auto_fallback_source(
-                settings, "strength", error_code=None if provider_ready else "DATA_SOURCE_OFFLINE"
+        fallback_attempts: list[dict[str, Any]] = []
+        if strict_source_mode:
+            logger.info(
+                "strength strict source mode enabled source={} phase={}，跳过跨源 fallback/probe",
+                requested_source,
+                market_phase,
             )
-            if auto_source:
-                fallback_started_at = perf_counter()
-                try:
-                    fallback_detail = await asyncio.wait_for(
-                        _ensure_fallback_data(app_state, "strength", auto_source), timeout=10.0
+        else:
+            auto_sources = _auto_fallback_sources(
+                settings,
+                "strength",
+                app_state=app_state,
+                phase=market_phase,
+                error_code="DATA_SOURCE_EMPTY" if provider_ready else "DATA_SOURCE_OFFLINE",
+            )
+            if auto_sources:
+                for auto_source in auto_sources:
+                    if not _is_module_fallback_source(settings, "strength", auto_source):
+                        continue
+                    if _is_akshare_source(auto_source):
+                        guard_state = _akshare_guard_state(settings, source_failures)
+                        if not bool(guard_state.get("allowed")):
+                            blocked_detail = _akshare_guard_block_detail(
+                                source=auto_source,
+                                phase=market_phase,
+                                guard_state=guard_state,
+                            )
+                            fallback_attempts.append(blocked_detail)
+                            akshare_guard_detail = blocked_detail
+                            continue
+                    unready_detail = _unready_source_block_detail(
+                        app_state,
+                        source=auto_source,
+                        phase=market_phase,
                     )
-                    strength_result = await _fetch_with_timing(auto_source)
-                    effective_source = auto_source
-                except asyncio.TimeoutError:
-                    logger.warning("strength fallback 超时（5秒），跳过 {} fallback", auto_source)
-                finally:
-                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+                    if unready_detail is not None:
+                        fallback_attempts.append(unready_detail)
+                        _record_source_failure_code(
+                            source_failures,
+                            source=auto_source,
+                            code=_failure_code_from_detail(unready_detail),
+                        )
+                        continue
+                    fallback_started_at = perf_counter()
+                    fallback_timeout_seconds = _resolve_fallback_timeout_seconds(
+                        app_state,
+                        auto_source,
+                        phase=market_phase,
+                    )
+                    attempt_detail: dict[str, Any] | None = None
+                    try:
+                        attempt_detail = await asyncio.wait_for(
+                            _ensure_fallback_data(
+                                app_state,
+                                "strength",
+                                auto_source,
+                                phase=market_phase,
+                            ),
+                            timeout=fallback_timeout_seconds,
+                        )
+                        candidate_result = await _fetch_with_timing(auto_source)
+                        if candidate_result.items:
+                            effective_source = auto_source
+                            strength_result = candidate_result
+                            fallback_detail = attempt_detail
+                            break
+                        attempt_detail = dict(attempt_detail or {})
+                        attempt_detail.setdefault("source", auto_source)
+                        attempt_detail.setdefault("phase", market_phase)
+                        attempt_detail.setdefault("code", "DATA_SOURCE_EMPTY")
+                        attempt_detail["message"] = "fallback completed but returned empty items"
+                    except asyncio.TimeoutError:
+                        attempt_detail = {
+                            "source": auto_source,
+                            "phase": market_phase,
+                            "code": "FALLBACK_TIMEOUT",
+                            "message": "fallback timeout",
+                            "timeout_seconds": fallback_timeout_seconds,
+                        }
+                        logger.warning(
+                            "strength fallback 超时（{}秒），跳过 {} fallback",
+                            round(fallback_timeout_seconds, 1),
+                            auto_source,
+                        )
+                    except HTTPException as exc:
+                        attempt_detail = _fallback_detail_from_http_exception(
+                            source=auto_source,
+                            phase=market_phase,
+                            exc=exc,
+                        )
+                        logger.warning(
+                            "strength fallback 失败 source={} status={} detail={}",
+                            auto_source,
+                            exc.status_code,
+                            exc.detail,
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive logging
+                        attempt_detail = {
+                            "source": auto_source,
+                            "phase": market_phase,
+                            "code": "FALLBACK_EXCEPTION",
+                            "message": str(exc),
+                        }
+                        logger.warning(
+                            "strength fallback 异常 source={} error={}", auto_source, exc
+                        )
+                    finally:
+                        stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+                    if attempt_detail:
+                        fallback_attempts.append(attempt_detail)
+                        _record_source_failure_code(
+                            source_failures,
+                            source=auto_source,
+                            code=_failure_code_from_detail(attempt_detail),
+                        )
+                if fallback_detail is None and fallback_attempts:
+                    fallback_detail = (
+                        {"attempts": fallback_attempts}
+                        if len(fallback_attempts) > 1
+                        else fallback_attempts[0]
+                    )
             elif provider_ready:
                 fallback_started_at = perf_counter()
                 try:
-                    await asyncio.wait_for(refresh_market_data_once(app_state), timeout=10.0)
+                    await asyncio.wait_for(
+                        refresh_market_data_once(app_state),
+                        timeout=_LIVE_REFRESH_TIMEOUT_SECONDS,
+                    )
                     strength_result = await _fetch_with_timing(None)
                     effective_source = None
                 except asyncio.TimeoutError:
-                    logger.warning("strength refresh 超时（5秒），返回空结果")
+                    logger.warning(
+                        "strength refresh 超时（{}秒），返回空结果",
+                        round(_LIVE_REFRESH_TIMEOUT_SECONDS, 1),
+                    )
                 finally:
                     stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+
+    if not strength_result.items and not cache_probe_attempted:
+        await _probe_cached_snapshot(preferred_source=effective_source or resolved_source)
 
     cache_started_at = perf_counter()
     cache_info = {
@@ -1046,11 +2094,12 @@ async def get_market_strength(
         "boards": board_filter or list(getattr(pipeline, "boards", ())),
         "items": strength_result.items,
         "asOf": strength_result.as_of,
-        "stale": strength_result.stale,
+        "stale": strength_result.stale or (not is_trading and bool(strength_result.items)),
         "retrieved_at": _iso_now(),
-        "data_source": effective_source or _resolve_data_source_name(app_state),
+        "data_source": effective_source or resolved_source,
         "mode": "realtime" if is_trading else "summary",
         "is_trading_hours": is_trading,
+        "phase_state": market_phase,
     }
     stage_timings["normalize_ms"] += _elapsed_ms(normalize_started_at)
     if cache_info:
@@ -1058,6 +2107,68 @@ async def get_market_strength(
     detail: dict[str, Any] = {}
     if fallback_detail:
         detail["fallback"] = fallback_detail
+    if cache_probe_source:
+        detail["cache_probe"] = {"source": cache_probe_source}
+    if akshare_guard_detail:
+        detail["akshare_guard"] = akshare_guard_detail
+    _enrich_live_detail(
+        detail,
+        requested_source=requested_source,
+        effective_source=effective_source,
+        resolved_source=resolved_source,
+    )
+    _attach_failure_diagnostics(
+        detail,
+        app_state=app_state,
+        source_failures=source_failures,
+    )
+
+    if strength_result.items:
+        _set_recent_success_payload(response_cache_key, payload)
+    else:
+        payload["stale"] = True
+        payload["items"] = []
+        detail["code"] = "DATA_SOURCE_OFFLINE" if not provider_ready else "DATA_SOURCE_EMPTY"
+        detail["latest_failure"] = {
+            "code": detail["code"],
+            "phase": market_phase,
+            "source": effective_source or resolved_source,
+        }
+
+        cached_payload = _build_recent_cache_fallback_payload(
+            response_cache_key,
+            code=str(detail["code"]),
+            message="资金脉冲实时数据不可用，已回退最近缓存",
+            reason=(f"strength items empty phase={market_phase} provider_ready={provider_ready}"),
+            required_source=requested_source if strict_source_mode else None,
+        )
+        if cached_payload:
+            cached_detail = cached_payload.get("detail")
+            merged_detail = dict(cached_detail) if isinstance(cached_detail, dict) else {}
+            if detail:
+                merged_detail.setdefault("latest_failure", detail.get("latest_failure", detail))
+            _enrich_live_detail(
+                merged_detail,
+                requested_source=requested_source,
+                effective_source=effective_source,
+                resolved_source=resolved_source,
+            )
+            _attach_failure_diagnostics(
+                merged_detail,
+                app_state=app_state,
+                source_failures=source_failures,
+            )
+            finalized_cached_detail = _finalize_stage_timings(
+                request,
+                route="/api/market/live/strength",
+                request_started_at=request_started_at,
+                stage_timings=stage_timings,
+                detail=merged_detail or None,
+            )
+            if finalized_cached_detail:
+                cached_payload["detail"] = finalized_cached_detail
+            return JSONResponse(cached_payload)
+
     finalized_detail = _finalize_stage_timings(
         request,
         route="/api/market/live/strength",
@@ -1067,11 +2178,6 @@ async def get_market_strength(
     )
     if finalized_detail:
         payload["detail"] = finalized_detail
-
-    if not strength_result.items:
-        payload["stale"] = True
-        payload["items"] = []
-        return _offline_response(app_state, payload)
     return JSONResponse(payload)
 
 
@@ -1178,6 +2284,7 @@ async def get_board_overview(
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, pipeline = _ensure_runtime_components(request)
     provider_ready = _is_provider_ready(app_state)
+    market_phase = _resolve_market_phase()
     service = getattr(app_state, "market_data_service")
     stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
 
@@ -1195,8 +2302,21 @@ async def get_board_overview(
     window_name = window_candidates[0]
 
     requested_source = _normalize_source_param(source)
-    response_cache_key = f"board_overview:{type_.lower()}:{window_name}:{limit}"
+    strict_source_mode = _strict_source_requested(requested_source)
+    resolved_source = _resolve_data_source_name(app_state)
+    auto_primary_source = _resolve_module_primary_source(
+        settings,
+        "board_overview",
+        app_state=app_state,
+    )
+    effective_source = requested_source or auto_primary_source
+    response_cache_key = (
+        f"board_overview:{type_.lower()}:{window_name}:{limit}:{requested_source or 'auto'}"
+    )
     fallback_detail: dict[str, Any] | None = None
+    cache_probe_source: str | None = None
+    akshare_guard_detail: dict[str, Any] | None = None
+    source_failures: dict[str, str] = {}
     cache_module = _cache_module_name("board_overview")
 
     async def _fetch(current_source: str | None):
@@ -1210,62 +2330,266 @@ async def get_board_overview(
         stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
         return result
 
-    strength_result = await _fetch_with_timing(requested_source)
+    strength_result = await _fetch_with_timing(effective_source)
+    cache_probe_attempted = False
+    if not strength_result.items:
+        _record_source_failure_code(
+            source_failures,
+            source=effective_source or resolved_source,
+            code="DATA_SOURCE_EMPTY" if provider_ready else "DATA_SOURCE_OFFLINE",
+        )
+
+    async def _probe_cached_overview(*, preferred_source: str | None) -> bool:
+        nonlocal strength_result
+        nonlocal cache_probe_source
+        nonlocal effective_source
+        nonlocal cache_probe_attempted
+        nonlocal akshare_guard_detail
+        cache_probe_attempted = True
+
+        cache_probe_started_at = perf_counter()
+        try:
+            if strict_source_mode:
+                probe_sources = _unique(
+                    [item for item in (preferred_source, requested_source) if item]
+                )
+            else:
+                preferred_sources = (preferred_source,) if preferred_source else None
+                probe_sources = _candidate_cache_probe_sources(
+                    settings,
+                    "board_overview",
+                    preferred=preferred_sources,
+                )
+
+            def _on_probe_miss(source_name: str) -> None:
+                _record_source_failure_code(
+                    source_failures,
+                    source=source_name,
+                    code="DATA_SOURCE_EMPTY",
+                )
+
+            def _should_skip_probe(source_name: str) -> dict[str, Any] | None:
+                nonlocal akshare_guard_detail
+                if strict_source_mode or not _is_akshare_source(source_name):
+                    return None
+                guard_state = _akshare_guard_state(settings, source_failures)
+                if bool(guard_state.get("allowed")):
+                    return None
+                blocked_detail = _akshare_guard_block_detail(
+                    source=source_name,
+                    phase=market_phase,
+                    guard_state=guard_state,
+                )
+                akshare_guard_detail = blocked_detail
+                return blocked_detail
+
+            cached_probe = await _probe_strength_cache_from_sources(
+                reader,
+                windows=[window_name],
+                boards=None,
+                limit=None,
+                module=cache_module,
+                sources=probe_sources,
+                on_miss=_on_probe_miss,
+                should_skip=_should_skip_probe,
+            )
+            if not cached_probe:
+                return False
+            strength_result, cache_probe_source = cached_probe
+            effective_source = cache_probe_source
+            return True
+        finally:
+            stage_timings["cache_ms"] += _elapsed_ms(cache_probe_started_at)
+
+    if not strength_result.items and market_phase in _OFF_HOURS_PHASES:
+        cached_payload = _build_recent_cache_fallback_payload(
+            response_cache_key,
+            code="DATA_SOURCE_EMPTY",
+            message="板块概览实时数据为空，已回退最近缓存",
+            reason=f"board_overview pre-fallback empty phase={market_phase}",
+            required_source=requested_source if strict_source_mode else None,
+        )
+        if cached_payload:
+            cached_detail = cached_payload.get("detail")
+            merged_detail = dict(cached_detail) if isinstance(cached_detail, dict) else {}
+            merged_detail.setdefault(
+                "latest_failure",
+                {
+                    "code": "DATA_SOURCE_EMPTY",
+                    "phase": market_phase,
+                    "source": effective_source or resolved_source,
+                },
+            )
+            _enrich_live_detail(
+                merged_detail,
+                requested_source=requested_source,
+                effective_source=effective_source,
+                resolved_source=resolved_source,
+            )
+            _attach_failure_diagnostics(
+                merged_detail,
+                app_state=app_state,
+                source_failures=source_failures,
+            )
+            finalized_cached_detail = _finalize_stage_timings(
+                request,
+                route="/api/market/live/board-overview",
+                request_started_at=request_started_at,
+                stage_timings=stage_timings,
+                detail=merged_detail or None,
+            )
+            if finalized_cached_detail:
+                cached_payload["detail"] = finalized_cached_detail
+            return JSONResponse(cached_payload)
+
+        await _probe_cached_overview(preferred_source=effective_source or resolved_source)
 
     if not strength_result.items:
-        if requested_source:
-            fallback_started_at = perf_counter()
-            try:
-                fallback_detail = await asyncio.wait_for(
-                    _ensure_fallback_data(app_state, "board_overview", requested_source),
-                    timeout=_LIVE_FALLBACK_TIMEOUT_SECONDS,
-                )
-                strength_result = await _fetch_with_timing(requested_source)
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "board_overview fallback 超时（{}秒），返回空结果",
-                    _LIVE_FALLBACK_TIMEOUT_SECONDS,
-                )
-            finally:
-                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+        fallback_attempts: list[dict[str, Any]] = []
+        if strict_source_mode:
+            logger.info(
+                "board_overview strict source mode enabled source={} phase={}，跳过跨源 fallback/probe",
+                requested_source,
+                market_phase,
+            )
         else:
-            auto_source = _auto_fallback_source(
+            auto_sources = _auto_fallback_sources(
                 settings,
                 "board_overview",
-                error_code=None if provider_ready else "DATA_SOURCE_OFFLINE",
+                app_state=app_state,
+                phase=market_phase,
+                error_code="DATA_SOURCE_EMPTY" if provider_ready else "DATA_SOURCE_OFFLINE",
             )
-            if auto_source:
-                fallback_started_at = perf_counter()
-                try:
-                    fallback_detail = await asyncio.wait_for(
-                        _ensure_fallback_data(app_state, "board_overview", auto_source),
-                        timeout=_LIVE_FALLBACK_TIMEOUT_SECONDS,
-                    )
-                    strength_result = await _fetch_with_timing(auto_source)
-                    requested_source = auto_source
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        "board_overview fallback 超时（{}秒），跳过 {} fallback",
-                        _LIVE_FALLBACK_TIMEOUT_SECONDS,
+            if auto_sources:
+                for auto_source in auto_sources:
+                    if not _is_module_fallback_source(
+                        settings,
+                        "board_overview",
                         auto_source,
+                    ):
+                        continue
+                    if _is_akshare_source(auto_source):
+                        guard_state = _akshare_guard_state(settings, source_failures)
+                        if not bool(guard_state.get("allowed")):
+                            blocked_detail = _akshare_guard_block_detail(
+                                source=auto_source,
+                                phase=market_phase,
+                                guard_state=guard_state,
+                            )
+                            fallback_attempts.append(blocked_detail)
+                            akshare_guard_detail = blocked_detail
+                            continue
+                    unready_detail = _unready_source_block_detail(
+                        app_state,
+                        source=auto_source,
+                        phase=market_phase,
                     )
-                finally:
-                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+                    if unready_detail is not None:
+                        fallback_attempts.append(unready_detail)
+                        _record_source_failure_code(
+                            source_failures,
+                            source=auto_source,
+                            code=_failure_code_from_detail(unready_detail),
+                        )
+                        continue
+                    fallback_started_at = perf_counter()
+                    fallback_timeout_seconds = _resolve_fallback_timeout_seconds(
+                        app_state,
+                        auto_source,
+                        phase=market_phase,
+                    )
+                    attempt_detail: dict[str, Any] | None = None
+                    try:
+                        attempt_detail = await asyncio.wait_for(
+                            _ensure_fallback_data(
+                                app_state,
+                                "board_overview",
+                                auto_source,
+                                phase=market_phase,
+                            ),
+                            timeout=fallback_timeout_seconds,
+                        )
+                        candidate_result = await _fetch_with_timing(auto_source)
+                        if candidate_result.items:
+                            effective_source = auto_source
+                            strength_result = candidate_result
+                            fallback_detail = attempt_detail
+                            break
+                        attempt_detail = dict(attempt_detail or {})
+                        attempt_detail.setdefault("source", auto_source)
+                        attempt_detail.setdefault("phase", market_phase)
+                        attempt_detail.setdefault("code", "DATA_SOURCE_EMPTY")
+                        attempt_detail["message"] = "fallback completed but returned empty items"
+                    except asyncio.TimeoutError:
+                        attempt_detail = {
+                            "source": auto_source,
+                            "phase": market_phase,
+                            "code": "FALLBACK_TIMEOUT",
+                            "message": "fallback timeout",
+                            "timeout_seconds": fallback_timeout_seconds,
+                        }
+                        logger.warning(
+                            "board_overview fallback 超时（{}秒），跳过 {} fallback",
+                            round(fallback_timeout_seconds, 1),
+                            auto_source,
+                        )
+                    except HTTPException as exc:
+                        attempt_detail = _fallback_detail_from_http_exception(
+                            source=auto_source,
+                            phase=market_phase,
+                            exc=exc,
+                        )
+                        logger.warning(
+                            "board_overview fallback 失败 source={} status={} detail={}",
+                            auto_source,
+                            exc.status_code,
+                            exc.detail,
+                        )
+                    except Exception as exc:  # pragma: no cover - defensive logging
+                        attempt_detail = {
+                            "source": auto_source,
+                            "phase": market_phase,
+                            "code": "FALLBACK_EXCEPTION",
+                            "message": str(exc),
+                        }
+                        logger.warning(
+                            "board_overview fallback 异常 source={} error={}",
+                            auto_source,
+                            exc,
+                        )
+                    finally:
+                        stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+                    if attempt_detail:
+                        fallback_attempts.append(attempt_detail)
+                        _record_source_failure_code(
+                            source_failures,
+                            source=auto_source,
+                            code=_failure_code_from_detail(attempt_detail),
+                        )
+                if fallback_detail is None and fallback_attempts:
+                    fallback_detail = (
+                        {"attempts": fallback_attempts}
+                        if len(fallback_attempts) > 1
+                        else fallback_attempts[0]
+                    )
             elif provider_ready:
                 fallback_started_at = perf_counter()
                 try:
                     await asyncio.wait_for(
                         refresh_market_data_once(app_state),
-                        timeout=_LIVE_FALLBACK_TIMEOUT_SECONDS,
+                        timeout=_LIVE_REFRESH_TIMEOUT_SECONDS,
                     )
                     strength_result = await _fetch_with_timing(None)
                 except asyncio.TimeoutError:
                     logger.warning(
                         "board_overview refresh 超时（{}秒），返回空结果",
-                        _LIVE_FALLBACK_TIMEOUT_SECONDS,
+                        round(_LIVE_REFRESH_TIMEOUT_SECONDS, 1),
                     )
                 finally:
                     stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+
+    if not strength_result.items and not cache_probe_attempted:
+        await _probe_cached_overview(preferred_source=effective_source or resolved_source)
 
     cache_started_at = perf_counter()
     board_snapshot, _ = await reader.fetch_board_universe()
@@ -1283,30 +2607,35 @@ async def get_board_overview(
             continue
         seen.add(board_name)
         stock_list = board_snapshot.get(board_name, ())
-        overview_items.append(
-            {
-                "board": board_name,
-                "stock_count": len(stock_list) or None,
-                # 新增字段 - 从 entry 中提取或设置默认值
-                "change_pct": _safe_float(entry.get("change_pct")),
-                "lead_stock": entry.get("lead_stock"),
-                "lead_stock_name": entry.get("lead_stock_name"),
-                "lead_change": _safe_float(entry.get("lead_change")),
-                "limit_up_count": entry.get("limit_up_count"),
-                # 原有字段
-                "probing_count": None,
-                "probing_ratio": None,
-                "inflow_speed": _safe_float(entry.get("speed_per_min")),
-                "inflow_net": _safe_float(entry.get("amount_total")),
-                "inflow_accel": _safe_float(entry.get("accel_per_min2")),
-                "breadth_up_ratio": None,
-                "top1_contrib_pct": None,
-                "top3_contrib_pct": None,
-                "hhi": None,
-                "classification": "unknown",
-                "data_source": entry.get("data_source") or "amazingdata",
-            }
-        )
+        overview_item: dict[str, Any] = {
+            "board": board_name,
+            "stock_count": len(stock_list) or None,
+            "inflow_speed": _safe_float(entry.get("speed_per_min")),
+            "inflow_net": _safe_float(entry.get("amount_total")),
+            "inflow_accel": _safe_float(entry.get("accel_per_min2")),
+            "data_source": entry.get("data_source") or (effective_source or resolved_source),
+        }
+
+        change_pct = _safe_float(entry.get("change_pct"))
+        if change_pct is not None:
+            overview_item["change_pct"] = change_pct
+        lead_stock = entry.get("lead_stock")
+        if lead_stock:
+            overview_item["lead_stock"] = lead_stock
+        lead_stock_name = entry.get("lead_stock_name")
+        if lead_stock_name:
+            overview_item["lead_stock_name"] = lead_stock_name
+        lead_change = _safe_float(entry.get("lead_change"))
+        if lead_change is not None:
+            overview_item["lead_change"] = lead_change
+        limit_up_count = entry.get("limit_up_count")
+        if limit_up_count is not None:
+            overview_item["limit_up_count"] = limit_up_count
+        latest_ts = entry.get("ts")
+        if latest_ts:
+            overview_item["latest_ts"] = latest_ts
+
+        overview_items.append(overview_item)
 
     overview_items.sort(key=lambda item: item.get("inflow_speed") or 0.0, reverse=True)
     if limit and len(overview_items) > limit:
@@ -1329,19 +2658,42 @@ async def get_board_overview(
         "window": window_name,
         "items": overview_items,
         "asOf": strength_result.as_of,
-        "stale": strength_result.stale or not overview_items,
+        "stale": (
+            strength_result.stale or not overview_items or (not is_trading and bool(overview_items))
+        ),
         "retrieved_at": _iso_now(),
-        "data_source": requested_source or _resolve_data_source_name(app_state),
+        "data_source": effective_source or resolved_source,
         "mode": "realtime" if is_trading else "summary",
         "is_trading_hours": is_trading,
+        "phase_state": market_phase,
     }
     if cache_info:
         payload["cache"] = cache_info
     detail: dict[str, Any] = {}
     if fallback_detail:
         detail["fallback"] = fallback_detail
+    if cache_probe_source:
+        detail["cache_probe"] = {"source": cache_probe_source}
+    if akshare_guard_detail:
+        detail["akshare_guard"] = akshare_guard_detail
     if not overview_items:
         detail["code"] = "DATA_SOURCE_EMPTY"
+        detail["latest_failure"] = {
+            "code": "DATA_SOURCE_EMPTY",
+            "phase": market_phase,
+            "source": effective_source or resolved_source,
+        }
+    _enrich_live_detail(
+        detail,
+        requested_source=requested_source,
+        effective_source=effective_source,
+        resolved_source=resolved_source,
+    )
+    _attach_failure_diagnostics(
+        detail,
+        app_state=app_state,
+        source_failures=source_failures,
+    )
     if orchestrator_info:
         route_detail = detail
         active_source = orchestrator_info.get("active")
@@ -1362,12 +2714,24 @@ async def get_board_overview(
             code="DATA_SOURCE_EMPTY",
             message="板块概览实时数据为空，已回退最近缓存",
             reason="overview items empty",
+            required_source=requested_source if strict_source_mode else None,
         )
         if cached_payload:
             cached_detail = cached_payload.get("detail")
             merged_detail = dict(cached_detail) if isinstance(cached_detail, dict) else {}
             if detail:
-                merged_detail.setdefault("latest_failure", detail)
+                merged_detail.setdefault("latest_failure", detail.get("latest_failure", detail))
+            _enrich_live_detail(
+                merged_detail,
+                requested_source=requested_source,
+                effective_source=effective_source,
+                resolved_source=resolved_source,
+            )
+            _attach_failure_diagnostics(
+                merged_detail,
+                app_state=app_state,
+                source_failures=source_failures,
+            )
             finalized_cached_detail = _finalize_stage_timings(
                 request,
                 route="/api/market/live/board-overview",
@@ -1382,6 +2746,310 @@ async def get_board_overview(
     finalized_detail = _finalize_stage_timings(
         request,
         route="/api/market/live/board-overview",
+        request_started_at=request_started_at,
+        stage_timings=stage_timings,
+        detail=detail or None,
+    )
+    if finalized_detail:
+        payload["detail"] = finalized_detail
+    return JSONResponse(payload)
+
+
+@router.get("/board-drivers")
+async def get_board_drivers(
+    request: Request,
+    board: str = Query(..., description="板块名称"),
+    type_: str = Query("concept", alias="type", description="板块类型 concept/industry"),  # type: ignore[call-arg]
+    window: str | None = Query(None, description="指标窗口，如 1m/5m"),
+    limit: int = Query(30, ge=1, le=200, description="返回股票数量"),
+    source: str | None = Query(None, description="指定数据源，auto 表示自动"),
+) -> JSONResponse:
+    """返回板块驱动构成明细（成分股快照 + 覆盖率）。"""
+
+    request_started_at = perf_counter()
+    stage_timings = _new_stage_timings()
+    settings = getattr(request.app.state, "settings", None)
+    await ensure_market_data_runtime(request.app.state.app_state, settings)
+    app_state, reader, pipeline = _ensure_runtime_components(request)
+    service = getattr(app_state, "market_data_service")
+    market_phase = _resolve_market_phase()
+    requested_source = _normalize_source_param(source)
+    strict_source_mode = _strict_source_requested(requested_source)
+    resolved_source = _resolve_data_source_name(app_state)
+    auto_primary_source = _resolve_module_primary_source(
+        settings,
+        "board_overview",
+        app_state=app_state,
+    )
+    effective_source = requested_source or auto_primary_source
+
+    normalized_board = board.strip()
+    if not normalized_board:
+        raise HTTPException(status_code=400, detail="board 参数不能为空")
+
+    if window:
+        window_name = _unique([window])[0]
+    else:
+        specs = getattr(service, "default_capital_windows", ()) or ()
+        default_windows = tuple(spec.name for spec in specs) or ()
+        if not default_windows and pipeline is not None:
+            default_windows = tuple(
+                getattr(spec, "name", "") for spec in getattr(pipeline, "capital_windows", ())
+            )
+        if not default_windows:
+            raise HTTPException(status_code=400, detail="缺少有效的窗口参数")
+        window_name = default_windows[0]
+
+    response_cache_key = (
+        f"board_drivers:{type_.lower()}:{normalized_board}:{window_name}:"
+        f"{limit}:{requested_source or 'auto'}"
+    )
+
+    source_candidates: list[str]
+    if strict_source_mode:
+        source_candidates = [requested_source] if requested_source else [resolved_source]
+    else:
+        source_candidates = _candidate_cache_probe_sources(
+            settings,
+            "board_overview",
+            preferred=(resolved_source,),
+        )
+        if not source_candidates:
+            source_candidates = [resolved_source]
+
+    source_attempts: list[dict[str, Any]] = []
+    source_failures: dict[str, str] = {}
+    akshare_guard_detail: dict[str, Any] | None = None
+    board_codes: list[str] = []
+    total_components = 0
+    quote_map: dict[str, dict[str, Any]] = {}
+    latest_failure: dict[str, Any] | None = None
+
+    from apps.api.api.provider_deps import resolve_provider
+
+    for candidate_source in _unique(source_candidates):
+        source_label = candidate_source or resolved_source
+        attempt_detail: dict[str, Any] = {"source": source_label}
+        if not strict_source_mode and _is_akshare_source(source_label):
+            guard_state = _akshare_guard_state(settings, source_failures)
+            if not bool(guard_state.get("allowed")):
+                blocked_detail = _akshare_guard_block_detail(
+                    source=source_label,
+                    phase=market_phase,
+                    guard_state=guard_state,
+                )
+                source_attempts.append(blocked_detail)
+                latest_failure = blocked_detail
+                akshare_guard_detail = blocked_detail
+                continue
+
+        cache_started_at = perf_counter()
+        board_snapshot, _ = await reader.fetch_board_universe(source=source_label)
+        stage_timings["cache_ms"] += _elapsed_ms(cache_started_at)
+        candidate_codes = list(board_snapshot.get(normalized_board, ()))
+        if not candidate_codes:
+            attempt_detail["code"] = "BOARD_UNIVERSE_EMPTY"
+            attempt_detail["message"] = f"板块 {normalized_board} 无可用成分股"
+            source_attempts.append(attempt_detail)
+            latest_failure = attempt_detail
+            _record_source_failure_code(
+                source_failures,
+                source=source_label,
+                code=_failure_code_from_detail(attempt_detail),
+            )
+            if strict_source_mode:
+                break
+            continue
+
+        total_components = len(candidate_codes)
+        max_query_size = min(max(limit * 8, 80), 400)
+        board_codes = candidate_codes[:max_query_size]
+
+        provider = None
+        provider_started_at = perf_counter()
+        if (
+            source_label == resolved_source
+            and getattr(app_state, "market_data_provider", None) is not None
+        ):
+            provider = getattr(app_state, "market_data_provider")
+        else:
+            try:
+                provider = await resolve_provider(
+                    source_label,
+                    request=request,
+                    strict=strict_source_mode,
+                )
+            except HTTPException as exc:
+                attempt_detail["code"] = "DATA_SOURCE_UNAVAILABLE"
+                attempt_detail["message"] = str(exc.detail)
+                source_attempts.append(attempt_detail)
+                latest_failure = attempt_detail
+                _record_source_failure_code(
+                    source_failures,
+                    source=source_label,
+                    code=_failure_code_from_detail(attempt_detail),
+                )
+                stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
+                if strict_source_mode:
+                    break
+                continue
+        stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
+
+        upstream_started_at = perf_counter()
+        fetched_quotes, quote_failure = await _fetch_quotes_from_provider(
+            provider,
+            symbols=board_codes,
+            timeout_seconds=8.0 if strict_source_mode else 6.0,
+        )
+        stage_timings["upstream_ms"] += _elapsed_ms(upstream_started_at)
+        if fetched_quotes:
+            quote_map = fetched_quotes
+            effective_source = source_label
+            latest_failure = None
+            break
+
+        attempt_detail.update(quote_failure or {"code": "DATA_SOURCE_EMPTY"})
+        source_attempts.append(attempt_detail)
+        latest_failure = attempt_detail
+        _record_source_failure_code(
+            source_failures,
+            source=source_label,
+            code=_failure_code_from_detail(attempt_detail),
+        )
+        if strict_source_mode:
+            break
+
+    normalize_started_at = perf_counter()
+    items: list[dict[str, Any]] = []
+    for code in board_codes:
+        quote_payload = quote_map.get(_normalize_quote_symbol(code))
+        if not quote_payload:
+            continue
+        amount = _safe_float(
+            quote_payload.get("amount")
+            or quote_payload.get("turnover")
+            or quote_payload.get("trade_amount")
+        )
+        item: dict[str, Any] = {
+            "code": code,
+            "name": str(quote_payload.get("name") or quote_payload.get("security_name") or code),
+        }
+        latest_ts = _quote_latest_time(quote_payload)
+        if latest_ts:
+            item["latest_time"] = latest_ts
+        change_pct = _quote_change_pct(quote_payload)
+        if change_pct is not None:
+            item["change_pct"] = change_pct
+        last_price = _safe_float(
+            quote_payload.get("last") or quote_payload.get("close") or quote_payload.get("price")
+        )
+        if last_price is not None:
+            item["last_price"] = last_price
+        if amount is not None:
+            item["amount"] = amount
+        items.append(item)
+
+    items.sort(
+        key=lambda item: abs(_safe_float(item.get("amount")) or 0.0),
+        reverse=True,
+    )
+    if limit and len(items) > limit:
+        items = items[:limit]
+
+    available_snapshots = len(items)
+    queried_components = len(board_codes)
+    coverage = {
+        "total_components": total_components,
+        "queried_components": queried_components,
+        "available_snapshots": available_snapshots,
+        "coverage_ratio": round(
+            (available_snapshots / total_components) if total_components else 0.0, 4
+        ),
+        "query_coverage_ratio": round(
+            (available_snapshots / queried_components) if queried_components else 0.0,
+            4,
+        ),
+    }
+    stage_timings["normalize_ms"] += _elapsed_ms(normalize_started_at)
+
+    as_of_candidates = [
+        str(item.get("latest_time"))
+        for item in items
+        if isinstance(item.get("latest_time"), str) and str(item.get("latest_time")).strip()
+    ]
+    as_of_value = max(as_of_candidates) if as_of_candidates else None
+    is_trading = _is_trading_hours()
+    payload: dict[str, Any] = {
+        "type": type_,
+        "board": normalized_board,
+        "window": window_name,
+        "items": items,
+        "coverage": coverage,
+        "asOf": as_of_value,
+        "stale": (not items) or (not is_trading and bool(items)),
+        "retrieved_at": _iso_now(),
+        "data_source": effective_source or resolved_source,
+        "phase_state": market_phase,
+        "mode": "realtime" if is_trading else "summary",
+        "is_trading_hours": is_trading,
+    }
+
+    detail: dict[str, Any] = {}
+    if source_attempts and not items:
+        detail["attempts"] = source_attempts
+    if latest_failure:
+        detail["code"] = latest_failure.get("code", "DATA_SOURCE_EMPTY")
+        detail["latest_failure"] = latest_failure
+    elif not items:
+        detail["code"] = "DATA_SOURCE_EMPTY"
+        detail["latest_failure"] = {
+            "code": "DATA_SOURCE_EMPTY",
+            "phase": market_phase,
+            "source": effective_source or resolved_source,
+        }
+    _enrich_live_detail(
+        detail,
+        requested_source=requested_source,
+        effective_source=effective_source,
+        resolved_source=resolved_source,
+    )
+    if akshare_guard_detail:
+        detail["akshare_guard"] = akshare_guard_detail
+
+    if items:
+        _set_recent_success_payload(response_cache_key, payload)
+    else:
+        cached_payload = _build_recent_cache_fallback_payload(
+            response_cache_key,
+            code=str(detail.get("code") or "DATA_SOURCE_EMPTY"),
+            message="板块驱动明细暂无实时快照，已回退最近缓存",
+            reason=f"board_drivers empty board={normalized_board}",
+            required_source=requested_source if strict_source_mode else None,
+        )
+        if cached_payload:
+            cached_detail = cached_payload.get("detail")
+            merged_detail = dict(cached_detail) if isinstance(cached_detail, dict) else {}
+            merged_detail.setdefault("latest_failure", detail.get("latest_failure", detail))
+            _enrich_live_detail(
+                merged_detail,
+                requested_source=requested_source,
+                effective_source=effective_source,
+                resolved_source=resolved_source,
+            )
+            finalized_cached_detail = _finalize_stage_timings(
+                request,
+                route="/api/market/live/board-drivers",
+                request_started_at=request_started_at,
+                stage_timings=stage_timings,
+                detail=merged_detail or None,
+            )
+            if finalized_cached_detail:
+                cached_payload["detail"] = finalized_cached_detail
+            return JSONResponse(cached_payload)
+
+    finalized_detail = _finalize_stage_timings(
+        request,
+        route="/api/market/live/board-drivers",
         request_started_at=request_started_at,
         stage_timings=stage_timings,
         detail=detail or None,
@@ -1511,6 +3179,7 @@ async def get_order_imbalance(
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, _ = _ensure_runtime_components(request)
     provider_ready = _is_provider_ready(app_state)
+    market_phase = _resolve_market_phase()
     service = getattr(app_state, "market_data_service")
     stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
 
@@ -1538,33 +3207,60 @@ async def get_order_imbalance(
 
     if not imbalance_result.items:
         if requested_source:
-            fallback_started_at = perf_counter()
-            try:
-                fallback_detail = await asyncio.wait_for(
-                    _ensure_fallback_data(app_state, "order_imbalance", requested_source),
-                    timeout=10.0,
+            if _is_module_fallback_source(settings, "order_imbalance", requested_source):
+                fallback_started_at = perf_counter()
+                try:
+                    fallback_detail = await asyncio.wait_for(
+                        _ensure_fallback_data(
+                            app_state,
+                            "order_imbalance",
+                            requested_source,
+                            phase=market_phase,
+                        ),
+                        timeout=10.0,
+                    )
+                    imbalance_result = await _fetch_with_timing(requested_source)
+                except asyncio.TimeoutError:
+                    fallback_detail = {
+                        "source": requested_source,
+                        "phase": market_phase,
+                        "message": "fallback timeout",
+                    }
+                    logger.warning("order_imbalance fallback 超时（5秒），返回空结果")
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+            else:
+                logger.debug(
+                    "order_imbalance 忽略 fallback fetch: source={} 未配置为 fallback",
+                    requested_source,
                 )
-                imbalance_result = await _fetch_with_timing(requested_source)
-            except asyncio.TimeoutError:
-                logger.warning("order_imbalance fallback 超时（5秒），返回空结果")
-            finally:
-                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
         else:
             auto_source = _auto_fallback_source(
                 settings,
                 "order_imbalance",
+                phase=market_phase,
                 error_code=None if provider_ready else "DATA_SOURCE_OFFLINE",
             )
             if auto_source:
                 fallback_started_at = perf_counter()
                 try:
                     fallback_detail = await asyncio.wait_for(
-                        _ensure_fallback_data(app_state, "order_imbalance", auto_source),
+                        _ensure_fallback_data(
+                            app_state,
+                            "order_imbalance",
+                            auto_source,
+                            phase=market_phase,
+                        ),
                         timeout=10.0,
                     )
                     imbalance_result = await _fetch_with_timing(auto_source)
                     requested_source = auto_source
                 except asyncio.TimeoutError:
+                    fallback_detail = {
+                        "source": auto_source,
+                        "phase": market_phase,
+                        "message": "fallback timeout",
+                    }
                     logger.warning(
                         "order_imbalance fallback 超时（5秒），跳过 {} fallback", auto_source
                     )
@@ -1636,6 +3332,7 @@ async def get_auction_quality(
     await ensure_market_data_runtime(request.app.state.app_state, settings)
     app_state, reader, pipeline = _ensure_runtime_components(request)
     provider_ready = _is_provider_ready(app_state)
+    market_phase = _resolve_market_phase()
     service = getattr(app_state, "market_data_service")
     stage_timings["provider_ms"] += _elapsed_ms(provider_started_at)
 
@@ -1672,25 +3369,38 @@ async def get_auction_quality(
 
     if not auction_result.items:
         if requested_source:
-            fallback_started_at = perf_counter()
-            try:
-                fallback_detail = await _ensure_fallback_data(
-                    app_state, "auction_quality", requested_source
+            if _is_module_fallback_source(settings, "auction_quality", requested_source):
+                fallback_started_at = perf_counter()
+                try:
+                    fallback_detail = await _ensure_fallback_data(
+                        app_state,
+                        "auction_quality",
+                        requested_source,
+                        phase=market_phase,
+                    )
+                    auction_result = await _fetch_with_timing(requested_source)
+                finally:
+                    stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
+            else:
+                logger.debug(
+                    "auction_quality 忽略 fallback fetch: source={} 未配置为 fallback",
+                    requested_source,
                 )
-                auction_result = await _fetch_with_timing(requested_source)
-            finally:
-                stage_timings["fallback_ms"] += _elapsed_ms(fallback_started_at)
         else:
             auto_source = _auto_fallback_source(
                 settings,
                 "auction_quality",
+                phase=market_phase,
                 error_code=None if provider_ready else "DATA_SOURCE_OFFLINE",
             )
             if auto_source:
                 fallback_started_at = perf_counter()
                 try:
                     fallback_detail = await _ensure_fallback_data(
-                        app_state, "auction_quality", auto_source
+                        app_state,
+                        "auction_quality",
+                        auto_source,
+                        phase=market_phase,
                     )
                     auction_result = await _fetch_with_timing(auto_source)
                     requested_source = auto_source

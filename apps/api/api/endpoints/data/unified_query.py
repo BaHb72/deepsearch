@@ -365,14 +365,14 @@ def _coerce_rows(payload: Any) -> list[dict[str, Any]]:
             or hasattr(value, "records")
             for value in payload.values()
         ):
-            mapped_rows: list[dict[str, Any]] = []
+            expanded_rows: list[dict[str, Any]] = []
             for symbol, value in payload.items():
                 rows = _coerce_rows(value)
                 for row in rows:
                     row.setdefault("symbol", str(symbol))
-                    mapped_rows.append(row)
-            if mapped_rows:
-                return mapped_rows
+                    expanded_rows.append(row)
+            if expanded_rows:
+                return expanded_rows
         return [dict(payload)]
     return []
 
@@ -409,6 +409,13 @@ def _normalize_realtime_rows(
         "change_pct",
     )
 
+    def _has_meaningful_value(value: Any) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return bool(value.strip())
+        return True
+
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -433,11 +440,7 @@ def _normalize_realtime_rows(
         if not non_empty_keys:
             continue
 
-        has_quote_value = any(
-            item.get(key) is not None
-            and not (isinstance(item.get(key), str) and not item.get(key).strip())
-            for key in quote_keys
-        )
+        has_quote_value = any(_has_meaningful_value(item.get(key)) for key in quote_keys)
         error_value = item.get("error") or item.get("errmsg") or item.get("message")
         if error_value and not has_quote_value:
             continue

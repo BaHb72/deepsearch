@@ -64,12 +64,16 @@ class _AmazingDataKlineProvider:
 
 @pytest.mark.asyncio
 async def test_xtdata_quote_fallback_to_amazingdata(monkeypatch: pytest.MonkeyPatch):
+    async def _raise_bridge_unavailable(*_args, **_kwargs):
+        raise HTTPException(status_code=503, detail="bridge unavailable")
+
     async def _raise_miniqmt_unavailable():
         raise HTTPException(status_code=503, detail="MiniQMT down")
 
     async def _get_amazingdata_provider():
         return _AmazingDataQuoteProvider()
 
+    monkeypatch.setattr(miniqmt, "query_capability_bridge", _raise_bridge_unavailable)
     monkeypatch.setattr(miniqmt, "get_miniqmt_provider", _raise_miniqmt_unavailable)
     monkeypatch.setattr(miniqmt, "_get_amazingdata_provider_optional", _get_amazingdata_provider)
 
@@ -85,12 +89,16 @@ async def test_xtdata_quote_fallback_to_amazingdata(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 async def test_xtdata_kline_fallback_to_amazingdata(monkeypatch: pytest.MonkeyPatch):
+    async def _raise_bridge_unavailable(*_args, **_kwargs):
+        raise HTTPException(status_code=503, detail="bridge unavailable")
+
     async def _raise_miniqmt_unavailable():
         raise HTTPException(status_code=503, detail="MiniQMT down")
 
     async def _get_amazingdata_provider():
         return _AmazingDataKlineProvider()
 
+    monkeypatch.setattr(miniqmt, "query_capability_bridge", _raise_bridge_unavailable)
     monkeypatch.setattr(miniqmt, "get_miniqmt_provider", _raise_miniqmt_unavailable)
     monkeypatch.setattr(miniqmt, "_get_amazingdata_provider_optional", _get_amazingdata_provider)
 
@@ -107,12 +115,16 @@ async def test_xtdata_kline_fallback_to_amazingdata(monkeypatch: pytest.MonkeyPa
 async def test_xtdata_quote_returns_error_when_all_sources_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ):
+    async def _raise_bridge_unavailable(*_args, **_kwargs):
+        raise HTTPException(status_code=503, detail="bridge unavailable")
+
     async def _raise_miniqmt_unavailable():
         raise HTTPException(status_code=503, detail="MiniQMT down")
 
     async def _get_amazingdata_provider():
         return None
 
+    monkeypatch.setattr(miniqmt, "query_capability_bridge", _raise_bridge_unavailable)
     monkeypatch.setattr(miniqmt, "get_miniqmt_provider", _raise_miniqmt_unavailable)
     monkeypatch.setattr(miniqmt, "_get_amazingdata_provider_optional", _get_amazingdata_provider)
 
@@ -123,3 +135,35 @@ async def test_xtdata_quote_returns_error_when_all_sources_unavailable(
     assert response["fallback"] is False
     assert response["count"] == 0
     assert response["reason"]["amazingdata"] == "amazingdata_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_xtdata_kline_bridge_success_keeps_bridge_source(monkeypatch: pytest.MonkeyPatch):
+    async def _bridge_success(*_args, **_kwargs):
+        return {
+            "capability": "stock_kline",
+            "data": [
+                {
+                    "symbol": "000001.SZ",
+                    "date": "2026-02-17",
+                    "open": 12.22,
+                    "high": 12.40,
+                    "low": 12.10,
+                    "close": 12.35,
+                    "volume": 110000,
+                    "amount": 1350000,
+                }
+            ],
+            "count": 1,
+            "source": "akshare_direct",
+            "fallback_reason": "provider_unavailable",
+        }
+
+    monkeypatch.setattr(miniqmt, "query_capability_bridge", _bridge_success)
+
+    response = await miniqmt.get_xtdata_kline(symbol="000001.SZ", period="1d", count=10)
+
+    assert response["success"] is True
+    assert response["source"] == "akshare_direct"
+    assert response["fallback"] is True
+    assert response["count"] == 1

@@ -3,6 +3,7 @@ Backtest API
 回测相关的API端点
 """
 
+import inspect
 import logging
 import time
 import uuid
@@ -17,6 +18,7 @@ from core.strategies.implementations.momentum import MomentumStrategy
 from core.strategies.implementations.moving_average import MovingAverageStrategy
 from core.strategies.implementations.turtle_trading import TurtleTradingStrategy
 from core.strategies.interfaces.models import TradingCostConfig
+from core.strategies.interfaces.protocols import BacktestStrategy
 from core.strategies.services.backtest_service import get_backtest_service
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from loguru import logger
@@ -42,6 +44,16 @@ STRATEGY_MAP = {
     "momentum": MomentumStrategy,
     "turtle": TurtleTradingStrategy,
 }
+
+
+def _ensure_concrete_backtest_strategy_class(
+    strategy_class: type[Any], *, strategy_name: str
+) -> type[BacktestStrategy]:
+    if not inspect.isclass(strategy_class):
+        raise TypeError(f"策略类型非法: {strategy_name}")
+    if inspect.isabstract(strategy_class):
+        raise TypeError(f"策略类型为抽象类，无法回测: {strategy_name}")
+    return cast(type[BacktestStrategy], strategy_class)
 
 
 class TTLCache:
@@ -318,7 +330,9 @@ async def execute_backtest(backtest_id: str, config: BacktestConfig):
     try:
         logger.info(f"开始执行回测 {backtest_id}")
         service = get_backtest_service()
-        strategy_class = STRATEGY_MAP[config.strategy]
+        strategy_class = _ensure_concrete_backtest_strategy_class(
+            STRATEGY_MAP[config.strategy], strategy_name=config.strategy
+        )
 
         cost_config = TradingCostConfig(
             commission_rate=config.commission,
@@ -452,7 +466,9 @@ async def execute_optimization(task_id: str, config: OptimizationConfig):
     try:
         logger.info(f"开始执行参数优化 {task_id}")
         service = get_backtest_service()
-        strategy_class = STRATEGY_MAP[config.strategy]
+        strategy_class = _ensure_concrete_backtest_strategy_class(
+            STRATEGY_MAP[config.strategy], strategy_name=config.strategy
+        )
 
         cost_config = TradingCostConfig(
             commission_rate=config.commission,

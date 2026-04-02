@@ -264,8 +264,8 @@ class DeduplicationMiddleware(BaseHTTPMiddleware):
         should_dedupe = any(path.startswith(p) for p in self.include_paths)
 
         if not should_dedupe:
-            passthrough_response: Response = await call_next(request)
-            return passthrough_response
+            passthrough_no_dedupe_response: Response = await call_next(request)
+            return passthrough_no_dedupe_response
 
         # 提取请求参数
         params = dict(request.query_params)

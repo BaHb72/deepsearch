@@ -6,7 +6,7 @@ import asyncio
 import contextlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Awaitable, Callable, Dict, Iterable, Sequence, Tuple, cast
 
 from core.adapters.market_data.akshare_polling_adapter import AkSharePollingAdapter
 from core.config.models.data_sources import RealtimeAdapterSpec
@@ -104,6 +104,312 @@ class RealtimeDataOrchestrator:
         self._adapter_specs: Dict[str, RealtimeAdapterSpec]
         self._configured_order: Tuple[str, ...]
         self._adapter_specs, self._configured_order = self._load_realtime_specs()
+
+    @staticmethod
+    def _normalize_calendar_market_code(raw: str) -> str:
+        if not raw:
+            return "SH"
+        normalized = raw.strip().upper()
+        mapping = {
+            "SH_MAIN": "SH",
+            "SZ_MAIN": "SZ",
+            "STAR": "SH",
+            "SZ_GEM": "SZ",
+            "GEM": "SZ",
+            "BSE": "SH",
+            "BJ": "SH",
+            "INDEX": "SH",
+            "ETF": "SH",
+        }
+        if normalized in mapping:
+            return mapping[normalized]
+        if "_" in normalized:
+            prefix = normalized.split("_", 1)[0]
+            if prefix in mapping:
+                return mapping[prefix]
+            if prefix in {"SH", "SZ", "BJ"}:
+                return prefix
+        if normalized in {"SH", "SZ", "BJ"}:
+            return normalized
+        return normalized
+
+    @staticmethod
+    def _allow_amazingdata_calendar_fallback(adapter_name: str) -> bool:
+        normalized = (adapter_name or "").strip().lower()
+        if not normalized:
+            return False
+        return normalized.startswith("miniqmt") or normalized in {
+            "qmt",
+            "xtquant",
+            "mini-qmt",
+        }
+
+    @staticmethod
+    def _resolve_dask_amazingdata_adapter() -> Any | None:
+        try:
+            from core.compute.dask_init_state import get_dask_init_manager_sync
+
+            manager = get_dask_init_manager_sync()
+        except Exception as exc:
+            logger.debug("读取 Dask 初始化状态失败，无法获取 amazingdata adapter: {}", exc)
+            return None
+
+        if manager is None:
+            return None
+        adapter = getattr(manager, "amazingdata_adapter", None)
+        if adapter is not None:
+            return adapter
+        if not bool(getattr(manager, "amazingdata_ready", False)):
+            return None
+        return None
+
+    @staticmethod
+    def _normalize_calendar_result(result: Sequence[int] | Sequence[str] | None) -> tuple[int, ...]:
+        normalized: list[int] = []
+        seen: set[int] = set()
+        for value in result or ():
+            text = str(value).strip()
+            if not text:
+                continue
+            digits = "".join(ch for ch in text if ch.isdigit())
+            if len(digits) != 8:
+                continue
+            try:
+                parsed = int(digits)
+            except ValueError:
+                continue
+            if parsed in seen:
+                continue
+            seen.add(parsed)
+            normalized.append(parsed)
+        return tuple(normalized)
+
+    async def _call_calendar_provider(
+        self,
+        *,
+        provider: Any,
+        provider_name: str,
+        market: str,
+        adapter_name: str,
+    ) -> tuple[int, ...]:
+        calendar_getter = getattr(provider, "get_calendar", None)
+        if not callable(calendar_getter):
+            logger.warning(
+                "交易日历 fallback 失败：{} provider 缺少 get_calendar 接口 adapter={}",
+                provider_name,
+                adapter_name,
+            )
+            return ()
+
+        normalized_market = self._normalize_calendar_market_code(market)
+        getter = cast(
+            Callable[..., Awaitable[Sequence[int] | Sequence[str] | None]],
+            calendar_getter,
+        )
+        call_specs: tuple[dict[str, str], ...] = (
+            {"data_type": "int", "market": normalized_market},
+            {"market": normalized_market},
+            {},
+        )
+        signature_errors: list[str] = []
+        for kwargs in call_specs:
+            try:
+                result = await getter(**kwargs)
+                normalized_result = self._normalize_calendar_result(result)
+                if normalized_result:
+                    logger.info(
+                        "交易日历 fallback 命中 {} adapter={} market={} normalized={} count={}",
+                        provider_name,
+                        adapter_name,
+                        market,
+                        normalized_market,
+                        len(normalized_result),
+                    )
+                    return normalized_result
+
+                logger.warning(
+                    "交易日历 fallback 返回空结果 source={} adapter={} market={} normalized={}",
+                    provider_name,
+                    adapter_name,
+                    market,
+                    normalized_market,
+                )
+                return ()
+            except TypeError as exc:
+                signature_errors.append(str(exc))
+                continue
+            except Exception as exc:
+                logger.warning(
+                    "交易日历 fallback 调用 {} 失败 adapter={} market={} normalized={} error={}",
+                    provider_name,
+                    adapter_name,
+                    market,
+                    normalized_market,
+                    exc,
+                )
+                return ()
+
+        logger.warning(
+            "交易日历 fallback 调用 {} 失败：get_calendar 参数签名不兼容 adapter={} errors={}",
+            provider_name,
+            adapter_name,
+            " | ".join(signature_errors) if signature_errors else "unknown",
+        )
+        return ()
+
+    async def _load_akshare_calendar(
+        self,
+        *,
+        market: str,
+        adapter_name: str,
+    ) -> tuple[int, ...]:
+        container = self._provider_container
+        provider: Any | None = None
+        can_use_container = container is not None
+
+        if can_use_container:
+            has_method = getattr(container, "has", None)
+            if callable(has_method):
+                try:
+                    can_use_container = bool(has_method("akshare"))
+                except Exception as exc:
+                    can_use_container = False
+                    logger.debug("检查 provider_container.has(akshare) 失败: {}", exc)
+
+        if can_use_container:
+            get_method = getattr(container, "get", None)
+            if callable(get_method):
+                try:
+                    provider = await cast(Callable[[str], Awaitable[Any]], get_method)("akshare")
+                except Exception as exc:
+                    logger.warning(
+                        "交易日历 fallback 获取 akshare provider 失败 adapter={} error={}",
+                        adapter_name,
+                        exc,
+                    )
+
+        if provider is None:
+            logger.warning(
+                "交易日历 secondary fallback 未命中 akshare provider adapter={} (container_registered={})",
+                adapter_name,
+                can_use_container,
+            )
+            return ()
+
+        return await self._call_calendar_provider(
+            provider=provider,
+            provider_name="akshare",
+            market=market,
+            adapter_name=adapter_name,
+        )
+
+    async def _load_amazingdata_calendar(
+        self,
+        *,
+        market: str,
+        adapter_name: str,
+    ) -> tuple[int, ...]:
+        container = self._provider_container
+        provider: Any | None = None
+        can_use_container = container is not None
+
+        if can_use_container:
+            has_method = getattr(container, "has", None)
+            if callable(has_method):
+                try:
+                    can_use_container = bool(has_method("amazingdata"))
+                except Exception as exc:
+                    can_use_container = False
+                    logger.debug("检查 provider_container.has(amazingdata) 失败: {}", exc)
+
+        if can_use_container:
+            get_method = getattr(container, "get", None)
+            if callable(get_method):
+                try:
+                    provider = await cast(Callable[[str], Awaitable[Any]], get_method)(
+                        "amazingdata"
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "交易日历 fallback 获取 amazingdata provider 失败 adapter={} error={}",
+                        adapter_name,
+                        exc,
+                    )
+                    provider = None
+            else:
+                logger.warning(
+                    "交易日历 fallback 无法读取 provider_container.get adapter={}",
+                    adapter_name,
+                )
+
+        if provider is None:
+            provider = self._resolve_dask_amazingdata_adapter()
+            if provider is not None:
+                logger.info(
+                    "交易日历 fallback 使用 Dask 初始化管理器中的 amazingdata adapter adapter={}",
+                    adapter_name,
+                )
+
+        if provider is None:
+            logger.warning(
+                "交易日历 fallback 未命中 amazingdata provider adapter={} (container_registered={})",
+                adapter_name,
+                can_use_container,
+            )
+            return await self._load_akshare_calendar(market=market, adapter_name=adapter_name)
+
+        amazingdata_calendar = await self._call_calendar_provider(
+            provider=provider,
+            provider_name="amazingdata",
+            market=market,
+            adapter_name=adapter_name,
+        )
+        if amazingdata_calendar:
+            return amazingdata_calendar
+        return await self._load_akshare_calendar(market=market, adapter_name=adapter_name)
+
+    def _build_adapter_calendar_loader(
+        self,
+        adapter: RealtimeAdapter,
+    ) -> Callable[[str], Awaitable[Sequence[int]]]:
+        adapter_name = adapter.name
+        enable_amazingdata_fallback = self._allow_amazingdata_calendar_fallback(adapter_name)
+
+        async def _adapter_calendar_loader(market: str) -> Sequence[int]:
+            has_cal = hasattr(adapter, "get_calendar")
+            logger.debug(
+                "日历加载器: adapter={} hasattr(get_calendar)={} market={}",
+                adapter_name,
+                has_cal,
+                market,
+            )
+            if has_cal:
+                try:
+                    result = await adapter.get_calendar(market)  # type: ignore[attr-defined]
+                    normalized = tuple(result or ())
+                    logger.debug(
+                        "日历加载器: adapter={} 返回 {} 条记录",
+                        adapter_name,
+                        len(normalized),
+                    )
+                    if normalized:
+                        return normalized
+                    logger.warning(
+                        "日历加载器: adapter={} 返回空交易日历，尝试后备源",
+                        adapter_name,
+                    )
+                except Exception as exc:
+                    logger.warning("适配器日历获取失败 {}: {}", adapter_name, exc)
+
+            if not enable_amazingdata_fallback:
+                return ()
+
+            return await self._load_amazingdata_calendar(
+                market=market,
+                adapter_name=adapter_name,
+            )
+
+        return _adapter_calendar_loader
 
     @property
     def settings(self) -> Settings:
@@ -259,6 +565,40 @@ class RealtimeDataOrchestrator:
             except Exception as exc:
                 logger.warning("从 ProviderContainer 获取 AmazingData Provider 失败: {}", exc)
 
+        # QMT 不可用时会继续回退到 AmazingData。为避免过早降级到 AkShare，
+        # 在真正尝试 AmazingData 时按配置等待 Dask 代理就绪。
+        if provider is None and self._provider_container is not None:
+            try:
+                from core.compute.dask_init_state import get_dask_init_manager_sync
+
+                dask_manager = get_dask_init_manager_sync()
+            except Exception as exc:  # pragma: no cover - defensive import
+                dask_manager = None
+                logger.debug("获取 Dask 初始化状态管理器失败: {}", exc)
+
+            if dask_manager and not dask_manager.amazingdata_ready:
+                timeouts_cfg = getattr(self._settings, "timeouts", None)
+                wait_timeout = timeouts_cfg.dask.amazingdata_init if timeouts_cfg else 60.0
+                logger.info(
+                    "AmazingData Dask 代理未就绪，等待最多 {:.1f}s 后重试获取 Provider",
+                    wait_timeout,
+                )
+                try:
+                    ready = await dask_manager.wait_amazingdata_ready(timeout=wait_timeout)
+                except Exception as exc:  # pragma: no cover - defensive wait
+                    ready = False
+                    logger.warning("等待 AmazingData Dask 代理时发生异常: {}", exc)
+
+                if ready:
+                    try:
+                        if self._provider_container.has("amazingdata"):
+                            provider = await self._provider_container.get("amazingdata")
+                            logger.info("AmazingData Dask 代理就绪，已获取 ProviderContainer 实例")
+                    except Exception as exc:
+                        logger.warning("Dask 代理就绪后获取 AmazingData Provider 失败: {}", exc)
+                else:
+                    logger.warning("等待 AmazingData Dask 代理超时 ({:.1f}s)", wait_timeout)
+
         # 如果 ProviderContainer 中没有 AmazingData，不要回退到主进程加载 SDK
         # AmazingData SDK 不支持多进程同时登录，主进程加载会导致 Segfault
         # 让 orchestrator 使用其他 fallback 适配器（如 AkShare）
@@ -334,27 +674,7 @@ class RealtimeDataOrchestrator:
         registry: MarketDataPortRegistry = PortBundleRegistry(bundle)
         board_fetcher = bundle.board.fetch_records if bundle.board else None
 
-        # 创建使用适配器日历的加载器
-        async def _adapter_calendar_loader(market: str):
-            has_cal = hasattr(adapter, "get_calendar")
-            logger.debug(
-                "日历加载器: adapter={} hasattr(get_calendar)={} market={}",
-                adapter.name,
-                has_cal,
-                market,
-            )
-            if has_cal:
-                try:
-                    result = await adapter.get_calendar(market)  # type: ignore[attr-defined]
-                    logger.debug(
-                        "日历加载器: adapter={} 返回 {} 条记录",
-                        adapter.name,
-                        len(result) if result else 0,
-                    )
-                    return result
-                except Exception as exc:
-                    logger.warning("适配器日历获取失败 {}: {}", adapter.name, exc)
-            return ()
+        calendar_loader = self._build_adapter_calendar_loader(adapter)
 
         service, cache_writer, pipeline, runner = create_realtime_streaming_pipeline(
             provider=None,
@@ -363,7 +683,7 @@ class RealtimeDataOrchestrator:
             data_source_name=adapter.name,
             realtime_config=realtime_cfg,
             enable_session_guard=True,
-            calendar_loader=_adapter_calendar_loader,
+            calendar_loader=calendar_loader,
         )
         cache_reader = MarketDataCacheReader(cache_writer)
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Any, Mapping, MutableSet, Sequence
 
@@ -13,7 +13,7 @@ from core.domain.market_data import StockListRecord
 from core.infrastructure.persistence.database import DatabaseService
 from core.infrastructure.persistence.ingestion_records import DataSourceRecordPersistence
 from core.infrastructure.providers.implementations.akshare.akshare_adapter import AkShareAdapter
-from core.ports.data_sources import DataSourceType
+from core.ports.data_sources import DataAccessType, DataSourceType
 from core.ports.market_data import (
     BoardUniversePort,
     MarketSnapshot,
@@ -83,6 +83,7 @@ def _augment_stock_record(record: StockListRecord) -> StockListRecord:
 
 
 _AKSHARE_RECORD_STORE: DataSourceRecordPersistence | None = None
+_AKSHARE_BOARD_CACHE_MAX_AGE = timedelta(hours=12)
 
 
 def _resolve_record_store() -> DataSourceRecordPersistence | None:
@@ -238,6 +239,10 @@ class AkShareBoardUniversePort(BoardUniversePort):
         self._job_type = job_type
 
     async def fetch_records(self) -> Sequence[StockListRecord]:
+        cached_records = await self._load_cached_records()
+        if cached_records:
+            return tuple(cached_records)
+
         rows = await self._adapter.fetch_stock_list()
         succeeded = rows is not None
         records: list[StockListRecord] = []
@@ -257,6 +262,80 @@ class AkShareBoardUniversePort(BoardUniversePort):
         if succeeded:
             await self._persist_snapshot(payloads, captured_at=captured_at)
         return tuple(records)
+
+    async def _load_cached_records(self) -> list[StockListRecord]:
+        record_store = self._record_store
+        if record_store is None:
+            return []
+
+        async def _load_by_job_type(job_type: str) -> list[StockListRecord]:
+            try:
+                snapshot = await record_store.load_latest_record_set(
+                    job_type=job_type,
+                    data_source=self._data_source,
+                    access_type=DataAccessType.STOCK_LIST,
+                    max_age=_AKSHARE_BOARD_CACHE_MAX_AGE,
+                )
+            except Exception as exc:
+                logger.debug("AkShare 板块快照读取失败 job_type={} error={}", job_type, exc)
+                return []
+
+            if snapshot is None or not snapshot.records:
+                return []
+
+            materialized: list[StockListRecord] = []
+            for row in snapshot.records:
+                if not isinstance(row, Mapping):
+                    continue
+                record = StockListRecord.from_payload(row)
+                if not record.symbol:
+                    continue
+                materialized.append(_augment_stock_record(record))
+            if materialized:
+                logger.debug(
+                    "AkShare 板块快照命中缓存 job_type={} records={} completed_at={}",
+                    job_type,
+                    len(materialized),
+                    snapshot.completed_at,
+                )
+            return materialized
+
+        records = await _load_by_job_type(self._job_type)
+        if records:
+            return records
+
+        # 同源同能力的快照可能由其他任务写入（例如实时 fallback 任务）。
+        # 若当前 job_type 未命中，按最近成功作业回退一次，避免盘后“有快照却空表”。
+        try:
+            jobs = await record_store.fetch_jobs(limit=40)
+        except Exception as exc:
+            logger.debug("AkShare 板块快照回退扫描失败: {}", exc)
+            return []
+
+        candidate_job_types: list[str] = []
+        for job in jobs:
+            if not isinstance(job, Mapping):
+                continue
+            if str(job.get("status") or "").lower() != "succeeded":
+                continue
+            if str(job.get("data_source") or "").lower() != self._data_source.value:
+                continue
+            if str(job.get("access_type") or "").lower() != DataAccessType.STOCK_LIST.value:
+                continue
+            job_type = str(job.get("job_type") or "").strip()
+            if not job_type:
+                continue
+            if job_type not in candidate_job_types:
+                candidate_job_types.append(job_type)
+
+        for job_type in candidate_job_types:
+            if job_type == self._job_type:
+                continue
+            records = await _load_by_job_type(job_type)
+            if records:
+                return records
+
+        return []
 
     async def _persist_snapshot(
         self,

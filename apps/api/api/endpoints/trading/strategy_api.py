@@ -4,6 +4,7 @@ Strategy API Endpoints
 FastAPI routes for strategy management and backtesting.
 """
 
+import inspect
 from typing import Any, Dict, List, Literal, cast
 
 from core.strategies.implementations.mean_reversion import MeanReversionStrategy
@@ -11,6 +12,7 @@ from core.strategies.implementations.momentum import MomentumStrategy
 from core.strategies.implementations.moving_average import MovingAverageStrategy
 from core.strategies.implementations.turtle_trading import TurtleTradingStrategy
 from core.strategies.interfaces.models import TradingCostConfig
+from core.strategies.interfaces.protocols import BacktestStrategy
 from core.strategies.managers.manager import get_strategy_manager
 from core.strategies.services.backtest_service import StrategyComparisonConfig, get_backtest_service
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -83,6 +85,16 @@ BACKTEST_STRATEGY_TYPES = {
     "Turtle": TurtleTradingStrategy,
     "turtle": TurtleTradingStrategy,
 }
+
+
+def _ensure_concrete_backtest_strategy_class(
+    strategy_class: type[Any], *, strategy_name: str
+) -> type[BacktestStrategy]:
+    if not inspect.isclass(strategy_class):
+        raise HTTPException(status_code=400, detail=f"策略类型非法: {strategy_name}")
+    if inspect.isabstract(strategy_class):
+        raise HTTPException(status_code=400, detail=f"策略为抽象类，无法回测: {strategy_name}")
+    return cast(type[BacktestStrategy], strategy_class)
 
 
 @router.get("/types")
@@ -376,8 +388,8 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
     """Run a strategy backtest"""
     _ = background_tasks
     # Get strategy class
-    strategy_class = BACKTEST_STRATEGY_TYPES.get(request.strategy_type)
-    if not strategy_class:
+    strategy_class_raw = BACKTEST_STRATEGY_TYPES.get(request.strategy_type)
+    if not strategy_class_raw:
         raise HTTPException(
             status_code=400,
             detail=(
@@ -385,6 +397,10 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
                 f"当前支持: {', '.join(BACKTEST_STRATEGY_TYPES.keys())}"
             ),
         )
+    strategy_class = _ensure_concrete_backtest_strategy_class(
+        strategy_class_raw,
+        strategy_name=request.strategy_type,
+    )
 
     try:
         # Get backtest service
@@ -434,13 +450,17 @@ async def compare_strategies(request: CompareRequest):
             strategy_type_value = strategy_config.get("type")
             if not isinstance(strategy_type_value, str):
                 raise ValueError(f"Unknown strategy type: {strategy_type_value!r}")
-            strategy_class = BACKTEST_STRATEGY_TYPES.get(strategy_type_value)
+            strategy_class_raw = BACKTEST_STRATEGY_TYPES.get(strategy_type_value)
 
-            if not strategy_class:
+            if not strategy_class_raw:
                 raise ValueError(
                     f"回测暂不支持策略: {strategy_type_value}。"
                     f"当前支持: {', '.join(BACKTEST_STRATEGY_TYPES.keys())}"
                 )
+            strategy_class = _ensure_concrete_backtest_strategy_class(
+                strategy_class_raw,
+                strategy_name=strategy_type_value,
+            )
 
             strategies.append(
                 {

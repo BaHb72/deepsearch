@@ -33,7 +33,9 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from typing import TYPE_CHECKING, Any
+from datetime import datetime
+from time import monotonic
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Sequence
 
 import pandas as pd
 from core.infrastructure.providers.interfaces.base import DataProviderError
@@ -48,6 +50,63 @@ if TYPE_CHECKING:
 _REDIS_RESULT_PREFIX = "dask_result:"
 _ACTOR_READY_KEY = "dask_actor_ready:amazingdata"
 _ACTOR_HEARTBEAT_KEY = "dask_actor_heartbeat:amazingdata"
+_BSE_PREFIXES: tuple[str, ...] = ("43", "83", "87", "88")
+_SNAPSHOT_BATCH_SIZE = 120
+
+
+def _normalize_symbol(symbol: str) -> str:
+    text = str(symbol or "").strip().upper()
+    if not text:
+        return ""
+    if "." in text:
+        code, suffix = text.split(".", 1)
+        code = "".join(ch for ch in code if ch.isdigit())
+        if suffix in {"SH", "SZ", "BJ"} and code:
+            return f"{code}.{suffix}"
+        return text
+    code = "".join(ch for ch in text if ch.isdigit())
+    if len(code) == 6:
+        if code.startswith("6"):
+            return f"{code}.SH"
+        if code.startswith(("0", "3")):
+            return f"{code}.SZ"
+        if code.startswith(("4", "8")):
+            return f"{code}.BJ"
+    return code or text
+
+
+def _resolve_exchange(symbol: str) -> str:
+    normalized = _normalize_symbol(symbol)
+    if normalized.endswith(".SH"):
+        return "SH"
+    if normalized.endswith(".SZ"):
+        return "SZ"
+    if normalized.endswith(".BJ"):
+        return "BJ"
+    code = normalized.split(".", 1)[0]
+    if code.startswith("6"):
+        return "SH"
+    if code.startswith(("0", "3")):
+        return "SZ"
+    if code.startswith(("4", "8")):
+        return "BJ"
+    return "SH"
+
+
+def _infer_board_labels(symbol: str) -> tuple[str, ...]:
+    code = _normalize_symbol(symbol).split(".", 1)[0]
+    if not code:
+        return ()
+    boards: list[str] = []
+    if code.startswith(("688", "689")):
+        boards.extend(("科创板", "主板"))
+    elif code.startswith(("300", "301")):
+        boards.extend(("创业板", "主板"))
+    elif code.startswith(_BSE_PREFIXES) or code.startswith(("4", "8")):
+        boards.append("北证")
+    else:
+        boards.append("主板")
+    return tuple(dict.fromkeys(board for board in boards if board))
 
 
 class AmazingDataDaskAdapter:
@@ -78,6 +137,7 @@ class AmazingDataDaskAdapter:
         redis_url: str = "redis://localhost:6379",
         timeout: float = 45.0,
         first_call_timeout: float = 120.0,
+        snapshot_timeout: float | None = None,
         retry_count: int = 3,
         scheduler_address: str = "tcp://localhost:8786",
     ):
@@ -89,6 +149,7 @@ class AmazingDataDaskAdapter:
             redis_url: Redis 连接 URL
             timeout: 后续调用超时时间（秒），纯 SDK 执行
             first_call_timeout: 首次调用超时时间（秒），包含登录流程
+            snapshot_timeout: query_snapshot 方法级超时预算（秒）
             retry_count: 失败重试次数
             scheduler_address: 已废弃，保留兼容性
         """
@@ -96,6 +157,11 @@ class AmazingDataDaskAdapter:
         self._redis_url = redis_url
         self._timeout = timeout
         self._first_call_timeout = first_call_timeout
+        snapshot_budget = (
+            float(snapshot_timeout) if snapshot_timeout is not None else float(timeout)
+        )
+        max_budget = max(float(timeout), float(first_call_timeout))
+        self._snapshot_timeout = max(12.0, min(snapshot_budget, max_budget))
         self._retry_count = retry_count
 
         # 缓存 Windows Worker 地址（用于日志）
@@ -104,6 +170,10 @@ class AmazingDataDaskAdapter:
         self._initialized = False
         self._first_call_done = False
         self._last_runtime_issue: str | None = None
+        self._subscribed_symbols: set[str] = set()
+        self._subscription_callbacks: list[Callable[[dict[str, Any]], Awaitable[None] | None]] = []
+        self._runtime_recovery_grace_seconds = 6.0
+        self._runtime_recovery_poll_interval = 0.2
 
         logger.info(
             "[AmazingDataDaskAdapter] 初始化 | mode=redis-queue | redis={}",
@@ -238,7 +308,7 @@ class AmazingDataDaskAdapter:
 
     async def _attempt_runtime_recovery(self) -> bool:
         """尝试通过 Redis 运行时标记恢复 Actor 可用状态。"""
-        if not self._initialized or not self._redis:
+        if not self._redis:
             return False
 
         runtime_alive, runtime_reason = await self._probe_actor_runtime()
@@ -251,6 +321,44 @@ class AmazingDataDaskAdapter:
 
         self._mark_actor_recovered()
         return True
+
+    async def _ensure_runtime_ready_for_call(
+        self,
+        *,
+        method: str,
+        wait_seconds: float,
+    ) -> None:
+        """在提交任务前确认运行时标记可用，避免直接进入长超时。"""
+        runtime_alive, runtime_reason = await self._probe_actor_runtime()
+        if runtime_alive:
+            if (not self._actor_available) or self._last_runtime_issue:
+                self._mark_actor_recovered()
+            return
+
+        wait_budget = max(self._runtime_recovery_poll_interval, float(wait_seconds))
+        deadline = monotonic() + wait_budget
+        logger.warning(
+            "[AmazingData/Dask] 调用前检测到运行时标记缺失 | method={} | wait_budget={:.1f}s | reason={}",
+            method,
+            wait_budget,
+            runtime_reason or "unknown",
+        )
+
+        while monotonic() < deadline:
+            await asyncio.sleep(self._runtime_recovery_poll_interval)
+            runtime_alive, runtime_reason = await self._probe_actor_runtime()
+            if runtime_alive:
+                self._mark_actor_recovered()
+                logger.info(
+                    "[AmazingData/Dask] 调用前运行时恢复成功 | method={} | worker={}",
+                    method,
+                    self._windows_worker,
+                )
+                return
+
+        reason = f"Actor 调用前运行时异常: {runtime_reason or 'Redis 未检测到 AmazingData Actor 心跳/就绪标记'}"
+        self._mark_actor_unavailable(reason, error_type="PROCESS_CRASH")
+        raise DataProviderError(reason)
 
     # ==================== 连接管理 ====================
 
@@ -632,6 +740,7 @@ class AmazingDataDaskAdapter:
         self,
         method: str,
         retry: int = 0,
+        timeout_seconds: float | None = None,
         **kwargs: Any,
     ) -> Any:
         """通用远程调用方法
@@ -684,8 +793,22 @@ class AmazingDataDaskAdapter:
         # 格式: {method}:{short_uuid}，例如 query_kline:a1b2c3d4
         task_id = f"{method}:{uuid.uuid4().hex[:8]}"
 
-        # 根据是否首次调用选择超时时间
-        current_timeout = self._first_call_timeout if not self._first_call_done else self._timeout
+        # 根据是否首次调用选择超时时间；可被方法级预算覆盖。
+        if timeout_seconds is not None and timeout_seconds > 0:
+            current_timeout = float(timeout_seconds)
+        else:
+            current_timeout = (
+                self._first_call_timeout if not self._first_call_done else self._timeout
+            )
+
+        runtime_wait_budget = min(
+            self._runtime_recovery_grace_seconds,
+            max(self._runtime_recovery_poll_interval * 2, current_timeout * 0.3),
+        )
+        await self._ensure_runtime_ready_for_call(
+            method=method,
+            wait_seconds=runtime_wait_budget,
+        )
 
         try:
             worker_addr = self._windows_worker
@@ -786,7 +909,12 @@ class AmazingDataDaskAdapter:
 
                 if retry < self._retry_count:
                     logger.info("[AmazingData/Dask] 重试 {}/{}", retry + 1, self._retry_count)
-                    return await self._call_actor(method, retry=retry + 1, **kwargs)
+                    return await self._call_actor(
+                        method,
+                        retry=retry + 1,
+                        timeout_seconds=timeout_seconds,
+                        **kwargs,
+                    )
 
                 raise DataProviderError(f"Actor 调用超时: {method}")
 
@@ -806,7 +934,12 @@ class AmazingDataDaskAdapter:
             if retry < self._retry_count:
                 logger.info("[AmazingData/Dask] 重试 {}/{}", retry + 1, self._retry_count)
                 await asyncio.sleep(1)  # 延迟重试
-                return await self._call_actor(method, retry=retry + 1, **kwargs)
+                return await self._call_actor(
+                    method,
+                    retry=retry + 1,
+                    timeout_seconds=timeout_seconds,
+                    **kwargs,
+                )
             raise DataProviderError(f"Actor 调用失败: {method} - {e}")
 
     async def cleanup_pending_futures(self) -> int:
@@ -901,27 +1034,389 @@ class AmazingDataDaskAdapter:
         if result is None:
             return []
 
-        # 转换为领域层期望的格式 (list[dict])
+        # 转换为领域层期望的格式 (list[dict])，补齐 board 信息供 BoardUniverse 解析。
         stocks = []
+        normalized_board_filter = str(board).strip() if isinstance(board, str) else ""
         for code in result:
             if not isinstance(code, str):
+                continue
+            normalized_symbol = _normalize_symbol(code)
+            if not normalized_symbol:
                 continue
 
             # 按市场过滤
             if market:
-                if market == "SH" and not code.endswith(".SH"):
+                if market == "SH" and not normalized_symbol.endswith(".SH"):
                     continue
-                if market == "SZ" and not code.endswith(".SZ"):
+                if market == "SZ" and not normalized_symbol.endswith(".SZ"):
                     continue
-                if market == "BJ" and not code.endswith(".BJ"):
+                if market == "BJ" and not normalized_symbol.endswith(".BJ"):
                     continue
 
-            stocks.append({"symbol": code, "name": ""})
+            inferred_boards = _infer_board_labels(normalized_symbol)
+            if normalized_board_filter and normalized_board_filter not in inferred_boards:
+                continue
+
+            board_text = ";".join(inferred_boards)
+            stocks.append(
+                {
+                    "symbol": normalized_symbol,
+                    "name": "",
+                    "exchange": _resolve_exchange(normalized_symbol),
+                    "board": board_text,
+                    "board_name": board_text,
+                    "LISTPLATE_NAME": board_text,
+                }
+            )
 
         if limit is not None and limit >= 0:
             stocks = stocks[:limit]
 
         return stocks
+
+    # ==================== 实时行情兼容接口 ====================
+
+    async def subscribe_quote(
+        self,
+        symbols: Sequence[str],
+        callback: Callable[[dict[str, Any]], Awaitable[None] | None],
+        data_type: str = "snapshot",
+    ) -> bool:
+        """兼容 AmazingDataProvider 的订阅接口。
+
+        Dask 适配器当前通过 query_snapshot 轮询拉取快照，
+        因此这里只维护订阅集合与回调引用，避免上层因接口缺失失败。
+        """
+
+        del data_type
+        normalized: list[str] = []
+        for symbol in symbols:
+            if not isinstance(symbol, str):
+                continue
+            canonical = _normalize_symbol(symbol)
+            if canonical:
+                normalized.append(canonical)
+        if normalized:
+            self._subscribed_symbols.update(normalized)
+        if callable(callback):
+            self._subscription_callbacks.append(callback)
+        return True
+
+    async def subscribe_stock_snapshot(
+        self,
+        symbols: Sequence[str],
+        callback: Callable[[dict[str, Any]], Awaitable[None] | None],
+        data_type: str = "snapshot",
+    ) -> bool:
+        """订阅通用入口，保持与 AmazingDataProvider 一致。"""
+        return await self.subscribe_quote(symbols, callback, data_type=data_type)
+
+    async def unsubscribe_quote(self, symbols: Sequence[str]) -> bool:
+        """取消订阅（Dask 轮询模式仅更新本地订阅集合）。"""
+        for symbol in symbols:
+            if not isinstance(symbol, str):
+                continue
+            canonical = _normalize_symbol(symbol)
+            if canonical:
+                self._subscribed_symbols.discard(canonical)
+        return True
+
+    @staticmethod
+    def _is_missing_value(value: Any) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return not value.strip()
+        try:
+            return bool(pd.isna(value))
+        except Exception:
+            return False
+
+    @classmethod
+    def _coalesce(cls, *values: Any) -> Any:
+        for value in values:
+            if cls._is_missing_value(value):
+                continue
+            return value
+        return None
+
+    @staticmethod
+    def _to_number(value: Any, default: float = 0.0) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _to_int(value: Any, default: int = 0) -> int:
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _format_trade_time(value: Any) -> str:
+        if isinstance(value, pd.Timestamp):
+            return value.to_pydatetime().strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(value, datetime):
+            return value.strftime("%Y-%m-%d %H:%M:%S")
+        if isinstance(value, str):
+            text = value.strip()
+            if text:
+                return text
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    @staticmethod
+    def _current_date_yyyymmdd() -> int:
+        return int(datetime.now().strftime("%Y%m%d"))
+
+    @staticmethod
+    def _normalize_yyyymmdd(value: Any, *, field: str) -> int:
+        try:
+            normalized = int(str(value).strip())
+        except (TypeError, ValueError) as exc:
+            raise DataProviderError(
+                f"AMAZINGDATA_PARAM_INVALID: {field} 必须是 YYYYMMDD 整数，当前值={value!r}"
+            ) from exc
+        if normalized < 19000101 or normalized > 21991231:
+            raise DataProviderError(
+                f"AMAZINGDATA_PARAM_INVALID: {field} 超出有效范围，当前值={normalized}"
+            )
+        return normalized
+
+    @staticmethod
+    def _normalize_hhmm(value: Any, *, field: str) -> int:
+        try:
+            normalized = int(str(value).strip())
+        except (TypeError, ValueError) as exc:
+            raise DataProviderError(
+                f"AMAZINGDATA_PARAM_INVALID: {field} 必须是 HHMM 整数，当前值={value!r}"
+            ) from exc
+        if normalized < 0 or normalized > 2359:
+            raise DataProviderError(
+                f"AMAZINGDATA_PARAM_INVALID: {field} 超出有效范围，当前值={normalized}"
+            )
+        return normalized
+
+    async def _candidate_snapshot_dates(self, today: int) -> list[int]:
+        dates: list[int] = [today]
+        try:
+            calendar = await self.get_calendar()
+        except Exception:
+            return dates
+
+        normalized_values: set[int] = set()
+        for item in calendar:
+            if not isinstance(item, (int, float, str)):
+                continue
+            text = str(item).strip()
+            if not text:
+                continue
+            try:
+                normalized_values.add(int(text))
+            except ValueError:
+                continue
+        normalized_calendar = sorted(normalized_values)
+        if not normalized_calendar:
+            return dates
+
+        latest_on_or_before = max(
+            (item for item in normalized_calendar if item <= today), default=None
+        )
+        if latest_on_or_before is None:
+            return dates
+        if latest_on_or_before not in dates:
+            dates.append(latest_on_or_before)
+
+        try:
+            idx = normalized_calendar.index(latest_on_or_before)
+        except ValueError:
+            return dates
+        if idx > 0:
+            prev_day = normalized_calendar[idx - 1]
+            if prev_day not in dates:
+                dates.append(prev_day)
+        return dates
+
+    @staticmethod
+    def _iter_symbol_batches(
+        symbols: Sequence[str],
+        *,
+        batch_size: int = _SNAPSHOT_BATCH_SIZE,
+    ) -> list[list[str]]:
+        normalized_size = max(1, int(batch_size))
+        return [
+            list(symbols[index : index + normalized_size])
+            for index in range(0, len(symbols), normalized_size)
+        ]
+
+    @classmethod
+    def _pick_latest_row(cls, frame: pd.DataFrame) -> dict[str, Any] | None:
+        if frame.empty:
+            return None
+        normalized_columns = {str(column).lower(): column for column in frame.columns}
+        trade_column = normalized_columns.get("trade_time") or normalized_columns.get("time")
+        if trade_column is not None:
+            ordered = frame.copy()
+            ordered["__trade_time__"] = pd.to_datetime(
+                ordered[trade_column],
+                errors="coerce",
+            )
+            ordered = ordered.sort_values(by="__trade_time__", kind="stable")
+            row = ordered.iloc[-1]
+        else:
+            row = frame.iloc[-1]
+        payload: dict[str, Any] = {}
+        for key, value in row.items():
+            if key == "__trade_time__":
+                continue
+            payload[str(key).lower()] = value
+        return payload
+
+    @classmethod
+    def _snapshot_row_to_quote(
+        cls,
+        fallback_symbol: str,
+        row_payload: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        symbol = cls._coalesce(row_payload.get("code"), row_payload.get("symbol"), fallback_symbol)
+        if cls._is_missing_value(symbol):
+            return None
+        normalized_symbol = _normalize_symbol(str(symbol))
+        if not normalized_symbol:
+            return None
+
+        last = cls._coalesce(
+            row_payload.get("last"),
+            row_payload.get("price"),
+            row_payload.get("close"),
+        )
+        pre_close = cls._coalesce(row_payload.get("pre_close"), row_payload.get("prev_close"), last)
+        open_price = cls._coalesce(row_payload.get("open"), last)
+        high_price = cls._coalesce(row_payload.get("high"), last)
+        low_price = cls._coalesce(row_payload.get("low"), last)
+        close_price = cls._coalesce(row_payload.get("close"), pre_close, last)
+        amount = cls._coalesce(row_payload.get("amount"), 0.0)
+        volume = cls._coalesce(row_payload.get("volume"), 0)
+        trade_time = cls._format_trade_time(
+            cls._coalesce(row_payload.get("trade_time"), row_payload.get("time"))
+        )
+
+        quote: dict[str, Any] = {
+            "symbol": normalized_symbol,
+            "name": str(cls._coalesce(row_payload.get("name"), "")),
+            "time": trade_time,
+            "last": cls._to_number(last, 0.0),
+            "open": cls._to_number(open_price, 0.0),
+            "high": cls._to_number(high_price, 0.0),
+            "low": cls._to_number(low_price, 0.0),
+            "close": cls._to_number(close_price, 0.0),
+            "amount": cls._to_number(amount, 0.0),
+            "volume": cls._to_int(volume, 0),
+            "status": cls._coalesce(
+                row_payload.get("status"),
+                row_payload.get("trading_phase_code"),
+            ),
+        }
+        quote["pre_close"] = cls._to_number(pre_close, quote["close"])
+
+        ask_price1 = cls._coalesce(row_payload.get("ask_price1"), row_payload.get("ask1"))
+        ask_volume1 = cls._coalesce(row_payload.get("ask_volume1"), row_payload.get("ask1_volume"))
+        bid_price1 = cls._coalesce(row_payload.get("bid_price1"), row_payload.get("bid1"))
+        bid_volume1 = cls._coalesce(row_payload.get("bid_volume1"), row_payload.get("bid1_volume"))
+        if not cls._is_missing_value(ask_price1):
+            quote["ask1"] = cls._to_number(ask_price1, 0.0)
+        if not cls._is_missing_value(ask_volume1):
+            quote["ask1_volume"] = cls._to_int(ask_volume1, 0)
+        if not cls._is_missing_value(bid_price1):
+            quote["bid1"] = cls._to_number(bid_price1, 0.0)
+        if not cls._is_missing_value(bid_volume1):
+            quote["bid1_volume"] = cls._to_int(bid_volume1, 0)
+
+        high_limit = cls._coalesce(row_payload.get("high_limited"), row_payload.get("high_limit"))
+        low_limit = cls._coalesce(row_payload.get("low_limited"), row_payload.get("low_limit"))
+        if not cls._is_missing_value(high_limit):
+            quote["high_limit"] = cls._to_number(high_limit, 0.0)
+        if not cls._is_missing_value(low_limit):
+            quote["low_limit"] = cls._to_number(low_limit, 0.0)
+        return quote
+
+    @classmethod
+    def _snapshot_payload_to_quotes(
+        cls,
+        snapshot_payload: dict[str, pd.DataFrame] | None,
+        requested_symbols: Sequence[str],
+    ) -> dict[str, dict[str, Any]]:
+        if not snapshot_payload:
+            return {}
+
+        frames_by_symbol: dict[str, pd.DataFrame] = {}
+        for symbol_key, frame_value in snapshot_payload.items():
+            if not isinstance(frame_value, pd.DataFrame):
+                continue
+            normalized_key = _normalize_symbol(str(symbol_key))
+            if normalized_key:
+                frames_by_symbol[normalized_key] = frame_value
+
+        quotes: dict[str, dict[str, Any]] = {}
+        for symbol in requested_symbols:
+            symbol_frame = frames_by_symbol.get(symbol)
+            if symbol_frame is None:
+                continue
+            row_payload = cls._pick_latest_row(symbol_frame)
+            if not row_payload:
+                continue
+            quote = cls._snapshot_row_to_quote(symbol, row_payload)
+            if quote:
+                quotes[symbol] = quote
+        return quotes
+
+    async def get_realtime_quote(
+        self,
+        symbols: Sequence[str] | str,
+    ) -> dict[str, dict[str, Any]]:
+        """兼容实时行情接口，基于 query_snapshot 生成最新快照字典。"""
+        if isinstance(symbols, str):
+            raw_symbols: list[str] = [symbols]
+        else:
+            raw_symbols = [str(item) for item in symbols if isinstance(item, str)]
+
+        normalized_symbols = [
+            symbol for symbol in (_normalize_symbol(item) for item in raw_symbols) if symbol
+        ]
+        # 去重并保持顺序
+        deduped_symbols = list(dict.fromkeys(normalized_symbols))
+        if not deduped_symbols:
+            return {}
+
+        today = self._current_date_yyyymmdd()
+        candidate_dates = await self._candidate_snapshot_dates(today)
+        symbol_batches = self._iter_symbol_batches(deduped_symbols)
+
+        for candidate_date in candidate_dates:
+            quotes: dict[str, dict[str, Any]] = {}
+            for batch in symbol_batches:
+                try:
+                    snapshot_payload = await self.query_snapshot(
+                        code_list=batch,
+                        begin_date=candidate_date,
+                        end_date=candidate_date,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "[AmazingData/Dask] get_realtime_quote 查询失败 | date={} | batch={} | error={}",
+                        candidate_date,
+                        len(batch),
+                        exc,
+                    )
+                    continue
+
+                batch_quotes = self._snapshot_payload_to_quotes(snapshot_payload, batch)
+                if batch_quotes:
+                    quotes.update(batch_quotes)
+            if quotes:
+                return quotes
+        return {}
 
     async def get_calendar_range(
         self,
@@ -1096,32 +1591,63 @@ class AmazingDataDaskAdapter:
     async def query_snapshot(
         self,
         code_list: list[str],
-        date: int,
-        time_point: int | None = None,
+        begin_date: int,
+        end_date: int,
+        *,
+        begin_time: int | None = None,
+        end_time: int | None = None,
     ) -> dict[str, pd.DataFrame] | None:
         """3.5.4.1 历史快照
 
         Args:
             code_list: 代码列表
-            date: 日期 (YYYYMMDD)
-            time_point: 时间点 (HHMMSS)
+            begin_date: 开始日期 (YYYYMMDD)
+            end_date: 结束日期 (YYYYMMDD)
+            begin_time: 起始时间 (HHMM)
+            end_time: 结束时间 (HHMM)
 
         Returns:
             字典，key为代码，value为DataFrame
         """
-        kwargs: dict[str, Any] = {
-            "code_list": code_list,
-            "date": date,
-        }
-        if time_point is not None:
-            kwargs["time_point"] = time_point
+        normalized_codes = [
+            code
+            for code in (
+                _normalize_symbol(str(item)) for item in (code_list or []) if isinstance(item, str)
+            )
+            if code
+        ]
+        if not normalized_codes:
+            raise DataProviderError("AMAZINGDATA_PARAM_INVALID: code_list 不能为空")
 
-        result = await self._call_actor("query_snapshot", **kwargs)
+        normalized_begin = self._normalize_yyyymmdd(begin_date, field="begin_date")
+        normalized_end = self._normalize_yyyymmdd(end_date, field="end_date")
+        if normalized_begin > normalized_end:
+            raise DataProviderError("AMAZINGDATA_PARAM_INVALID: begin_date 不能晚于 end_date")
+
+        kwargs: dict[str, Any] = {
+            "code_list": normalized_codes,
+            "begin_date": normalized_begin,
+            "end_date": normalized_end,
+        }
+        if begin_time is not None:
+            kwargs["begin_time"] = self._normalize_hhmm(begin_time, field="begin_time")
+        if end_time is not None:
+            kwargs["end_time"] = self._normalize_hhmm(end_time, field="end_time")
+
+        result = await self._call_actor(
+            "query_snapshot",
+            timeout_seconds=self._snapshot_timeout,
+            **kwargs,
+        )
         if result is None:
             return None
 
         # 转换结果
-        return {k: pd.DataFrame(v) for k, v in result.items()}
+        if not isinstance(result, dict):
+            raise DataProviderError(
+                "AMAZINGDATA_SNAPSHOT_INVALID_RESULT: query_snapshot 返回值不是字典结构"
+            )
+        return {str(k): pd.DataFrame(v) for k, v in result.items()}
 
     async def query_kline(
         self,

@@ -8,6 +8,8 @@ from core.config.models.notifications import NotificationsConfig
 from core.core.runtime.context import get_context
 from core.infrastructure.notifications import NotificationQuotaGuard, NotificationService
 
+from apps.api.api.endpoints.notifications import push as notification_push
+
 CONFIG_PATH = ensure_env_config_file("dev")
 
 
@@ -50,10 +52,12 @@ async def test_get_notification_config(async_client):
 
 
 @pytest.mark.asyncio
-async def test_update_notification_config(async_client):
+async def test_update_notification_config(async_client, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(notification_push, "_get_config_path", lambda: CONFIG_PATH)
+
     payload = {
         "enabled": True,
-        "defaultChannel": "wechat",
+        "defaultChannel": ["wechat"],
         "wechatToken": "unit-test-token",
         "barkToken": "unit-test-token",
         "requestTimeout": 6.5,
@@ -83,9 +87,9 @@ async def test_update_notification_config(async_client):
     response = await async_client.put("/api/notification/config", json=payload)
     assert response.status_code == 200
     updated = response.json()
-    assert updated["defaultChannel"] == "wechat"
-    assert updated["wechatToken"] == "***"
-    assert updated["barkToken"] == "***"
+    assert updated["defaultChannel"] == ["wechat"]
+    assert updated["wechatToken"] == "unit-test-token"
+    assert updated["barkToken"] == "unit-test-token"
     assert updated["titleTemplate"] == "测试默认标题 {symbol}"
     assert updated["bodyTemplate"] == "最新价格：{price}"
     assert updated["hasWechatToken"] is True

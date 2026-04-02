@@ -124,7 +124,8 @@ def assert_unique_route_signatures(app: FastAPI) -> None:
     route_map: dict[tuple[str, tuple[str, ...]], list[str]] = {}
     ignored_methods = {"HEAD", "OPTIONS"}
 
-    for route in app.routes:
+    router_routes = getattr(app.router, "routes", ())
+    for route in router_routes:
         if not isinstance(route, APIRoute):
             continue
 
@@ -784,22 +785,47 @@ async def lifespan(app: FastAPI):
         backend_runtime.db_component = None
         backend_runtime.db_service = None
 
-    # 启动 Dask 集群（后台异步初始化，不阻塞 Uvicorn 端口监听）
-    # 这是关键优化：Dask Worker 初始化需要 15-25 秒，移到后台可让 Uvicorn 立即响应
+    # 启动 Dask 集群并执行启动期预热（优先保证 AmazingData 链路可用，再对外提供 API）
     try:
-        from core.compute.dask_init_state import get_dask_init_manager
+        from core.compute.dask_init_state import DaskInitPhase, get_dask_init_manager
 
         dask_init_manager = await get_dask_init_manager()
-        # 启动后台初始化任务
         app.state.dask_init_task = asyncio.create_task(
             dask_init_manager.initialize_in_background(app),
-            name="dask_background_init",
+            name="dask_startup_prewarm",
         )
         app.state.dask_init_manager = dask_init_manager
         backend_runtime.dask_init_manager = dask_init_manager
-        logger.info("Dask 后台初始化任务已启动（Uvicorn 将立即开始监听端口）")
+
+        dask_ready_timeout = 120.0
+        settings = get_config()
+        timeouts_cfg = getattr(settings, "timeouts", None)
+        dask_timeout_cfg = getattr(timeouts_cfg, "dask", None) if timeouts_cfg else None
+        if dask_timeout_cfg is not None:
+            amazingdata_init_timeout = float(getattr(dask_timeout_cfg, "amazingdata_init", 60.0))
+            worker_ready_timeout = float(getattr(dask_timeout_cfg, "worker_ready", 30.0))
+            dask_ready_timeout = max(30.0, amazingdata_init_timeout + worker_ready_timeout)
+
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(app.state.dask_init_task),
+                timeout=dask_ready_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Dask 启动期预热超时（{:.1f}s），后台继续初始化；实时接口将按降级策略返回",
+                dask_ready_timeout,
+            )
+        else:
+            dask_status = dask_init_manager.get_status()
+            if dask_status.phase == DaskInitPhase.READY:
+                logger.info("Dask 启动期预热完成：集群与 AmazingData 全部就绪")
+            elif dask_status.phase == DaskInitPhase.PARTIAL:
+                logger.warning("Dask 启动期预热完成：部分就绪（AmazingData 未完全可用）")
+            else:
+                logger.warning("Dask 启动期预热结束：phase={}", dask_status.phase.value)
     except Exception as e:
-        logger.warning(f"启动 Dask 后台初始化失败: {e}")
+        logger.warning(f"启动 Dask 预热失败: {e}")
         backend_runtime.dask_init_manager = None
 
     # 初始化 UnifiedDataFeed（核心数据访问层）

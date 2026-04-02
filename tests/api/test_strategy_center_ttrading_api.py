@@ -6,10 +6,10 @@ from apps.api.api.endpoints.strategy_center import ttrading
 
 
 @pytest.mark.asyncio
-async def test_datasource_status_returns_mock_when_miniqmt_unavailable(
+async def test_datasource_status_returns_none_when_miniqmt_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """MiniQMT 不可用时应直接返回 mock 状态。"""
+    """MiniQMT 不可用时应返回 none 状态。"""
 
     async def _probe_should_not_run() -> bool:
         raise AssertionError("MINIQMT_AVAILABLE=False 时不应探活")
@@ -21,7 +21,7 @@ async def test_datasource_status_returns_mock_when_miniqmt_unavailable(
 
     assert result["miniqmt_available"] is False
     assert result["miniqmt_connected"] is False
-    assert result["active_provider"] == "mock"
+    assert result["active_provider"] == "none"
 
 
 @pytest.mark.asyncio
@@ -51,10 +51,10 @@ async def test_datasource_status_fallbacks_when_probe_failed(monkeypatch: pytest
 
 
 @pytest.mark.asyncio
-async def test_datasource_status_returns_mock_when_all_providers_unavailable(
+async def test_datasource_status_returns_none_when_all_providers_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    """MiniQMT 与回退源均不可用时才返回 mock。"""
+    """MiniQMT 与回退源均不可用时返回 none。"""
 
     async def _probe_false() -> bool:
         return False
@@ -73,7 +73,7 @@ async def test_datasource_status_returns_mock_when_all_providers_unavailable(
     assert result["miniqmt_connected"] is False
     assert result["amazingdata_available"] is False
     assert result["akshare_available"] is False
-    assert result["active_provider"] == "mock"
+    assert result["active_provider"] == "none"
 
 
 @pytest.mark.asyncio
@@ -97,8 +97,8 @@ async def test_datasource_status_returns_miniqmt_when_probe_success(
 
 
 @pytest.mark.asyncio
-async def test_datasource_status_returns_mock_when_tcp_unreachable(monkeypatch: pytest.MonkeyPatch):
-    """端口不可达时应直接判定未连接。"""
+async def test_datasource_status_returns_none_when_tcp_unreachable(monkeypatch: pytest.MonkeyPatch):
+    """端口不可达时应直接判定未连接并保持 none。"""
 
     async def _probe_should_not_run() -> bool:
         raise AssertionError("TCP 不可达时不应执行 Actor 探活")
@@ -111,4 +111,4 @@ async def test_datasource_status_returns_mock_when_tcp_unreachable(monkeypatch: 
 
     assert result["miniqmt_available"] is True
     assert result["miniqmt_connected"] is False
-    assert result["active_provider"] == "mock"
+    assert result["active_provider"] == "none"
