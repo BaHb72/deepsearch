@@ -54,6 +54,7 @@ export interface BoardOverviewItem {
     top3_contrib_pct?: number
     hhi?: number
     classification?: string
+    latest_ts?: string
     data_source?: string
 }
 
@@ -76,6 +77,32 @@ export interface BoardOverviewResponse extends BaseLiveResponse {
     window: string
     items: BoardOverviewItem[]
     detail?: BoardOverviewDetail & Record<string, unknown>
+}
+
+export interface BoardDriverItem {
+    code: string
+    name: string
+    last_price?: number
+    change_pct?: number
+    amount?: number
+    latest_time?: string
+}
+
+export interface BoardDriversCoverage {
+    total_components: number
+    queried_components: number
+    available_snapshots: number
+    coverage_ratio: number
+    query_coverage_ratio: number
+}
+
+export interface BoardDriversResponse extends BaseLiveResponse {
+    type: 'concept' | 'industry' | string
+    board: string
+    window: string
+    coverage: BoardDriversCoverage
+    items: BoardDriverItem[]
+    detail?: Record<string, unknown>
 }
 
 export interface OrderImbalanceItem {
@@ -158,6 +185,8 @@ export const marketDataLiveApi = {
         request.get<StrengthResponse>('/market/live/concept-strength', { params }) as unknown as Promise<StrengthResponse>,
     getBoardOverview: (params?: { type?: string; window?: string; limit?: number; source?: string | null }) =>
         request.get<BoardOverviewResponse>('/market/live/board-overview', { params }) as unknown as Promise<BoardOverviewResponse>,
+    getBoardDrivers: (params: { type?: string; board: string; window?: string; limit?: number; source?: string | null }) =>
+        request.get<BoardDriversResponse>('/market/live/board-drivers', { params }) as unknown as Promise<BoardDriversResponse>,
     getOrderImbalance: (params?: { window?: string; limit?: number; source?: string | null }) =>
         request.get<OrderImbalanceResponse>('/market/live/order-imbalance', { params }) as unknown as Promise<OrderImbalanceResponse>,
     getAuctionQuality: (params?: { boards?: string; source?: string | null }) =>

@@ -4,6 +4,10 @@ import { logApiError } from '@/utils/errorTracker'
 import backendStatus from '@/utils/backendStatus'
 import { clearPortCache } from '@/utils/portDetector'
 import { debugAxiosInstance } from '@/utils/debugApi'
+import {
+    shouldBlockByBackendAvailability,
+    shouldBypassBackendStatusCheck,
+} from './backendGate'
 
 // ============ 类型定义 ============
 
@@ -59,6 +63,44 @@ const describeBackendIssue = (): string => {
     return '后端服务初始化中'
 }
 
+const getBackendAvailabilityState = (): 'unknown' | 'available' | 'unavailable' => {
+    const stateGetter = (backendStatus as { getAvailabilityState?: () => string }).getAvailabilityState
+    const state = stateGetter ? stateGetter.call(backendStatus) : undefined
+    const statusGetter = (backendStatus as { getLastStatus?: () => Record<string, unknown> | null }).getLastStatus
+    const latestStatus = statusGetter ? statusGetter.call(backendStatus) : null
+    const ready =
+        latestStatus &&
+        typeof latestStatus === 'object' &&
+        (latestStatus as { ready?: unknown }).ready === true
+
+    if (state === 'unavailable') {
+        return 'unavailable'
+    }
+    if (state === 'available') {
+        return 'available'
+    }
+    if (!state && ready) {
+        return 'available'
+    }
+    return 'unknown'
+}
+
+const shouldTrackBackendAvailabilitySignal = (
+    url?: string,
+    skipBackendCheck?: boolean
+): boolean => {
+    if (skipBackendCheck) {
+        return false
+    }
+    if (!url) {
+        return true
+    }
+    if (url === '/system/status') {
+        return true
+    }
+    return !shouldBypassBackendStatusCheck(url)
+}
+
 // ============ 创建 axios 实例 ============
 
 debugLog('INIT', '创建axios实例', { timeout: 90000 })
@@ -83,7 +125,14 @@ export async function setupRequest(): Promise<null> {
     try {
         debugLog('SETUP', '开始初始化 axios 实例')
         request.defaults.baseURL = '/api'
-        debugLog('SETUP', '使用代理配置: /api -> http://localhost:8000')
+        const proxyTarget = import.meta.env.VITE_PROXY_TARGET || 'http://127.0.0.1:8000'
+        debugLog('SETUP', `使用代理配置: /api -> ${proxyTarget}`)
+
+        const availabilityState = getBackendAvailabilityState()
+        if (availabilityState !== 'available') {
+            debugLog('SETUP', `后端状态为 ${availabilityState}，跳过超时配置同步`)
+            return null
+        }
 
         // 从后端同步超时配置，确保前后端超时一致
         try {
@@ -117,15 +166,14 @@ request.interceptors.request.use(
         customConfig.requestId = requestId
         customConfig.requestStartTime = Date.now()
 
-        const isStatusCheck = config.url === '/system/status' && !customConfig.skipBackendCheck
-        // 白名单：这些 URL 不受后端状态检查影响
-        const bypassUrls = ['/notification/', '/system/config', '/log/']
-        const shouldBypass = bypassUrls.some(url => config.url?.includes(url))
-
-        if (!isStatusCheck && !shouldBypass && !(backendStatus as { isAvailable?: boolean }).isAvailable) {
+        if (shouldBlockByBackendAvailability({
+            url: config.url,
+            skipBackendCheck: customConfig.skipBackendCheck,
+            backendAvailable: getBackendAvailabilityState(),
+        })) {
             debugLog('REQUEST_BLOCKED', `#${requestId} 后端不可用，拒绝请求`, {
                 url: config.url,
-                backendAvailable: false
+                backendState: getBackendAvailabilityState(),
             })
 
             const error = new Error(describeBackendIssue()) as Error & { code?: string; config?: InternalAxiosRequestConfig }
@@ -174,14 +222,22 @@ request.interceptors.response.use(
         })
 
         // 记录请求成功
+        const shouldTrackAvailability = shouldTrackBackendAvailabilitySignal(
+            response.config?.url,
+            customConfig.skipBackendCheck
+        )
         const bs = backendStatus as { recordSuccess?: () => void }
-        if (bs.recordSuccess) bs.recordSuccess()
+        if (bs.recordSuccess && shouldTrackAvailability) bs.recordSuccess()
 
         return response.data
     },
     (error: AxiosError) => {
         const customConfig = error.config as CustomAxiosRequestConfig | undefined
         const requestId = customConfig?.requestId || 'unknown'
+        const shouldTrackAvailability = shouldTrackBackendAvailabilitySignal(
+            error.config?.url,
+            customConfig?.skipBackendCheck
+        )
         const duration = customConfig?.requestStartTime
             ? Date.now() - customConfig.requestStartTime
             : 'unknown'
@@ -201,6 +257,8 @@ request.interceptors.response.use(
 
         let errorMessage = '请求失败'
         let showError = true
+        const silentUrls = ['/status', '/statistics', '/memory/', '/all-processes', '/jobs/', '/frontend/errors']
+        const isSilentRequest = silentUrls.some(url => error.config?.url?.includes(url))
 
         if (error.response) {
             const responseData = error.response.data as Record<string, unknown> | undefined
@@ -230,6 +288,12 @@ request.interceptors.response.use(
                     break
                 case 503:
                     errorMessage = '服务不可用'
+                    if (
+                        responseData?.code === 'BACKEND_UNAVAILABLE_DEV_PROXY' ||
+                        isSilentRequest
+                    ) {
+                        showError = false
+                    }
                     break
                 default: {
                     const detail = responseData?.detail
@@ -259,11 +323,11 @@ request.interceptors.response.use(
             }
             // 记录HTTP错误
             const bsf = backendStatus as { recordFailure?: () => void }
-            if (bsf.recordFailure) bsf.recordFailure()
+            if (bsf.recordFailure && shouldTrackAvailability) bsf.recordFailure()
         } else if (error.request) {
             errorMessage = '无法连接到后端服务，请确保后端已启动'
             const bsf2 = backendStatus as { recordFailure?: () => void }
-            if (bsf2.recordFailure) bsf2.recordFailure()
+            if (bsf2.recordFailure && shouldTrackAvailability) bsf2.recordFailure()
 
             if (error.config?.url === '/system/status') {
                 (backendStatus as { setAvailable?: (v: boolean) => void }).setAvailable?.(false)
@@ -275,8 +339,7 @@ request.interceptors.response.use(
             }
 
             // 静默处理周期性轮询请求的错误，避免频繁弹窗
-            const silentUrls = ['/status', '/statistics', '/memory/', '/all-processes', '/jobs/']
-            if (silentUrls.some(url => error.config?.url?.includes(url))) {
+            if (isSilentRequest) {
                 showError = false
                 debugLog('SILENT_ERROR', `#${requestId} 静默处理周期性请求错误`, {
                     url: error.config?.url

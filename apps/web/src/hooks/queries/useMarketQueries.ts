@@ -9,6 +9,7 @@ import {
     marketDataService,
     type StrengthParams,
     type BoardOverviewParams,
+    type BoardDriversParams,
     type OrderImbalanceParams,
     type AuctionQualityParams,
     type ConceptFlowParams,
@@ -83,6 +84,26 @@ export function useBoardOverview(
         staleTime: 10_000,
         refetchInterval: options?.refetchInterval ?? 15_000,
         enabled: options?.enabled,
+    })
+}
+
+// ============ 板块驱动明细 Hook ============
+
+export function useBoardDrivers(
+    params?: BoardDriversParams,
+    options?: QueryHookOptions
+) {
+    return useQuery({
+        queryKey: marketQueryKeys.boardDrivers(params),
+        queryFn: () => {
+            if (!params?.board) {
+                throw new Error('缺少板块名称')
+            }
+            return marketDataService.getBoardDrivers(params)
+        },
+        staleTime: 10_000,
+        refetchInterval: options?.refetchInterval ?? 15_000,
+        enabled: options?.enabled ?? Boolean(params?.board),
     })
 }
 

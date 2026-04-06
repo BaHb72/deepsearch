@@ -1,7 +1,6 @@
 import React from 'react'
 import {Select, Space, theme, Typography} from 'antd'
-import type {ProColumns} from '@ant-design/pro-components'
-import {ProTable} from '@ant-design/pro-components'
+import {ProTable, type ProColumns} from '@ant-design/pro-components'
 import type {StrengthItem} from '../../../api/marketDataLive'
 import ModuleSourceSelector from './ModuleSourceSelector'
 import {
@@ -41,6 +40,7 @@ const StrengthTable: React.FC<StrengthTableProps> = ({
     onModuleSourceChange,
 }) => {
     const {token} = theme.useToken()
+    const staleEmptyText = '暂无盘后快照，可稍后重试或切换数据源'
     // Chinese Market: Red = Up (+), Green = Down (-)
     const colorUp = '#ff4d4f' // or token.colorError
     const colorDown = '#52c41a' // or token.colorSuccess
@@ -125,7 +125,7 @@ const StrengthTable: React.FC<StrengthTableProps> = ({
             }}
             locale={{
                 emptyText: isStale
-                    ? '暂无可用数据（数据可能已过期）'
+                    ? staleEmptyText
                     : '暂无数据，请稍后重试',
             }}
             toolBarRender={() => [

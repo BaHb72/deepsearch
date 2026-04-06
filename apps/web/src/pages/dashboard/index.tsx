@@ -14,6 +14,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import {
     useMarketStrength,
     useBoardOverview,
+    useBoardDrivers,
     getRefreshIntervalByPhase,
     marketQueryKeys,
 } from '@/hooks/queries/useMarketQueries'
@@ -22,6 +23,7 @@ import {
 import MarketHeader from '../market/components/MarketHeader'
 import StrengthTable from '../market/components/StrengthTable'
 import BoardOverviewTable from '../market/components/BoardOverviewTable'
+import BoardDriversDrawer from '../market/components/BoardDriversDrawer'
 
 // 复用工具函数
 import {
@@ -44,6 +46,8 @@ const Dashboard: React.FC = () => {
     const [boardType, setBoardType] = useState<'concept' | 'industry'>('concept')
     const [autoRefresh, setAutoRefresh] = useState<boolean>(true)
     const [phase, setPhase] = useState<PhaseState>('unknown')
+    const [selectedBoard, setSelectedBoard] = useState<string>()
+    const [boardDrawerOpen, setBoardDrawerOpen] = useState<boolean>(false)
     const [moduleSources, setModuleSources] = useState<Record<string, string | null>>({
         strength: null,
         board_overview: null,
@@ -80,6 +84,21 @@ const Dashboard: React.FC = () => {
         { refetchInterval }
     )
 
+    const {
+        data: boardDrivers,
+        isLoading: boardDriversLoading,
+        isFetching: boardDriversFetching,
+    } = useBoardDrivers(
+        {
+            type: boardType,
+            board: selectedBoard || '',
+            window: selectedWindow,
+            limit: 40,
+            source: moduleSources.board_overview,
+        },
+        { refetchInterval, enabled: Boolean(selectedBoard && boardDrawerOpen) }
+    )
+
     // 当获取到数据后更新 phase 状态
     React.useEffect(() => {
         if (strength?.phase_state) {
@@ -94,9 +113,15 @@ const Dashboard: React.FC = () => {
     const refreshing = strengthFetching || boardFetching
     const fetchError = strengthError?.message || boardError?.message || null
 
+    const strengthItemsCount = strength?.items?.length ?? 0
+    const boardItemsCount = boardOverview?.items?.length ?? 0
     const globalAsOf = strength?.asOf || boardOverview?.asOf || null
     const retrievedAt = strength?.retrieved_at || boardOverview?.retrieved_at || null
-    const dataSource = strength?.data_source || boardOverview?.data_source || 'amazingdata'
+    const dataSource = boardItemsCount > 0
+        ? (boardOverview?.data_source || strength?.data_source || 'amazingdata')
+        : strengthItemsCount > 0
+            ? (strength?.data_source || boardOverview?.data_source || 'amazingdata')
+            : (strength?.data_source || boardOverview?.data_source || 'amazingdata')
     const isStale = Boolean(strength?.stale) || Boolean(boardOverview?.stale)
 
     const cacheInfo = useMemo(() => {
@@ -186,6 +211,11 @@ const Dashboard: React.FC = () => {
         })
     }, [])
 
+    const handleBoardSelect = useCallback((board: string) => {
+        setSelectedBoard(board)
+        setBoardDrawerOpen(true)
+    }, [])
+
     const getFallbackLabel = useCallback((detail?: unknown): string | null => {
         if (!detail || typeof detail !== 'object') return null
         const fallback = (detail as Record<string, unknown>).fallback
@@ -212,6 +242,43 @@ const Dashboard: React.FC = () => {
         () => getFallbackLabel(boardOverview?.detail),
         [boardOverview, getFallbackLabel]
     )
+
+    const diagnostics = useMemo(() => {
+        const strengthDetail = (strength?.detail || {}) as Record<string, unknown>
+        const boardDetail = (boardOverview?.detail || {}) as Record<string, unknown>
+        const strengthFailure = strengthItemsCount > 0
+            ? null
+            : (() => {
+                const failure = strengthDetail.latest_failure as Record<string, unknown> | undefined
+                return failure?.code ? String(failure.code) : null
+            })()
+        const boardFailure = boardItemsCount > 0
+            ? null
+            : (() => {
+                const failure = boardDetail.latest_failure as Record<string, unknown> | undefined
+                return failure?.code ? String(failure.code) : null
+            })()
+        const requestedSource = String(
+            boardDetail.requested_source || strengthDetail.requested_source || 'auto'
+        )
+        const effectiveSource = String(
+            boardItemsCount > 0
+                ? (boardDetail.effective_source || boardOverview?.data_source || dataSource || '--')
+                : strengthItemsCount > 0
+                    ? (strengthDetail.effective_source || strength?.data_source || dataSource || '--')
+                    : (boardDetail.effective_source || strengthDetail.effective_source || dataSource || '--')
+        )
+        const failureCode = boardFailure || strengthFailure
+        const failureSummary = failureCode
+            ? `资金脉冲=${strengthFailure || 'OK'}；板块概览=${boardFailure || 'OK'}`
+            : null
+        return {
+            requestedSource,
+            effectiveSource,
+            failureCode,
+            failureSummary,
+        }
+    }, [boardOverview?.detail, boardOverview?.data_source, boardItemsCount, strength?.detail, strength?.data_source, strengthItemsCount, dataSource])
 
     // ============ 渲染 ============
 
@@ -267,6 +334,19 @@ const Dashboard: React.FC = () => {
                     />
                 </ProCard>
 
+                <ProCard colSpan={24} bordered boxShadow>
+                    <Alert
+                        type={diagnostics.failureCode ? 'warning' : 'info'}
+                        showIcon
+                        message={`链路诊断：请求源 ${diagnostics.requestedSource} / 生效源 ${diagnostics.effectiveSource}`}
+                        description={
+                            diagnostics.failureCode
+                                ? `最近失败码：${diagnostics.failureCode}（${diagnostics.failureSummary || '模块级诊断已记录'}，已按当前策略返回可用结果或陈旧快照）`
+                                : '当前链路正常，支持盘后陈旧快照展示。'
+                        }
+                    />
+                </ProCard>
+
                 {/* Core Market Data: Strength & Boards */}
                 <ProCard
                     colSpan={24}
@@ -308,9 +388,18 @@ const Dashboard: React.FC = () => {
                         moduleSourceOptions={moduleSourceOptions}
                         fallbackLabel={boardFallbackLabel}
                         onModuleSourceChange={handleModuleSourceChange}
+                        onBoardSelect={handleBoardSelect}
+                        selectedBoard={selectedBoard}
                     />
                 </ProCard>
             </ProCard>
+            <BoardDriversDrawer
+                open={boardDrawerOpen && Boolean(selectedBoard)}
+                boardName={selectedBoard}
+                loading={boardDriversLoading || boardDriversFetching}
+                data={boardDrivers}
+                onClose={() => setBoardDrawerOpen(false)}
+            />
         </PageContainer>
     )
 }

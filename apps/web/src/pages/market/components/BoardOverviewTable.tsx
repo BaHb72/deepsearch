@@ -1,15 +1,14 @@
 import React from 'react'
-import { Select, Space, Tag, theme, Typography } from 'antd'
-import type { ProColumns } from '@ant-design/pro-components'
-import { ProTable } from '@ant-design/pro-components'
+import { Select, Space, theme, Typography } from 'antd'
+import { ProTable, type ProColumns } from '@ant-design/pro-components'
 import type { BoardOverviewItem } from '../../../api/marketDataLive'
 import ModuleSourceSelector from './ModuleSourceSelector'
 import {
-    CLASSIFICATION_META,
     formatAmountBillion,
     formatAmountMillionPerMinute,
+    formatAmountMillionPerMinuteSquared,
     formatNumber,
-    formatPercent,
+    formatTime,
 } from '../utils'
 
 const { Text } = Typography
@@ -25,6 +24,8 @@ interface BoardOverviewTableProps {
     moduleSourceOptions: { label: string; value: string }[]
     fallbackLabel?: string | null
     onModuleSourceChange: (moduleKey: string, value: string) => void
+    onBoardSelect?: (board: string) => void
+    selectedBoard?: string
 }
 
 const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
@@ -38,8 +39,11 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
     moduleSourceOptions,
     fallbackLabel,
     onModuleSourceChange,
+    onBoardSelect,
+    selectedBoard,
 }) => {
     const { token } = theme.useToken()
+    const staleEmptyText = '暂无盘后快照，可稍后重试或切换数据源'
     const colorUp = '#ff4d4f'
     const colorDown = '#52c41a'
 
@@ -58,42 +62,12 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             render: (dom) => <Text strong>{dom}</Text>
         },
         {
-            title: '涨跌幅',
-            dataIndex: 'change_pct',
-            key: 'change_pct',
+            title: '成分股数',
+            dataIndex: 'stock_count',
+            key: 'stock_count',
             width: 100,
-            render: (_, record) => (
-                <span style={{ color: getTrendColor(record.change_pct), fontFamily: 'Monaco, monospace' }}>
-                    {record.change_pct != null ? `${record.change_pct >= 0 ? '+' : ''}${record.change_pct.toFixed(2)}%` : '--'}
-                </span>
-            ),
-            sorter: (a, b) => (a.change_pct || 0) - (b.change_pct || 0),
-        },
-        {
-            title: '领涨股',
-            dataIndex: 'lead_stock',
-            key: 'lead_stock',
-            width: 160,
-            render: (_, record) => (
-                record.lead_stock ? (
-                    <span>
-                        <Text>{record.lead_stock_name || record.lead_stock}</Text>
-                        <Text type="danger" style={{ marginLeft: 4, fontFamily: 'Monaco, monospace' }}>
-                            +{(record.lead_change || 0).toFixed(2)}%
-                        </Text>
-                    </span>
-                ) : <span style={{ color: token.colorTextSecondary }}>--</span>
-            ),
-        },
-        {
-            title: '涨停',
-            dataIndex: 'limit_up_count',
-            key: 'limit_up_count',
-            width: 80,
-            render: (_, record) => (
-                record.limit_up_count ? <Tag color="red">{record.limit_up_count}</Tag> : <span style={{ color: token.colorTextSecondary }}>0</span>
-            ),
-            sorter: (a, b) => (a.limit_up_count || 0) - (b.limit_up_count || 0),
+            render: (_, record) => formatNumber(record.stock_count, 0),
+            sorter: (a, b) => (a.stock_count || 0) - (b.stock_count || 0),
         },
         {
             title: '净流入',
@@ -108,6 +82,25 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             sorter: (a, b) => (a.inflow_net || 0) - (b.inflow_net || 0),
         },
         {
+            title: '加速度',
+            dataIndex: 'inflow_accel',
+            key: 'inflow_accel',
+            width: 150,
+            render: (_, record) => (
+                <span style={{ color: getTrendColor(record.inflow_accel), fontFamily: 'Monaco, monospace' }}>
+                    {formatAmountMillionPerMinuteSquared(record.inflow_accel)}
+                </span>
+            ),
+            sorter: (a, b) => (a.inflow_accel || 0) - (b.inflow_accel || 0),
+        },
+        {
+            title: '最新时间',
+            dataIndex: 'latest_ts',
+            key: 'latest_ts',
+            width: 120,
+            render: (_, record) => <span style={{ color: token.colorTextSecondary }}>{formatTime(record.latest_ts)}</span>,
+        },
+        {
             title: '速度',
             dataIndex: 'inflow_speed',
             key: 'inflow_speed',
@@ -120,51 +113,15 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             sorter: (a, b) => (a.inflow_speed || 0) - (b.inflow_speed || 0),
         },
         {
-            title: '探测个数',
-            dataIndex: 'probing_count',
-            key: 'probing_count',
-            width: 120,
-            render: (_, record) => formatNumber(record.probing_count, 0),
-            sorter: (a, b) => (a.probing_count || 0) - (b.probing_count || 0),
-        },
-        {
-            title: '探测占比',
-            dataIndex: 'probing_ratio',
-            key: 'probing_ratio',
-            width: 120,
-            render: (_, record) => formatPercent(record.probing_ratio),
-            sorter: (a, b) => (a.probing_ratio || 0) - (b.probing_ratio || 0),
-        },
-        {
-            title: '上涨占比',
-            dataIndex: 'breadth_up_ratio',
-            key: 'breadth_up_ratio',
-            width: 120,
+            title: '数据源',
+            dataIndex: 'data_source',
+            key: 'data_source',
+            width: 110,
             render: (_, record) => (
-                <span style={{ color: (record.breadth_up_ratio || 0) > 0.5 ? colorUp : colorDown }}>
-                    {formatPercent(record.breadth_up_ratio)}
+                <span style={{ color: token.colorTextSecondary }}>
+                    {record.data_source || '--'}
                 </span>
             ),
-            sorter: (a, b) => (a.breadth_up_ratio || 0) - (b.breadth_up_ratio || 0),
-        },
-        {
-            title: '集中度',
-            dataIndex: 'hhi',
-            key: 'hhi',
-            width: 120,
-            render: (_, record) => formatPercent(record.hhi),
-            sorter: (a, b) => (a.hhi || 0) - (b.hhi || 0),
-        },
-        {
-            title: '结构类型',
-            dataIndex: 'classification',
-            key: 'classification',
-            width: 140,
-            render: (_, record) => {
-                const meta =
-                    CLASSIFICATION_META[record.classification ?? 'unknown'] ?? CLASSIFICATION_META.unknown
-                return <Tag color={meta.color}>{meta.label}</Tag>
-            },
         },
     ]
 
@@ -188,7 +145,7 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
             }}
             locale={{
                 emptyText: isStale
-                    ? '暂无可用数据（数据可能已过期）'
+                    ? staleEmptyText
                     : '暂无数据，请稍后重试',
             }}
             toolBarRender={() => [
@@ -213,6 +170,16 @@ const BoardOverviewTable: React.FC<BoardOverviewTableProps> = ({
                     />
                 </Space>
             ]}
+            onRow={(record) => ({
+                onClick: () => onBoardSelect?.(record.board),
+                style: {
+                    cursor: onBoardSelect ? 'pointer' : 'default',
+                    backgroundColor:
+                        selectedBoard && record.board === selectedBoard
+                            ? token.colorFillSecondary
+                            : undefined,
+                },
+            })}
             scroll={{ x: 800 }}
             cardProps={{ bodyStyle: { padding: 0 } }}
         />

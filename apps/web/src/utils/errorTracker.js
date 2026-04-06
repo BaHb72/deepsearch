@@ -4,6 +4,7 @@
  */
 
 import logger from '@/utils/logger'
+import backendStatus from '@/utils/backendStatus'
 
 const errorTrackerLogger = logger.child('utils:error-tracker')
 
@@ -21,6 +22,12 @@ class ErrorTracker {
         this.maxReportQueueSize = 10
         this.errorSignatures = new Map() // 用于去重
         this.signatureTimeout = 5000 // 5秒内相同错误只记录一次
+
+        backendStatus.addListener((available) => {
+            if (available) {
+                this.processReportQueue()
+            }
+        })
     }
 
     /**
@@ -177,6 +184,11 @@ class ErrorTracker {
 
         this.reportQueue.push(error)
 
+        // 后端不可用时只缓存，不上报
+        if (backendStatus.getAvailabilityState?.() !== 'available') {
+            return
+        }
+
         // 如果没有正在上报，开始处理队列
         if (!this.isReporting) {
             this.processReportQueue()
@@ -188,6 +200,10 @@ class ErrorTracker {
      */
     async processReportQueue() {
         if (this.isReporting || this.reportQueue.length === 0) {
+            return
+        }
+
+        if (backendStatus.getAvailabilityState?.() !== 'available') {
             return
         }
 

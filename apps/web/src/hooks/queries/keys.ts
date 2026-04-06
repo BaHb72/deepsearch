@@ -18,6 +18,9 @@ export const marketQueryKeys = {
     boardOverview: <T extends object | undefined>(params?: T) =>
         [...marketQueryKeys.all, 'boardOverview', params] as const,
 
+    boardDrivers: <T extends object | undefined>(params?: T) =>
+        [...marketQueryKeys.all, 'boardDrivers', params] as const,
+
     // 订单不平衡
     orderImbalance: <T extends object | undefined>(params?: T) =>
         [...marketQueryKeys.all, 'orderImbalance', params] as const,

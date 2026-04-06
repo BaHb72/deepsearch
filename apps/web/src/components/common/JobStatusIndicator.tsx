@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { Button, Space, Popover, List, Typography, message } from 'antd'
 import { CloudSyncOutlined, LoadingOutlined, CheckCircleOutlined, CloseCircleOutlined, SyncOutlined } from '@ant-design/icons'
 import dataSourceAPI, { IngestionJob } from '@/api/dataSource'
+import backendStatus from '@/utils/backendStatus'
 
 const { Text } = Typography
 
@@ -9,29 +10,53 @@ const JobStatusIndicator: React.FC = () => {
     const [jobs, setJobs] = useState<IngestionJob[]>([])
     const [loading, setLoading] = useState(false)
     const [polling, _setPolling] = useState(true)
+    const [backendReady, setBackendReady] = useState(
+        (backendStatus.getAvailabilityState?.() || 'unknown') === 'available'
+    )
 
     const fetchJobs = useCallback(async () => {
+        if (!backendReady) {
+            return
+        }
         try {
             const res = await dataSourceAPI.listIngestionJobs({ limit: 5 })
             setJobs(res.jobs)
         } catch (error) {
             console.error('Failed to fetch jobs', error)
         }
-    }, [])
+    }, [backendReady])
 
     useEffect(() => {
-        fetchJobs()
+        if (backendReady) {
+            fetchJobs()
+        } else {
+            setJobs([])
+        }
+
         const interval = setInterval(() => {
-            if (polling) {
+            if (polling && backendReady) {
                 fetchJobs()
             }
         }, 3000)
         return () => clearInterval(interval)
-    }, [fetchJobs, polling])
+    }, [backendReady, fetchJobs, polling])
+
+    useEffect(() => {
+        const onBackendStatus = (available: boolean) => {
+            setBackendReady(Boolean(available))
+        }
+
+        backendStatus.addListener(onBackendStatus)
+        return () => backendStatus.removeListener(onBackendStatus)
+    }, [])
 
     const activeJob = jobs.find(j => ['queued', 'running'].includes(j.status))
 
     const handleTrigger = async () => {
+        if (!backendReady) {
+            message.warning('后端未就绪，暂不能触发同步任务')
+            return
+        }
         setLoading(true)
         try {
             await dataSourceAPI.triggerPrefetchJob(true)
@@ -45,6 +70,10 @@ const JobStatusIndicator: React.FC = () => {
     }
 
     const handleCancel = async (jobId: string) => {
+        if (!backendReady) {
+            message.warning('后端未就绪，暂不能取消任务')
+            return
+        }
         try {
             await dataSourceAPI.cancelJob(jobId)
             message.success('已取消任务')
@@ -70,12 +99,17 @@ const JobStatusIndicator: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, padding: '0 4px' }}>
                 <Text strong>后台任务</Text>
                 <Space>
-                    <Button size="small" icon={<SyncOutlined />} onClick={fetchJobs} />
-                    <Button size="small" type="primary" onClick={handleTrigger} loading={loading}>
+                    <Button size="small" icon={<SyncOutlined />} onClick={fetchJobs} disabled={!backendReady} />
+                    <Button size="small" type="primary" onClick={handleTrigger} loading={loading} disabled={!backendReady}>
                         立即同步
                     </Button>
                 </Space>
             </div>
+            {!backendReady && (
+                <Text type="secondary" style={{ display: 'block', margin: '0 4px 8px' }}>
+                    后端未就绪，任务轮询已暂停
+                </Text>
+            )}
             <List
                 size="small"
                 dataSource={jobs}
@@ -109,7 +143,12 @@ const JobStatusIndicator: React.FC = () => {
         <Popover content={content} title={null} trigger="click" placement="bottomRight">
             <Button type="text" style={{ height: '100%' }}>
                 <Space>
-                    {activeJob ? (
+                    {!backendReady ? (
+                        <>
+                            <CloudSyncOutlined style={{ color: '#d9d9d9' }} />
+                            <span style={{ fontSize: 12, color: '#8c8c8c' }}>后端未就绪</span>
+                        </>
+                    ) : activeJob ? (
                         <>
                             <LoadingOutlined />
                             <span style={{ fontSize: 12 }}>同步中...</span>

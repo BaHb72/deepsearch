@@ -7,6 +7,7 @@ import {
     marketDataLiveApi,
     type StrengthResponse,
     type BoardOverviewResponse,
+    type BoardDriversResponse,
     type OrderImbalanceResponse,
     type AuctionQualityResponse,
     type ConceptFlowResponse,
@@ -26,6 +27,14 @@ export interface StrengthParams {
 
 export interface BoardOverviewParams {
     type?: 'concept' | 'industry'
+    window?: string
+    limit?: number
+    source?: string | null
+}
+
+export interface BoardDriversParams {
+    type?: 'concept' | 'industry'
+    board: string
     window?: string
     limit?: number
     source?: string | null
@@ -90,6 +99,13 @@ export const marketDataService = {
      */
     async getBoardOverview(params?: BoardOverviewParams): Promise<BoardOverviewResponse> {
         return marketDataLiveApi.getBoardOverview(params)
+    },
+
+    /**
+     * 获取板块驱动明细
+     */
+    async getBoardDrivers(params: BoardDriversParams): Promise<BoardDriversResponse> {
+        return marketDataLiveApi.getBoardDrivers(params)
     },
 
     /**

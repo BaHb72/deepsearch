@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Badge, Button, Dropdown, Switch, } from 'antd'
+import { Alert, Badge, Button, Dropdown, Switch, } from 'antd'
 import {
   BellOutlined,
   LogoutOutlined,
@@ -14,6 +14,7 @@ import { useSystemStore } from '@/stores'
 import { buildMenuRouteTree } from '@/router/manifest'
 // import { useRealtimeSource } from '@/contexts/RealtimeSourceContext' // TODO: 准备用于数据源切换
 import JobStatusIndicator from '@/components/common/JobStatusIndicator'
+import backendStatus from '@/utils/backendStatus'
 import './index.scss'
 
 const MainLayout: React.FC = () => {
@@ -21,10 +22,33 @@ const MainLayout: React.FC = () => {
   const location = useLocation()
   const { toggleTheme, isDark } = useTheme()
   const systemStore = useSystemStore()
+  const [backendAvailability, setBackendAvailability] = useState(
+    backendStatus.getAvailabilityState?.() || 'unknown'
+  )
+  const [backendReason, setBackendReason] = useState('')
   // const realtimeSource = useRealtimeSource() // TODO: 准备用于数据源切换
   // const { message } = AntApp.useApp() // TODO: 准备用于数据源切换
 
   const route = useMemo(() => buildMenuRouteTree(), [])
+  const backendTarget = backendStatus.getBackendTarget?.() || (import.meta.env.VITE_PROXY_TARGET || 'http://127.0.0.1:8000')
+
+  useEffect(() => {
+    const syncBackendState = () => {
+      setBackendAvailability(backendStatus.getAvailabilityState?.() || 'unknown')
+      const stats = backendStatus.getStatistics?.()
+      setBackendReason(stats?.lastReason || '')
+    }
+
+    syncBackendState()
+    const onBackendStatus = () => syncBackendState()
+    backendStatus.addListener(onBackendStatus)
+    const timer = window.setInterval(syncBackendState, 5000)
+
+    return () => {
+      backendStatus.removeListener(onBackendStatus)
+      window.clearInterval(timer)
+    }
+  }, [])
 
   const userMenuItems = [
     {
@@ -140,6 +164,16 @@ const MainLayout: React.FC = () => {
         splitMenus={false}
       >
         <div style={{ padding: 24, minHeight: '100%' }}>
+          {backendAvailability !== 'available' && (
+            <Alert
+              type="warning"
+              showIcon
+              banner
+              style={{ marginBottom: 12 }}
+              message={`后端未就绪（状态：${backendAvailability}）`}
+              description={`代理目标 ${backendTarget}。请先启动后端：uv run deepsearch run dev --no-frontend${backendReason ? `；最近原因：${backendReason}` : ''}`}
+            />
+          )}
           <Outlet />
         </div>
       </ProLayout>
