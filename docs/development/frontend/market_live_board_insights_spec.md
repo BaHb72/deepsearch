@@ -66,6 +66,7 @@
 ### 4.1 板块总览（概念/行业）
 
 - `GET /api/market/live/board-overview?type=concept&window=1m&limit=100`
+- 显式 `source=amazingdata` 时执行严格源语义：不跨源串换、不跨源探测缓存。
 - 响应：
 
 ```json
@@ -75,30 +76,33 @@
     {
       "board": "人工智能",
       "stock_count": 512,
-      "probing_count": 37,
-      "probing_ratio": 0.072,
       "inflow_net": 1.23e9,
       "inflow_speed": 6.5e7,
       "inflow_accel": 2.1e6,
-      "breadth_up_ratio": 0.58,
-      "top1_contrib_pct": 0.41,
-      "top3_contrib_pct": 0.63,
-      "hhi": 0.19,
-      "classification": "single_core",
-      "asOf": "2025-11-06T02:57:00Z",
-      "stale": false,
+      "change_pct": 2.35,
+      "lead_stock": "600000.SH",
+      "lead_stock_name": "浦发银行",
+      "lead_change": 4.12,
+      "limit_up_count": 3,
+      "latest_ts": "2025-11-06T02:57:00Z",
       "data_source": "amazingdata"
     }
   ],
   "retrieved_at": "2025-11-06T02:57:03Z",
   "stale": false,
   "phase_state": "continuous",
-  "data_source": "amazingdata"
+  "data_source": "amazingdata",
+  "detail": {
+    "requested_source": "amazingdata",
+    "effective_source": "amazingdata",
+    "stage_timings": {
+      "total_ms": 18.4
+    }
+  }
 }
 ```
 
-- 示例概念建议覆盖 AmazingData 能力范围内的主流主题，如 AI算力、AIGC应用、机器人、低空经济、储能、新能源车、光伏逆变、芯片设计、CPO、算力租赁、华为概念、中药现代化
-  等，便于前端在热力/榜单中展示多维对比。
+- 不可稳定提供的统计列（`probing_count/probing_ratio/breadth_up_ratio/hhi/classification`）不再作为主表列，避免页面长期 `--` 误导。
 
 ### 4.2 板块驱动构成（概念/行业）
 
@@ -113,17 +117,30 @@
     {
       "code": "600000.SH",
       "name": "浦发银行",
-      "inflow_contrib": 8.2e6,
-      "speed_per_min": 4.1e6,
-      "accel_per_min2": 1.2e5,
-      "probing_flag": true,
-      "is_leader": true,
-      "asOf": "2025-11-06T02:57:00Z"
+      "last_price": 10.23,
+      "change_pct": 1.62,
+      "amount": 8.2e8,
+      "latest_time": "2025-11-06T10:25:00Z"
     }
   ],
+  "coverage": {
+    "total_components": 120,
+    "queried_components": 30,
+    "available_snapshots": 27,
+    "coverage_ratio": 0.225,
+    "query_coverage_ratio": 0.9
+  },
   "retrieved_at": "2025-11-06T02:57:03Z",
   "stale": false,
-  "data_source": "amazingdata"
+  "phase_state": "continuous",
+  "data_source": "amazingdata",
+  "detail": {
+    "requested_source": "amazingdata",
+    "effective_source": "amazingdata",
+    "latest_failure": {
+      "code": "DATA_SOURCE_EMPTY"
+    }
+  }
 }
 ```
 

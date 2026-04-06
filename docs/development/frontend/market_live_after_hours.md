@@ -68,8 +68,13 @@
 - 对 `/api/market/live/*` 的响应结构补充：
   - 统一字段：`retrieved_at`、`asOf`（或 `as_of` 兼容）、`stale`（bool）、`data_source`、`cache: { cachedAt, expiresAt }`、
       `phase_state`（可选）。
+  - 诊断字段：`detail.requested_source`、`detail.effective_source`、`detail.latest_failure`、`detail.stage_timings`。
   - 当缓存缺失：尝试 `refresh_market_data_once`；若仍无数据，返回 `items: []` + `stale: true` + `phase_state` +
       `detail:{code:'DATA_SOURCE_OFFLINE'}`，HTTP 仍返回 200（便于前端一致处理）。
+- `source` 语义：
+  - `source=auto`：允许按模块 fallback 策略降级（例如 `amazingdata -> akshare`）。
+  - 显式 `source=amazingdata`：严格不串源，不跨源 cache probe，仅返回 AmazingData 实时结果或 AmazingData 最近成功快照。
+- 新增接口：`GET /api/market/live/board-drivers`，用于板块详情抽屉的成分股驱动明细与覆盖率展示。
 - 示例（strength）：
 
   ```json
@@ -112,6 +117,11 @@
   - `allow_stale_return: true`（默认开）；
   - `fallback_on_off_day: true`（休市也允许展示最后快照）；
   - `fallback_provider: ['akshare']`（回退顺序覆盖）。
+  - 当前仓库默认配置约定：
+    - `settings.dev.yaml` 与 `settings.template.yaml` 中，`strength`、`board_overview` 默认开启 `enable_auto_fallback: true`；
+    - `board_overview` 的 `akshare` fallback 覆盖 `off_day + no_trade`；
+    - `strength_ttl` 统一提升为 `86400` 秒，用于跨重启保留盘后“最后快照”；
+    - 当主源在线但返回空结果时，后端按 `DATA_SOURCE_EMPTY` 参与自动回退判定，而不是直接留空表。
 
 ## 前端实现要点
 
@@ -121,6 +131,11 @@
   - 顶部状态条组件（PhaseBadge + FreshnessTag + AsOf 显示）。
   - `items.length===0 && stale===true` 时展示“盘后最后快照为空”的友好提示，而非报错。
   - 自动刷新：依据 `phase_state` 调整刷新间隔。
+- `src/pages/dashboard` / 实时总览：
+  - 保留现有页面结构；
+  - 增加链路诊断条（请求源/生效源/最近失败码）；
+  - 对 `stale:true + items:[]` 使用“暂无盘后快照，可稍后重试或切换数据源”的空态文案，不再把这种场景视为故障。
+  - 新增“板块详情抽屉”，展示 `board-drivers` 明细和覆盖率，不再只给静态榜单。
 - 可选新增：`/market/daily` 页面与路由；日期选择器；“今日/历史”切换。
 
 ## 监控与埋点
