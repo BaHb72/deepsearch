@@ -13,6 +13,7 @@ Dask 初始化状态管理模块
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -383,21 +384,32 @@ class DaskInitStateManager:
         # 关键步骤：等待 Plugin 在 Worker 上完成 setup
         try:
             from core.compute.dask_worker_manager import get_dask_worker_manager
+            from core.config import get_config
 
             worker_manager = await get_dask_worker_manager()
+            wait_timeout = 60.0
+            try:
+                cfg = get_config()
+                timeouts_cfg = getattr(cfg, "timeouts", None)
+                dask_timeout_cfg = getattr(timeouts_cfg, "dask", None) if timeouts_cfg else None
+                if dask_timeout_cfg is not None:
+                    wait_timeout = float(getattr(dask_timeout_cfg, "amazingdata_init", 60.0))
+            except Exception:
+                pass
             self._logger.info("等待 AmazingData Plugin 就绪...")
 
             plugin_ready = await worker_manager.wait_amazingdata_plugin_ready(
-                timeout=60.0,
+                timeout=wait_timeout,
             )
 
             if not plugin_ready:
-                self._amazingdata_status.error = "Plugin 就绪超时"
-                self._logger.warning("AmazingData Plugin 未就绪（超时 60s），跳过代理注册")
-                self._amazingdata_ready_event.set()  # 通知等待者
-                return
-
-            self._logger.info("AmazingData Plugin 已就绪，开始注册代理...")
+                self._amazingdata_status.error = "Plugin 就绪等待失败"
+                self._logger.warning(
+                    "AmazingData Plugin 未就绪（等待 {:.1f}s），继续尝试通过 Redis 就绪标记注册代理",
+                    wait_timeout,
+                )
+            else:
+                self._logger.info("AmazingData Plugin 已就绪，开始注册代理...")
             self._message = "注册 AmazingData 代理..."
 
         except Exception as e:
@@ -470,16 +482,35 @@ class DaskInitStateManager:
                 first_call_timeout=amazingdata_first_call_timeout,
             )
 
-            # 从 Redis key 获取 Worker 地址（格式: "ready:tcp://localhost:58200"）
-            ready_value = await redis_client.get("dask_actor_ready:amazingdata")
-            worker_address = "tcp://localhost:58200"  # fallback
-            if ready_value and ":" in ready_value:
-                # 解析 "ready:tcp://localhost:58200"
-                parts = ready_value.split(":", 1)
-                if len(parts) == 2 and parts[1].startswith("tcp://"):
-                    worker_address = parts[1]
-                elif ready_value.startswith("ready:"):
-                    worker_address = ready_value[len("ready:") :]
+            actor_ready_wait = max(15.0, float(amazingdata_first_call_timeout))
+            if timeouts_cfg and getattr(timeouts_cfg, "dask", None) is not None:
+                actor_ready_wait = max(
+                    actor_ready_wait,
+                    float(getattr(timeouts_cfg.dask, "amazingdata_init", actor_ready_wait)),
+                )
+
+            # 从 Redis key 等待 Worker 地址（格式: "ready:tcp://localhost:58200"）
+            worker_address = await self._wait_for_actor_ready_marker(
+                redis_client,
+                timeout_seconds=actor_ready_wait,
+            )
+
+            if not worker_address:
+                self._amazingdata_status.error = "Actor 就绪标记缺失"
+                self._logger.warning(
+                    "AmazingData Actor 就绪标记缺失，跳过代理注册 | timeout={:.1f}s",
+                    actor_ready_wait,
+                )
+                try:
+                    close_async = getattr(redis_client, "aclose", None)
+                    if callable(close_async):
+                        await close_async()
+                    else:
+                        redis_client.close()
+                except Exception as close_exc:
+                    self._logger.debug("关闭 AmazingData Redis 客户端失败: {}", close_exc)
+                self._amazingdata_ready_event.set()
+                return
             adapter._windows_worker = worker_address
             adapter._actor_available = True
             adapter._initialized = True
@@ -488,6 +519,7 @@ class DaskInitStateManager:
             self._amazingdata_adapter = adapter
             app.state.amazingdata_redis_client = redis_client
             self._amazingdata_status.ready = True
+            self._amazingdata_status.error = None
             self._amazingdata_status.ready_at = datetime.now()
             self._amazingdata_ready_event.set()
             self._logger.info(
@@ -496,7 +528,50 @@ class DaskInitStateManager:
 
         except Exception as e:
             self._amazingdata_status.error = str(e)
+            self._amazingdata_ready_event.set()
             self._logger.warning(f"注册 AmazingData 代理失败: {e}")
+
+    @staticmethod
+    def _extract_worker_address(ready_value: Any) -> str | None:
+        if isinstance(ready_value, (bytes, bytearray, memoryview)):
+            ready_text = bytes(ready_value).decode("utf-8", errors="ignore").strip()
+        else:
+            ready_text = str(ready_value or "").strip()
+        marker_index = ready_text.find("tcp://")
+        if marker_index < 0:
+            return None
+        return ready_text[marker_index:] or None
+
+    async def _wait_for_actor_ready_marker(
+        self,
+        redis_client: Any,
+        *,
+        timeout_seconds: float,
+    ) -> str | None:
+        """轮询 Redis 就绪标记，避免 Actor 刚完成 setup 即被判定缺失。"""
+        deadline = time.monotonic() + max(0.1, timeout_seconds)
+        last_value: Any = None
+        while time.monotonic() < deadline:
+            try:
+                last_value = await redis_client.get("dask_actor_ready:amazingdata")
+            except Exception as exc:
+                self._logger.debug("读取 dask_actor_ready:amazingdata 失败: {}", exc)
+                last_value = None
+            worker_address = self._extract_worker_address(last_value)
+            if worker_address:
+                return worker_address
+
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            await asyncio.sleep(min(0.5, remaining))
+
+        self._logger.warning(
+            "等待 AmazingData Actor 就绪标记超时 ({:.1f}s) last_value={!r}",
+            timeout_seconds,
+            last_value,
+        )
+        return None
 
     async def _finalize_status(self) -> None:
         """确定最终初始化状态"""

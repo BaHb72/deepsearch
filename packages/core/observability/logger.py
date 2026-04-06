@@ -785,6 +785,19 @@ class LoggerManager:
 
         self._logging_bridge_installed = True
 
+    @staticmethod
+    def _safe_stderr_sink(message: str) -> None:
+        """Best-effort console sink that tolerates interpreter shutdown."""
+
+        stream = sys.stderr
+        if stream is None or getattr(stream, "closed", False):
+            return
+        try:
+            stream.write(message)
+        except (OSError, ValueError):
+            # During process teardown, stderr may already be closed.
+            return
+
     def _teardown_stdlib_bridge(self) -> None:
         """Reset stdlib logging handlers when stopping"""
 
@@ -814,7 +827,7 @@ class LoggerManager:
         )
 
         logger.add(
-            sys.stderr,
+            self._safe_stderr_sink,
             format=self._format_console,
             level=self.log_level,
             colorize=True,
@@ -841,7 +854,7 @@ class LoggerManager:
             self._ensure_datasource_sink(datasource_name)
 
         self._started = True
-        self.get_logger("observability").info("logging system started")
+        self.get_logger("observability").info(f"logging system started | log_dir={self.log_path}")
 
     def stop(self) -> None:
         """Stop the logging system"""

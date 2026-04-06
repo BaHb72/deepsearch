@@ -1,5 +1,7 @@
 """日志管理器格式化逻辑单元测试"""
 
+import io
+import sys
 from datetime import datetime
 from types import SimpleNamespace
 
@@ -58,3 +60,24 @@ def test_format_console_uses_translated_module(tmp_path):
     assert "c.i.p.akshare:42" in formatted
     assert "文件=" not in formatted
     assert "demo.py:42" not in formatted
+
+
+def test_safe_stderr_sink_writes_when_stream_open(monkeypatch):
+    """stderr 可用时应正常写入"""
+
+    stream = io.StringIO()
+    monkeypatch.setattr(sys, "stderr", stream)
+
+    logger_manager._safe_stderr_sink("hello")
+
+    assert stream.getvalue() == "hello"
+
+
+def test_safe_stderr_sink_ignores_closed_stream(monkeypatch):
+    """stderr 已关闭时应静默忽略"""
+
+    closed_stream = io.StringIO()
+    closed_stream.close()
+    monkeypatch.setattr(sys, "stderr", closed_stream)
+
+    logger_manager._safe_stderr_sink("ignored")
