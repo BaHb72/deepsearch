@@ -107,9 +107,23 @@ class Settings(BaseSettings):
         )
         return {}
 
+    @staticmethod
+    def _project_root() -> Path:
+        """返回仓库根目录路径。"""
+        return Path(__file__).resolve().parents[3]
+
+    def _resolve_runtime_path(self, raw_path: str) -> Path:
+        """将配置中的路径解析为运行时绝对路径。"""
+        candidate = Path(raw_path).expanduser()
+        if candidate.is_absolute():
+            return candidate
+        return (self._project_root() / candidate).resolve()
+
     @property
     def log_dir(self) -> Path:
         """获取日志目录路径。"""
+        if self.log and self.log.directory:
+            return self._resolve_runtime_path(self.log.directory)
         return cast(Path, LOG_DIR)
 
     model_config = SettingsConfigDict(

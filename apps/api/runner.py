@@ -22,12 +22,15 @@ if sys.platform == "win32":
 
 import asyncio
 import atexit
+import json
 import os
 import signal
 import subprocess  # nosec B404
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from ipaddress import ip_address
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -89,6 +92,8 @@ class WebUIRunner:
         # 运行状态
         self._running = False
         self._shutdown_event = asyncio.Event()
+        self._backend_ready_timeout_seconds = 45.0
+        self._backend_ready_probe_interval_seconds = 0.5
 
     def start_engine(self, infrastructure_only: bool = True) -> bool:
         """
@@ -174,6 +179,9 @@ class WebUIRunner:
             print(f"启动前端服务 (端口: {self.frontend_port})...")
             env = os.environ.copy()
             env["PORT"] = str(self.frontend_port)
+            backend_host = self._backend_display_host()
+            env["VITE_PROXY_TARGET"] = f"http://{backend_host}:{self.backend_port}"
+            env["VITE_WS_PROXY_TARGET"] = f"ws://{backend_host}:{self.backend_port}"
 
             if sys.platform == "win32":
                 self.frontend_process = subprocess.Popen(
@@ -306,6 +314,14 @@ class WebUIRunner:
                 )
                 display_host = self._backend_display_host()
                 print(f"[OK] Backend service started: http://{display_host}:{self.backend_port}")
+                ready = await self._wait_backend_ready()
+                if not ready:
+                    raise RuntimeError(
+                        f"后端在 {self._backend_ready_timeout_seconds:.0f}s 内未就绪，已停止前端启动。"
+                    )
+
+                if self.start_frontend and not self._start_frontend_server():
+                    raise RuntimeError("前端服务启动失败")
 
             # 自动打开浏览器
             if self.auto_open_browser:
@@ -338,11 +354,7 @@ class WebUIRunner:
         self._setup_signal_handlers()
 
         try:
-            # 启动前端（如果需要）
-            if self.start_frontend:
-                self._start_frontend_server()
-
-            # 运行后端服务器
+            # 运行后端服务器；后端就绪后再启动前端
             asyncio.run(self._run_backend_server())
 
         except KeyboardInterrupt:
@@ -395,6 +407,63 @@ class WebUIRunner:
         if ip_obj.is_unspecified:
             return "127.0.0.1"
         return str(ip_obj)
+
+    def _backend_status_probe_url(self) -> str:
+        display_host = self._backend_display_host()
+        return f"http://{display_host}:{self.backend_port}/api/system/status"
+
+    def _probe_backend_ready_once(self) -> tuple[bool, str]:
+        url = self._backend_status_probe_url()
+        try:
+            with urllib.request.urlopen(url, timeout=2.0) as response:
+                if response.status != 200:
+                    return False, f"http-{response.status}"
+                payload_bytes = response.read()
+                if not payload_bytes:
+                    return True, "ok-empty"
+                payload = json.loads(payload_bytes.decode("utf-8", errors="ignore"))
+                if isinstance(payload, dict) and payload.get("ready") is False:
+                    # /api/system/status.ready 表示市场数据链路是否完全就绪，
+                    # 不是后端 HTTP 服务可用性的硬门槛；此处仅要求后端可访问。
+                    return True, "ok-market-not-ready"
+                return True, "ok"
+        except urllib.error.HTTPError as exc:
+            return False, f"http-{exc.code}"
+        except urllib.error.URLError as exc:
+            return False, f"url-error:{exc.reason}"
+        except TimeoutError:
+            return False, "timeout"
+        except Exception as exc:  # pragma: no cover - 防御式兜底
+            return False, f"error:{exc}"
+
+    async def _wait_backend_ready(self) -> bool:
+        timeout = self._backend_ready_timeout_seconds
+        interval = self._backend_ready_probe_interval_seconds
+        started_at = time.monotonic()
+        attempts = 0
+        last_reason = ""
+        probe_url = self._backend_status_probe_url()
+        self.logger.info(f"等待后端就绪: {probe_url} (timeout={timeout:.1f}s)")
+
+        while time.monotonic() - started_at < timeout:
+            attempts += 1
+            ready, reason = await asyncio.to_thread(self._probe_backend_ready_once)
+            if ready:
+                elapsed = time.monotonic() - started_at
+                self.logger.info(
+                    f"后端已就绪: {probe_url} (attempts={attempts} elapsed={elapsed:.2f}s)"
+                )
+                return True
+
+            if reason != last_reason:
+                self.logger.debug(f"后端尚未就绪: {probe_url} (reason={reason})")
+                last_reason = reason
+            await asyncio.sleep(interval)
+
+        self.logger.error(
+            f"后端就绪等待超时: {probe_url} (timeout={timeout:.1f}s last_reason={last_reason or 'unknown'})"
+        )
+        return False
 
     def _print_startup_info(self):
         """打印启动信息"""

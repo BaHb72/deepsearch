@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -157,6 +158,7 @@ class TestAmazingDataDaskAdapterCallActor:
         from core.infrastructure.providers.interfaces.base import DataProviderError
 
         adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
+        mock_redis_client.get = AsyncMock(return_value=None)
 
         with pytest.raises(DataProviderError, match="Actor 不可用"):
             await adapter._call_actor("query_kline", code_list=["000001.SZ"])
@@ -296,6 +298,48 @@ class TestAmazingDataDaskAdapterCallActor:
             "tcp://worker2:2233"
         )
 
+    @pytest.mark.asyncio
+    async def test_call_actor_auto_recovers_even_when_initialized_flag_is_false(
+        self, mock_redis_client: MagicMock
+    ) -> None:
+        """测试 _initialized=False 时仍可通过运行时标记自愈。"""
+        from core.infrastructure.providers.implementations.amazingdata.dask_adapter import (
+            AmazingDataDaskAdapter,
+        )
+
+        adapter = AmazingDataDaskAdapter(redis_client=mock_redis_client)
+        adapter._actor_available = False
+        adapter._initialized = False
+        adapter._last_runtime_issue = "Redis 未检测到 AmazingData Actor 心跳/就绪标记"
+        adapter._windows_worker = "tcp://worker1:1234"
+
+        expected_result = [{"symbol": "000001.SZ", "close": 11.11}]
+
+        async def _mock_get(key: str) -> Any:
+            if key in ("dask_actor_heartbeat:amazingdata", "dask_actor_ready:amazingdata"):
+                return "ready:tcp://worker9:9999"
+            if key.startswith("dask_result:"):
+                return json.dumps({"status": "success", "result": expected_result}).encode()
+            return None
+
+        mock_redis_client.get = AsyncMock(side_effect=_mock_get)
+
+        fake_manager = MagicMock()
+        with patch(
+            "core.compute.dask_init_state.get_dask_init_manager_sync",
+            return_value=fake_manager,
+        ):
+            result = await adapter._call_actor("query_kline", code_list=["000001.SZ"])
+
+        assert result == expected_result
+        assert adapter._actor_available is True
+        assert adapter._initialized is True
+        assert adapter._last_runtime_issue is None
+        assert adapter._windows_worker == "tcp://worker9:9999"
+        fake_manager.mark_amazingdata_runtime_recovered.assert_called_once_with(
+            "tcp://worker9:9999"
+        )
+
 
 class TestAmazingDataDaskAdapterDataProviderMethods:
     """DataProvider 接口方法测试"""
@@ -341,6 +385,51 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
         )
 
     @pytest.mark.asyncio
+    async def test_query_snapshot_uses_begin_end_and_method_timeout(
+        self, initialized_adapter: Any
+    ) -> None:
+        """query_snapshot 应统一传 begin_date/end_date，且使用方法级超时预算。"""
+        expected_result = {
+            "000001.SZ": [{"code": "000001.SZ", "last": 10.5}],
+        }
+
+        with patch.object(
+            initialized_adapter, "_call_actor", return_value=expected_result
+        ) as mock_call:
+            result = await initialized_adapter.query_snapshot(
+                code_list=["000001.SZ"],
+                begin_date=20240101,
+                end_date=20240101,
+                begin_time=930,
+                end_time=1500,
+            )
+
+        assert result is not None
+        assert "000001.SZ" in result
+        mock_call.assert_called_once_with(
+            "query_snapshot",
+            timeout_seconds=initialized_adapter._snapshot_timeout,
+            code_list=["000001.SZ"],
+            begin_date=20240101,
+            end_date=20240101,
+            begin_time=930,
+            end_time=1500,
+        )
+
+    @pytest.mark.asyncio
+    async def test_query_snapshot_rejects_invalid_date_range(
+        self, initialized_adapter: Any
+    ) -> None:
+        from core.infrastructure.providers.interfaces.base import DataProviderError
+
+        with pytest.raises(DataProviderError, match="begin_date 不能晚于 end_date"):
+            await initialized_adapter.query_snapshot(
+                code_list=["000001.SZ"],
+                begin_date=20240131,
+                end_date=20240101,
+            )
+
+    @pytest.mark.asyncio
     async def test_get_code_list(self, initialized_adapter: Any) -> None:
         """测试 get_code_list 接口"""
         expected_result = ["000001.SZ", "000002.SZ", "600000.SH"]
@@ -377,7 +466,12 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
         ) as mock_call:
             result = await initialized_adapter.get_stock_list(market="SZ", limit=1)
 
-        assert result == [{"symbol": "000001.SZ", "name": ""}]
+        assert len(result) == 1
+        first = result[0]
+        assert first["symbol"] == "000001.SZ"
+        assert first["name"] == ""
+        assert first["board"] == "主板"
+        assert first["LISTPLATE_NAME"] == "主板"
         mock_call.assert_called_once_with("get_code_list", security_type="EXTRA_STOCK_A")
 
     @pytest.mark.asyncio
@@ -419,6 +513,106 @@ class TestAmazingDataDaskAdapterDataProviderMethods:
             local_path="D:/tmp/amazingdata",
             is_local=True,
         )
+
+    @pytest.mark.asyncio
+    async def test_subscribe_stock_snapshot_compatibility(self, initialized_adapter: Any) -> None:
+        """测试 Dask 适配器暴露 subscribe_stock_snapshot 兼容接口。"""
+
+        async def _noop_callback(_payload: dict[str, Any]) -> None:
+            return None
+
+        result = await initialized_adapter.subscribe_stock_snapshot(
+            ["000001.SZ", "600000.SH"],
+            _noop_callback,
+        )
+
+        assert result is True
+        assert "000001.SZ" in initialized_adapter._subscribed_symbols
+        assert "600000.SH" in initialized_adapter._subscribed_symbols
+
+    @pytest.mark.asyncio
+    async def test_get_realtime_quote_from_query_snapshot(self, initialized_adapter: Any) -> None:
+        """测试 get_realtime_quote 可基于 query_snapshot 结果构造行情。"""
+        today = int(datetime.now().strftime("%Y%m%d"))
+        snapshot_payload = {
+            "000001.SZ": pd.DataFrame(
+                [
+                    {
+                        "code": "000001.SZ",
+                        "trade_time": "2026-03-25 14:59:58",
+                        "last": 10.8,
+                        "open": 10.1,
+                        "high": 11.0,
+                        "low": 9.9,
+                        "pre_close": 10.0,
+                        "amount": 123456.0,
+                        "volume": 7890,
+                    }
+                ]
+            )
+        }
+
+        with patch.object(initialized_adapter, "_current_date_yyyymmdd", return_value=today):
+            with patch.object(initialized_adapter, "get_calendar", return_value=[today]):
+                with patch.object(
+                    initialized_adapter,
+                    "query_snapshot",
+                    return_value=snapshot_payload,
+                ) as mock_query:
+                    result = await initialized_adapter.get_realtime_quote(["000001.SZ"])
+
+        assert "000001.SZ" in result
+        quote = result["000001.SZ"]
+        assert quote["symbol"] == "000001.SZ"
+        assert quote["last"] == pytest.approx(10.8)
+        assert quote["volume"] == 7890
+        mock_query.assert_awaited_once_with(
+            code_list=["000001.SZ"],
+            begin_date=today,
+            end_date=today,
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_realtime_quote_fallback_to_previous_trade_day(
+        self, initialized_adapter: Any
+    ) -> None:
+        """测试当今日快照为空时会回退到上一交易日。"""
+        today = 20260325
+        prev_trade_day = 20260324
+        prev_payload = {
+            "000001.SZ": pd.DataFrame(
+                [
+                    {
+                        "code": "000001.SZ",
+                        "trade_time": "2026-03-24 14:59:58",
+                        "last": 10.5,
+                        "close": 10.4,
+                        "volume": 6000,
+                    }
+                ]
+            )
+        }
+
+        with patch.object(initialized_adapter, "_current_date_yyyymmdd", return_value=today):
+            with patch.object(
+                initialized_adapter, "get_calendar", return_value=[prev_trade_day, today]
+            ):
+                with patch.object(
+                    initialized_adapter,
+                    "query_snapshot",
+                    side_effect=[{}, prev_payload],
+                ) as mock_query:
+                    result = await initialized_adapter.get_realtime_quote(["000001.SZ"])
+
+        assert "000001.SZ" in result
+        assert result["000001.SZ"]["last"] == pytest.approx(10.5)
+        assert mock_query.await_count == 2
+        first_call = mock_query.await_args_list[0]
+        second_call = mock_query.await_args_list[1]
+        assert first_call.kwargs["begin_date"] == today
+        assert first_call.kwargs["end_date"] == today
+        assert second_call.kwargs["begin_date"] == prev_trade_day
+        assert second_call.kwargs["end_date"] == prev_trade_day
 
 
 class TestAmazingDataDaskAdapterRuntimeMarkers:

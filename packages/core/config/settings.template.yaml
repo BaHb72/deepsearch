@@ -17,6 +17,7 @@ log:
   toFile: true
   toConsole: true
   active: true
+  directory: ${LOG_DIR:./data/logs}
   rotation: "00:00"
   retention_days: ${LOG_RETENTION_DAYS:30}  # 建议生产环境至少30天
   enable_json: ${LOG_JSON:false}  # 生产环境建议开启
@@ -350,6 +351,7 @@ market_data:
     no_trade_timeout_seconds: 1.0
     auction_timeout_seconds: 2.0
     continuous_timeout_seconds: 3.5
+    runtime_board_refresh_timeout_seconds: 45.0
     capital_windows:
       - name: 1m
         duration_seconds: 60
@@ -360,31 +362,55 @@ market_data:
     order_limit: 100
     redis:
       url: redis://localhost:6379/6
-      strength_ttl: 180
+      strength_ttl: 86400
       imbalance_ttl: 180
       auction_ttl: 180
       max_strength_entries: 50
   modules:
     strength:
       primary: amazingdata
+      enable_auto_fallback: true
       fallbacks:
+        - source: miniqmt
+          phases:
+            - off_day
+            - no_trade
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+            - DATA_SOURCE_EMPTY
+            - SESSION_EXPIRED
+          cache_ttl_seconds: 90
+          min_interval_seconds: 15
         - source: akshare
           phases:
             - off_day
             - no_trade
           trigger_errors:
             - DATA_SOURCE_OFFLINE
+            - DATA_SOURCE_EMPTY
             - SESSION_EXPIRED
           cache_ttl_seconds: 90
           min_interval_seconds: 15
     board_overview:
       primary: amazingdata
+      enable_auto_fallback: true
       fallbacks:
+        - source: miniqmt
+          phases:
+            - off_day
+            - no_trade
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+            - DATA_SOURCE_EMPTY
+          cache_ttl_seconds: 120
+          min_interval_seconds: 30
         - source: akshare
           phases:
             - off_day
+            - no_trade
           trigger_errors:
             - DATA_SOURCE_OFFLINE
+            - DATA_SOURCE_EMPTY
           cache_ttl_seconds: 120
           min_interval_seconds: 30
     order_imbalance:

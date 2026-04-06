@@ -374,22 +374,8 @@ async def ensure_market_data_runtime(
             except Exception as exc:  # pragma: no cover - defensive logging
                 logger.warning("初始化 fallback 管理器失败: {}", exc)
 
-        # 如果 fallback 顺序包含 amazingdata，等待 Dask 就绪
-        ds_cfg = getattr(config_obj, "data_sources", None)
-        fallback_order = getattr(ds_cfg, "fallback_order", []) if ds_cfg else []
-        if "amazingdata" in fallback_order:
-            from core.compute.dask_init_state import get_dask_init_manager_sync
-
-            dask_manager = get_dask_init_manager_sync()
-            if dask_manager and not dask_manager.amazingdata_ready:
-                logger.info("等待 AmazingData Dask 代理初始化...")
-                timeouts_cfg = getattr(config_obj, "timeouts", None)
-                init_timeout = timeouts_cfg.dask.amazingdata_init if timeouts_cfg else 60.0
-                ready = await dask_manager.wait_amazingdata_ready(timeout=init_timeout)
-                if ready:
-                    logger.info("AmazingData Dask 代理已就绪")
-                else:
-                    logger.warning("AmazingData 初始化超时，将使用其他数据源")
+        # Dask/AmazingData 预热由 server.lifespan 启动期负责；
+        # 此处仅负责确保实时运行态句柄已绑定。
 
         try:
             handle = await orchestrator.ensure_handle()
@@ -520,6 +506,20 @@ async def shutdown_market_data_runtime(app_state: "AppState") -> None:
     app_state.market_data_handle = None
     app_state.market_data_active_source = None
     app_state.market_data_health = {}
+    fallback_manager = getattr(app_state, "market_data_fallback_manager", None)
+    if fallback_manager is not None:
+        try:
+            fallback_timeout = _shutdown.provider_stop if _shutdown else 5.0
+            await asyncio.wait_for(fallback_manager.shutdown(), timeout=fallback_timeout)
+        except asyncio.TimeoutError:
+            logger.warning("关闭 fallback 管理器超时")
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug("关闭 fallback 管理器失败: {}", exc)
+    app_state.market_data_fallback_manager = None
+    backend_runtime = getattr(app_state, "backend_runtime", None)
+    if backend_runtime is not None:
+        backend_runtime.market_data_fallback_manager = None
+
     orchestrator = getattr(app_state, "market_data_orchestrator", None)
     if orchestrator is not None:
         try:

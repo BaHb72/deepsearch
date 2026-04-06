@@ -247,3 +247,8 @@ def run_async_engine(mode: str = "full", config: Optional[Mapping[str, Any]] = N
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n正在关闭...")
+    finally:
+        try:
+            process_manager.shutdown(timeout=10.0, force=(sys.platform == "win32"))
+        except Exception as exc:
+            get_logger(__name__).warning(f"退出阶段清理受管资源失败: {exc}")

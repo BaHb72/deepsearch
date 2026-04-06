@@ -119,6 +119,7 @@ class HealthCheckManager:
             return RedisHealthChecker(
                 latency_threshold_ms=self._config.redis_latency_threshold_ms,
                 latency_samples=self._config.redis_latency_samples,
+                consecutive_degraded=self._config.redis_latency_consecutive_degraded,
             )
 
         checker_factories: Dict[str, Callable[[], HealthChecker]] = {

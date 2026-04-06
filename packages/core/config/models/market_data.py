@@ -160,6 +160,10 @@ class MarketModuleConfig(BaseModel):
     """Module-level configuration describing primary and fallback sources."""
 
     primary: str = Field(..., min_length=1, description="Primary realtime data source")
+    enable_auto_fallback: bool = Field(
+        default=False,
+        description="Enable automatic fallback source switching when module data is empty/offline",
+    )
     fallbacks: List[MarketModuleFallbackConfig] = Field(
         default_factory=list,
         description="Fallback data sources available to this module",

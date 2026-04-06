@@ -297,10 +297,21 @@ market_data:
           min_interval_seconds: 30
           phases:
             - off_day
+            - no_trade
+          source: miniqmt
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+            - DATA_SOURCE_EMPTY
+        - cache_ttl_seconds: 120
+          min_interval_seconds: 30
+          phases:
+            - off_day
+            - no_trade
           source: akshare
           trigger_errors:
             - DATA_SOURCE_OFFLINE
-      primary: miniqmt
+            - DATA_SOURCE_EMPTY
+      primary: amazingdata
     order_imbalance:
       fallbacks:
         - cache_ttl_seconds: 60
@@ -319,11 +330,22 @@ market_data:
           phases:
             - off_day
             - no_trade
+          source: miniqmt
+          trigger_errors:
+            - DATA_SOURCE_OFFLINE
+            - DATA_SOURCE_EMPTY
+            - SESSION_EXPIRED
+        - cache_ttl_seconds: 90
+          min_interval_seconds: 15
+          phases:
+            - off_day
+            - no_trade
           source: akshare
           trigger_errors:
             - DATA_SOURCE_OFFLINE
+            - DATA_SOURCE_EMPTY
             - SESSION_EXPIRED
-      primary: miniqmt
+      primary: amazingdata
   realtime:
     auction_interval_seconds: 1.0
     auction_timeout_seconds: 2.0

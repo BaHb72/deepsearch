@@ -42,6 +42,8 @@ if TYPE_CHECKING:
 _ACTOR_ID = "AMAZINGDATA_ACTOR"
 _SOURCE_NAME = "amazingdata"
 _SDK_TIMEOUT_SECONDS = 30.0
+_HEAVY_METHOD_TIMEOUT_SECONDS = 90.0
+_MEDIUM_METHOD_TIMEOUT_SECONDS = 60.0
 
 _T = TypeVar("_T")
 
@@ -1162,6 +1164,24 @@ class AmazingDataActor:
             )
             return self._info_data
 
+    @staticmethod
+    def _resolve_method_timeout(method: str, params: dict[str, Any]) -> float:
+        """按方法与入参规模动态选择 SDK 超时预算。"""
+        normalized_method = (method or "").strip().lower()
+        if normalized_method == "query_snapshot":
+            code_count = 0
+            codes = params.get("code_list")
+            if isinstance(codes, (list, tuple, set)):
+                code_count = len(codes)
+            if code_count >= 240:
+                return _HEAVY_METHOD_TIMEOUT_SECONDS
+            if code_count >= 80:
+                return _MEDIUM_METHOD_TIMEOUT_SECONDS
+            return max(45.0, _SDK_TIMEOUT_SECONDS)
+        if normalized_method in {"query_kline", "get_code_list"}:
+            return _MEDIUM_METHOD_TIMEOUT_SECONDS
+        return _SDK_TIMEOUT_SECONDS
+
     async def _call_sdk_method(self, sdk_obj: Any, method: str, params: dict[str, Any]) -> Any:
         """调用 SDK 方法（带超时保护）
 
@@ -1176,11 +1196,14 @@ class AmazingDataActor:
         func = getattr(sdk_obj, method, None)
         if func is None:
             raise ValueError(f"Method '{method}' not found on SDK object")
+        timeout_budget = self._resolve_method_timeout(method, params)
 
         try:
             # 优先使用关键字参数调用（大多数 SDK 方法支持）
             return await self._run_sdk_with_timeout(
-                lambda: func(**params), f"{sdk_obj.__class__.__name__}.{method}"
+                lambda: func(**params),
+                f"{sdk_obj.__class__.__name__}.{method}",
+                timeout=timeout_budget,
             )
         except TypeError as exc:
             # 某些 SDK 方法仅支持位置参数（不接受关键字参数），做一次兼容回退
@@ -1199,6 +1222,7 @@ class AmazingDataActor:
             return await self._run_sdk_with_timeout(
                 lambda: func(*positional_args),
                 f"{sdk_obj.__class__.__name__}.{method}(positional)",
+                timeout=timeout_budget,
             )
 
     async def _run_sdk_with_timeout(

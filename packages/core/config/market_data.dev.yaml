@@ -9,6 +9,7 @@ market_data:
     warmup_timeout_seconds: 600.0  # 总超时 10 分钟
     warmup_fetch_timeout_seconds: 400.0  # 单次超时 6.5 分钟
     warmup_retry_count: 2  # 允许 2 次重试
+    runtime_board_refresh_timeout_seconds: 45.0  # 运行时按需补齐板块映射超时
     auction_interval_seconds: 5.0
     auction_timeout_seconds: 3.0
     boards:
@@ -43,7 +44,7 @@ market_data:
       auction_ttl: 180
       imbalance_ttl: 180
       max_strength_entries: 50
-      strength_ttl: 180
+      strength_ttl: 86400
       url: redis://localhost:6379/6
     request_timeout_seconds: 3.0
 
@@ -109,16 +110,16 @@ capability_routing:
     kline:
       scenarios:
         realtime:
-          priority: [miniqmt, amazingdata]
+          priority: [amazingdata, miniqmt]
           fallback: true
         historical:
           priority: [amazingdata, akshare]  # AmazingData 优先，AkShare 作为 fallback
           fallback: true
       by_timeframe:
-        "1m": [miniqmt, amazingdata]
-        "5m": [miniqmt, amazingdata]
+        "1m": [amazingdata, miniqmt]
+        "5m": [amazingdata, miniqmt]
         "1d": [amazingdata, akshare]  # AmazingData 优先，AkShare 作为 fallback
-      priority: [miniqmt, amazingdata, akshare]
+      priority: [amazingdata, miniqmt, akshare]
       fallback: true
 
     realtime_quote:
@@ -130,5 +131,5 @@ capability_routing:
       fallback: false
 
     stock_list:
-      priority: [miniqmt, amazingdata, akshare]  # 增加 miniqmt 和 amazingdata，AkShare 作为最后 fallback
+      priority: [amazingdata, miniqmt, akshare]  # AmazingData 优先，AkShare 作为最后 fallback
       cache_ttl: 86400

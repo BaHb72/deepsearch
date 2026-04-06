@@ -161,3 +161,179 @@ async def test_probe_adapters_reports_status(monkeypatch):
     assert results["primary"]["status"] == "failed"
     assert results["backup"]["status"] == "healthy"
     assert teardown_calls == ["backup"]
+
+
+@pytest.mark.asyncio
+async def test_adapter_calendar_loader_fallbacks_to_amazingdata_for_miniqmt():
+    specs = [RealtimeAdapterSpec(name="miniqmt", driver="miniqmt", priority=1)]
+
+    class DummyAmazingDataProvider:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        async def get_calendar(self, data_type: str = "int", market: str = "SH"):
+            self.calls.append((data_type, market))
+            return [20250303, 20250304]
+
+    class DummyProviderContainer:
+        def __init__(self, provider: DummyAmazingDataProvider) -> None:
+            self.provider = provider
+
+        def has(self, name: str) -> bool:
+            return name == "amazingdata"
+
+        async def get(self, name: str):
+            if name != "amazingdata":
+                raise RuntimeError("unexpected provider name")
+            return self.provider
+
+    class DummyMiniQMTAdapter:
+        name = "miniqmt"
+        capabilities = RealtimeAdapterCapabilities(streaming=True)
+
+        async def get_calendar(self, market: str):
+            raise RuntimeError(f"miniqmt unavailable: {market}")
+
+    amazing_provider = DummyAmazingDataProvider()
+    orchestrator = RealtimeDataOrchestrator(
+        _build_settings(specs),
+        provider_container=DummyProviderContainer(amazing_provider),
+    )
+
+    calendar_loader = orchestrator._build_adapter_calendar_loader(DummyMiniQMTAdapter())
+    result = await calendar_loader("SH_MAIN")
+
+    assert tuple(result) == (20250303, 20250304)
+    assert amazing_provider.calls == [("int", "SH")]
+
+
+@pytest.mark.asyncio
+async def test_adapter_calendar_loader_prefers_adapter_calendar_before_fallback():
+    specs = [RealtimeAdapterSpec(name="miniqmt", driver="miniqmt", priority=1)]
+
+    class DummyAmazingDataProvider:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        async def get_calendar(self, data_type: str = "int", market: str = "SH"):
+            self.calls.append((data_type, market))
+            return [20250101]
+
+    class DummyProviderContainer:
+        def __init__(self, provider: DummyAmazingDataProvider) -> None:
+            self.provider = provider
+
+        def has(self, name: str) -> bool:
+            return name == "amazingdata"
+
+        async def get(self, name: str):
+            if name != "amazingdata":
+                raise RuntimeError("unexpected provider name")
+            return self.provider
+
+    class DummyMiniQMTAdapter:
+        name = "miniqmt"
+        capabilities = RealtimeAdapterCapabilities(streaming=True)
+
+        async def get_calendar(self, market: str):
+            return [20251231]
+
+    amazing_provider = DummyAmazingDataProvider()
+    orchestrator = RealtimeDataOrchestrator(
+        _build_settings(specs),
+        provider_container=DummyProviderContainer(amazing_provider),
+    )
+
+    calendar_loader = orchestrator._build_adapter_calendar_loader(DummyMiniQMTAdapter())
+    result = await calendar_loader("SH")
+
+    assert tuple(result) == (20251231,)
+    assert amazing_provider.calls == []
+
+
+@pytest.mark.asyncio
+async def test_adapter_calendar_loader_uses_dask_amazingdata_when_container_missing(monkeypatch):
+    specs = [RealtimeAdapterSpec(name="miniqmt", driver="miniqmt", priority=1)]
+
+    class DummyAmazingDataProvider:
+        async def get_calendar(self, data_type: str = "int", market: str = "SH"):
+            return [20260105]
+
+    class DummyProviderContainer:
+        def has(self, name: str) -> bool:
+            return False
+
+        async def get(self, name: str):
+            raise RuntimeError("should not call provider_container.get when has() is false")
+
+    class DummyMiniQMTAdapter:
+        name = "miniqmt"
+        capabilities = RealtimeAdapterCapabilities(streaming=True)
+
+        async def get_calendar(self, market: str):
+            return []
+
+    orchestrator = RealtimeDataOrchestrator(
+        _build_settings(specs),
+        provider_container=DummyProviderContainer(),
+    )
+    monkeypatch.setattr(
+        RealtimeDataOrchestrator,
+        "_resolve_dask_amazingdata_adapter",
+        staticmethod(lambda: DummyAmazingDataProvider()),
+    )
+    calendar_loader = orchestrator._build_adapter_calendar_loader(DummyMiniQMTAdapter())
+    result = await calendar_loader("SZ_MAIN")
+
+    assert tuple(result) == (20260105,)
+
+
+@pytest.mark.asyncio
+async def test_adapter_calendar_loader_falls_back_to_akshare_when_amazingdata_unavailable():
+    specs = [RealtimeAdapterSpec(name="miniqmt", driver="miniqmt", priority=1)]
+
+    class DummyAmazingDataProvider:
+        async def get_calendar(self, data_type: str = "int", market: str = "SH"):
+            raise RuntimeError("actor unavailable")
+
+    class DummyAkshareProvider:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, str]] = []
+
+        async def get_calendar(self, market: str = "SH"):
+            self.calls.append({"market": market})
+            return [20260327, "20260328"]
+
+    class DummyProviderContainer:
+        def __init__(self) -> None:
+            self.amazingdata = DummyAmazingDataProvider()
+            self.akshare = DummyAkshareProvider()
+
+        def has(self, name: str) -> bool:
+            return name in {"amazingdata", "akshare"}
+
+        async def get(self, name: str):
+            if name == "amazingdata":
+                return self.amazingdata
+            if name == "akshare":
+                return self.akshare
+            raise RuntimeError(f"unexpected provider name: {name}")
+
+    class DummyMiniQMTAdapter:
+        name = "miniqmt"
+        capabilities = RealtimeAdapterCapabilities(streaming=True)
+
+        async def get_calendar(self, market: str):
+            return []
+
+    container = DummyProviderContainer()
+    orchestrator = RealtimeDataOrchestrator(
+        _build_settings(specs),
+        provider_container=container,
+    )
+
+    calendar_loader = orchestrator._build_adapter_calendar_loader(DummyMiniQMTAdapter())
+    result = await calendar_loader("SH_MAIN")
+
+    assert tuple(result) == (20260327, 20260328)
+    assert container.akshare.calls == [{"market": "SH"}]

@@ -159,11 +159,13 @@ class RedisHealthChecker(HealthChecker):
     # 默认配置
     DEFAULT_LATENCY_THRESHOLD_MS = 50.0
     DEFAULT_LATENCY_SAMPLES = 3
+    DEFAULT_CONSECUTIVE_DEGRADED = 2
 
     def __init__(
         self,
         latency_threshold_ms: float = DEFAULT_LATENCY_THRESHOLD_MS,
         latency_samples: int = DEFAULT_LATENCY_SAMPLES,
+        consecutive_degraded: int = DEFAULT_CONSECUTIVE_DEGRADED,
     ):
         """
         初始化 Redis 健康检查器
@@ -171,15 +173,19 @@ class RedisHealthChecker(HealthChecker):
         Args:
             latency_threshold_ms: 响应延迟阈值（毫秒），超过此值触发 DEGRADED
             latency_samples: 延迟测量采样次数，取中位数以避免偶发毛刺
+            consecutive_degraded: 连续高延迟次数阈值，达到后才判定 DEGRADED
         """
         super().__init__("redis")
         self._latency_threshold_ms = latency_threshold_ms
         self._latency_samples = max(1, min(latency_samples, 10))  # 限制范围 1-10
+        self._consecutive_degraded = max(1, consecutive_degraded)
+        self._high_latency_streak = 0
 
     def configure(
         self,
         latency_threshold_ms: float | None = None,
         latency_samples: int | None = None,
+        consecutive_degraded: int | None = None,
     ) -> None:
         """
         动态配置检查器参数
@@ -187,11 +193,14 @@ class RedisHealthChecker(HealthChecker):
         Args:
             latency_threshold_ms: 响应延迟阈值（毫秒）
             latency_samples: 延迟测量采样次数
+            consecutive_degraded: 连续高延迟次数阈值
         """
         if latency_threshold_ms is not None:
             self._latency_threshold_ms = latency_threshold_ms
         if latency_samples is not None:
             self._latency_samples = max(1, min(latency_samples, 10))
+        if consecutive_degraded is not None:
+            self._consecutive_degraded = max(1, consecutive_degraded)
 
     async def _measure_ping_latency(self) -> float:
         """
@@ -262,10 +271,37 @@ class RedisHealthChecker(HealthChecker):
                 logger.debug(f"Failed to get Redis info: {e}")
                 redis_version = "unknown"
                 connected_clients = 0
+                used_memory = 0
                 used_memory_human = "unknown"
                 memory_usage_percent = 0
 
-            # 构建健康指标
+            # 确定健康状态
+            if ping_time > self._latency_threshold_ms:
+                self._high_latency_streak += 1
+                if self._high_latency_streak >= self._consecutive_degraded:
+                    status = HealthStatus.DEGRADED
+                    message = (
+                        "Redis response time is high "
+                        f"({ping_time:.1f}ms > {self._latency_threshold_ms}ms, "
+                        f"streak={self._high_latency_streak})"
+                    )
+                else:
+                    status = HealthStatus.HEALTHY
+                    message = (
+                        "Redis latency spike observed "
+                        f"({ping_time:.1f}ms > {self._latency_threshold_ms}ms, "
+                        f"streak={self._high_latency_streak}/{self._consecutive_degraded})"
+                    )
+            elif memory_usage_percent > 90:  # 内存使用率超过90%
+                self._high_latency_streak = 0
+                status = HealthStatus.DEGRADED
+                message = "Redis memory usage is high"
+            else:
+                self._high_latency_streak = 0
+                status = HealthStatus.HEALTHY
+                message = "Redis is healthy"
+
+            # 构建健康指标（使用已更新后的 streak）
             metrics = HealthMetrics(
                 response_time_ms=ping_time,
                 memory_usage_mb=used_memory / 1024 / 1024 if used_memory else None,
@@ -273,19 +309,9 @@ class RedisHealthChecker(HealthChecker):
                 custom_metrics={
                     "memory_usage_percent": memory_usage_percent,
                     "version": redis_version,
+                    "high_latency_streak": self._high_latency_streak,
                 },
             )
-
-            # 确定健康状态
-            if ping_time > self._latency_threshold_ms:
-                status = HealthStatus.DEGRADED
-                message = f"Redis response time is high ({ping_time:.1f}ms > {self._latency_threshold_ms}ms)"
-            elif memory_usage_percent > 90:  # 内存使用率超过90%
-                status = HealthStatus.DEGRADED
-                message = "Redis memory usage is high"
-            else:
-                status = HealthStatus.HEALTHY
-                message = "Redis is healthy"
 
             return HealthCheckResult(
                 status=status,

@@ -222,6 +222,7 @@ database:
 # =============================================================================
 log:
   active: true
+  directory: ./data/logs
   archive:
     archive_after_days: 30
     enabled: true
@@ -273,6 +274,7 @@ market_data:
     no_trade_timeout_seconds: 5.0
     off_day_interval_seconds: 120.0
     off_day_timeout_seconds: 5.0
+    runtime_board_refresh_timeout_seconds: 45.0
     order_limit: 100
     order_window:
       duration_seconds: 60
@@ -281,12 +283,13 @@ market_data:
       auction_ttl: 180
       imbalance_ttl: 180
       max_strength_entries: 50
-      strength_ttl: 180
+      strength_ttl: 86400
       url: redis://localhost:6379/6
     request_timeout_seconds: 3.0
   modules:
     auction_quality:
       primary: amazingdata
+      enable_auto_fallback: false
       fallbacks:
         - source: akshare
           phases: [auction, off_day]
@@ -295,14 +298,21 @@ market_data:
           min_interval_seconds: 10
     board_overview:
       primary: amazingdata
+      enable_auto_fallback: true
       fallbacks:
+        - source: miniqmt
+          phases: [off_day, no_trade]
+          trigger_errors: [DATA_SOURCE_OFFLINE, DATA_SOURCE_EMPTY]
+          cache_ttl_seconds: 120
+          min_interval_seconds: 30
         - source: akshare
-          phases: [off_day]
-          trigger_errors: [DATA_SOURCE_OFFLINE]
+          phases: [off_day, no_trade]
+          trigger_errors: [DATA_SOURCE_OFFLINE, DATA_SOURCE_EMPTY]
           cache_ttl_seconds: 120
           min_interval_seconds: 30
     order_imbalance:
       primary: amazingdata
+      enable_auto_fallback: false
       fallbacks:
         - source: akshare
           phases: [off_day, no_trade]
@@ -311,10 +321,16 @@ market_data:
           min_interval_seconds: 15
     strength:
       primary: amazingdata
+      enable_auto_fallback: true
       fallbacks:
+        - source: miniqmt
+          phases: [off_day, no_trade]
+          trigger_errors: [DATA_SOURCE_OFFLINE, DATA_SOURCE_EMPTY, SESSION_EXPIRED]
+          cache_ttl_seconds: 90
+          min_interval_seconds: 15
         - source: akshare
           phases: [off_day, no_trade]
-          trigger_errors: [DATA_SOURCE_OFFLINE, SESSION_EXPIRED]
+          trigger_errors: [DATA_SOURCE_OFFLINE, DATA_SOURCE_EMPTY, SESSION_EXPIRED]
           cache_ttl_seconds: 90
           min_interval_seconds: 15
 

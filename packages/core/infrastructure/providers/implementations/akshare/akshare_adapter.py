@@ -123,6 +123,10 @@ class AkShareAdapter(IAkShareProvider):
         symbol = _pick(_STOCK_SYMBOL_FIELDS)
         if symbol:
             normalized_symbol = str(symbol).strip().upper()
+            if "." in normalized_symbol:
+                normalized_symbol = normalized_symbol.split(".", 1)[0]
+            if normalized_symbol.isdigit():
+                normalized_symbol = normalized_symbol.zfill(6)
             normalized["symbol"] = normalized_symbol
             normalized.setdefault("code", normalized_symbol)
 
@@ -527,30 +531,35 @@ class AkShareAdapter(IAkShareProvider):
     @staticmethod
     def _normalize_stock_list(result: Any) -> List[Dict[str, str]]:
         """将不同来源的股票列表统一转换为字典列表"""
+
+        def _normalize_rows(rows: list[Any]) -> List[Dict[str, str]]:
+            normalized_rows: List[Dict[str, str]] = []
+            for row in rows:
+                if not isinstance(row, Mapping):
+                    continue
+                normalized = AkShareAdapter._normalize_row(cast(Mapping[str, Any], row))
+                # StockListRecord.from_payload 依赖 symbol/code 字段，缺失时应直接丢弃。
+                if not normalized.get("symbol"):
+                    continue
+                normalized_rows.append(cast(Dict[str, str], normalized))
+            return normalized_rows
+
         if result is None:
             return []
         if isinstance(result, pd.DataFrame):
             if result.empty:
                 return []
-            return [
-                AkShareAdapter._normalize_row(cast(Mapping[str, Any], row))
-                for row in result.to_dict(orient="records")
-                if isinstance(row, dict)
-            ]
+            return _normalize_rows(cast(list[Any], result.to_dict(orient="records")))
         if isinstance(result, dict):
             data = result.get("data")
             if isinstance(data, pd.DataFrame):
                 if data.empty:
                     return []
-                return [
-                    AkShareAdapter._normalize_row(cast(Mapping[str, Any], row))
-                    for row in data.to_dict(orient="records")
-                    if isinstance(row, dict)
-                ]
+                return _normalize_rows(cast(list[Any], data.to_dict(orient="records")))
             if isinstance(data, list):
-                return [item for item in data if isinstance(item, dict)]
+                return _normalize_rows(data)
         if isinstance(result, list):
-            return [item for item in result if isinstance(item, dict)]
+            return _normalize_rows(result)
         return []
 
     @staticmethod

@@ -17,15 +17,27 @@ market_data:
         - DATA_SOURCE_OFFLINE
       primary: miniqmt
     board_overview:
+      enable_auto_fallback: true
       fallbacks:
       - cache_ttl_seconds: 120
         min_interval_seconds: 30
         phases:
         - off_day
+        - no_trade
+        source: miniqmt
+        trigger_errors:
+        - DATA_SOURCE_OFFLINE
+        - DATA_SOURCE_EMPTY
+      - cache_ttl_seconds: 120
+        min_interval_seconds: 30
+        phases:
+        - off_day
+        - no_trade
         source: akshare
         trigger_errors:
         - DATA_SOURCE_OFFLINE
-      primary: miniqmt
+        - DATA_SOURCE_EMPTY
+      primary: amazingdata
     order_imbalance:
       fallbacks:
       - cache_ttl_seconds: 60
@@ -38,7 +50,18 @@ market_data:
         - DATA_SOURCE_OFFLINE
       primary: miniqmt
     strength:
+      enable_auto_fallback: true
       fallbacks:
+      - cache_ttl_seconds: 90
+        min_interval_seconds: 15
+        phases:
+        - off_day
+        - no_trade
+        source: miniqmt
+        trigger_errors:
+        - DATA_SOURCE_OFFLINE
+        - DATA_SOURCE_EMPTY
+        - SESSION_EXPIRED
       - cache_ttl_seconds: 90
         min_interval_seconds: 15
         phases:
@@ -47,8 +70,9 @@ market_data:
         source: akshare
         trigger_errors:
         - DATA_SOURCE_OFFLINE
+        - DATA_SOURCE_EMPTY
         - SESSION_EXPIRED
-      primary: miniqmt
+      primary: amazingdata
   realtime:
     auction_interval_seconds: 1.0
     auction_timeout_seconds: 2.0
@@ -80,6 +104,7 @@ market_data:
     no_trade_timeout_seconds: 1.0
     off_day_interval_seconds: 60.0
     off_day_timeout_seconds: 0.5
+    runtime_board_refresh_timeout_seconds: 45.0
     order_limit: 100
     order_window:
       duration_seconds: 60
@@ -88,7 +113,7 @@ market_data:
       auction_ttl: 180
       imbalance_ttl: 180
       max_strength_entries: 50
-      strength_ttl: 180
+      strength_ttl: 86400
       url: redis://localhost:6379/6
     request_timeout_seconds: 3.0
 

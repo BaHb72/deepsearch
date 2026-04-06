@@ -41,6 +41,7 @@ class LogConfig(BaseModel):
     """日志配置。"""
 
     active: bool = True
+    directory: str | None = None
     level: LogLevel = "INFO"
     rotation: str = DEFAULT_LOG_ROTATION_TIME
     # 使用 cast 确保默认值在静态类型层面符合 PositiveInt 的约束

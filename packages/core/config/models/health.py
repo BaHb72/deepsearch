@@ -40,6 +40,9 @@ class HealthCheckConfig(BaseModel):
     redis_latency_samples: int = Field(
         default=3, ge=1, le=10, description="Redis 延迟测量采样次数，取中位数"
     )
+    redis_latency_consecutive_degraded: int = Field(
+        default=2, ge=1, le=10, description="Redis 连续高延迟次数阈值，达到后触发 DEGRADED"
+    )
 
     # 数据库健康检查阈值
     database_latency_threshold_ms: float = Field(

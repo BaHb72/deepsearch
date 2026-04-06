@@ -27,6 +27,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Dict, List, Optional
+from uuid import uuid4
 
 from loguru import logger
 
@@ -200,9 +201,12 @@ class DaskWorkerManager:
 
         # Plugin 就绪事件（用于等待 Plugin 在 Worker 上完成 setup）
         self._amazingdata_plugin_ready = asyncio.Event()
+        self._amazingdata_plugin_ready_ok = False
 
         # Redis URL（用于 Plugin 就绪检查）
         self._redis_url: str = "redis://localhost:6379"
+        # 每次启动会话唯一后缀，避免 Scheduler 残留注册导致 "name taken"
+        self._worker_session_id: str = uuid4().hex[:8]
 
     # ========================================================================
     # 属性
@@ -287,6 +291,10 @@ class DaskWorkerManager:
             return True  # 配置禁用时返回 True
 
         try:
+            # 每次 start 刷新会话后缀，确保 Worker 名称唯一
+            self._worker_session_id = uuid4().hex[:8]
+            self._reset_plugin_states()
+
             # 启动前清理残留 Worker（避免 "name taken" 错误）
             cleaned_count = await self._cleanup_stale_workers()
             if cleaned_count > 0:
@@ -722,7 +730,7 @@ class DaskWorkerManager:
 
     def _reserve_ports(
         self, count: int, start_port: int = 58200, max_range: int = 100
-    ) -> tuple[list[int], "PortReservation"]:
+    ) -> tuple[list[int], Optional["PortReservation"]]:
         """
         预留 N 个端口（原子性操作，解决 TOCTOU 竞态条件）
 
@@ -735,8 +743,10 @@ class DaskWorkerManager:
             max_range: 搜索范围
 
         Returns:
-            (预留的端口列表, PortReservation 实例)
-            调用者需要在 Worker 启动后调用 reservation.release_all() 释放预留
+            (端口列表, PortReservation 实例或 None)
+            - 非 Windows: 返回活动 reservation，调用者需在 Worker 启动后释放
+            - Windows: 仅做端口探测并立即释放 reservation，返回 None
+              （避免与 dask worker 的 listen-address 同端口绑定冲突）
 
         Raises:
             RuntimeError: 无法找到足够的可用端口
@@ -752,6 +762,16 @@ class DaskWorkerManager:
                 host="0.0.0.0",
             )
             self._logger.info(f"已预留端口: {ports}")
+
+            # Windows 上保留 socket 与 dask worker 的同端口 bind 会冲突（WinError 10048）。
+            # 因此这里仅做“可用端口探测”，选出端口后立即释放预留句柄。
+            if os.name == "nt":
+                reservation.release_all()
+                self._logger.info(
+                    "Windows 平台已释放端口预留句柄，改为探测后直接启动 Worker 绑定端口"
+                )
+                return ports, None
+
             return ports, reservation
         except RuntimeError:
             reservation.release_all()
@@ -876,20 +896,25 @@ class DaskWorkerManager:
             self._workers.clear()
 
             host_address = await self._resolve_worker_contact_host()
+            use_fixed_worker_port = not bool(getattr(self._config, "use_nanny", True))
 
-            # 原子性预留端口（解决 TOCTOU 竞态条件）
-            try:
-                worker_ports, port_reservation = self._reserve_ports(
-                    count=self._config.num_workers,
-                    start_port=getattr(self._config, "port_range_start", 58200),
-                    max_range=100,
-                )
-            except RuntimeError as e:
-                self._logger.error(f"端口预留失败: {e}")
-                return False
+            # Nanny 模式下不固定 worker 端口，避免重启时出现 bind OSError。
+            if use_fixed_worker_port:
+                # 原子性预留端口（解决 TOCTOU 竞态条件）
+                try:
+                    worker_ports, port_reservation = self._reserve_ports(
+                        count=self._config.num_workers,
+                        start_port=getattr(self._config, "port_range_start", 58200),
+                        max_range=100,
+                    )
+                except RuntimeError as e:
+                    self._logger.error(f"端口预留失败: {e}")
+                    return False
+            else:
+                worker_ports = [0] * self._config.num_workers
 
             for i, worker_port in enumerate(worker_ports):
-                worker_name = f"{self._config.name_prefix}-{i}"
+                worker_name = self._build_worker_name(i)
 
                 # 使用 sys.executable 直接调用 Python 模块，而不是 uv run
                 # 原因: uv run dask worker 启动 Nanny 时，Nanny fork 的子进程
@@ -948,16 +973,19 @@ class DaskWorkerManager:
                         f"可能导致 Windows 特定 plugins 无法激活"
                     )
 
-                cmd.extend(
-                    [
-                        "--name",
-                        worker_name,
-                        "--listen-address",
-                        f"tcp://0.0.0.0:{worker_port}",
-                        "--contact-address",
-                        f"tcp://{host_address}:{worker_port}",
-                    ]
-                )
+                cmd.extend(["--name", worker_name])
+                if use_fixed_worker_port:
+                    cmd.extend(
+                        [
+                            "--listen-address",
+                            f"tcp://0.0.0.0:{worker_port}",
+                            "--contact-address",
+                            f"tcp://{host_address}:{worker_port}",
+                        ]
+                    )
+                else:
+                    # 交由 nanny/worker 选择可用端口，仅固定 host 归属，避免端口复用冲突。
+                    cmd.extend(["--host", host_address])
 
                 # 打印完整的启动命令用于调试
                 cmd_str = " ".join(cmd)
@@ -1006,7 +1034,7 @@ class DaskWorkerManager:
                     self._workers[process.pid] = WorkerProcessInfo(
                         process=process,
                         name=worker_name,
-                        port=worker_port,
+                        port=worker_port if use_fixed_worker_port else 0,
                         started_at=datetime.now(),
                         pid=process.pid,
                     )
@@ -1099,6 +1127,17 @@ class DaskWorkerManager:
                 f"Workers 已启动 ({len(pids)} 个, {ready_count} 个就绪, PIDs: {pids})"
             )
             return True
+
+    def _build_worker_name(self, index: int) -> str:
+        """构建 Worker 名称。
+
+        命名规范: <prefix>-<session>-<index>
+        例如: windows-worker-a1b2c3d4-0
+        """
+
+        prefix = self._config.name_prefix if self._config else "windows-worker"
+        session = self._worker_session_id or uuid4().hex[:8]
+        return f"{prefix}-{session}-{index}"
 
     async def _stop_workers(self, timeout: float) -> None:
         """停止所有 Worker 进程"""
@@ -1263,6 +1302,44 @@ class DaskWorkerManager:
             plugin.state = PluginState.UNREGISTERED
             plugin.error = None
             plugin.registered_at = None
+        self._amazingdata_plugin_ready_ok = False
+        self._amazingdata_plugin_ready.clear()
+
+    def _plugin_register_timeout_seconds(self, plugin_name: str | None = None) -> float:
+        """读取 Plugin 注册超时，避免注册阶段无限阻塞。"""
+        timeout_seconds = 45.0
+        plugin = (plugin_name or "").strip().lower()
+        try:
+            from core.config import get_config
+
+            settings = get_config()
+            timeouts_cfg = getattr(settings, "timeouts", None)
+            dask_timeout_cfg = getattr(timeouts_cfg, "dask", None) if timeouts_cfg else None
+            if dask_timeout_cfg is not None:
+                timeout_seconds = float(getattr(dask_timeout_cfg, "worker_ready", timeout_seconds))
+
+            if plugin == "amazingdata" and timeouts_cfg is not None:
+                amazingdata_timeout_cfg = getattr(timeouts_cfg, "amazingdata", None)
+                if amazingdata_timeout_cfg is not None:
+                    first_call_timeout = float(
+                        getattr(amazingdata_timeout_cfg, "first_call", timeout_seconds)
+                    )
+                    normal_call_timeout = float(
+                        getattr(amazingdata_timeout_cfg, "normal_call", timeout_seconds)
+                    )
+                    timeout_seconds = max(
+                        timeout_seconds, max(first_call_timeout, normal_call_timeout)
+                    )
+                if dask_timeout_cfg is not None:
+                    timeout_seconds = max(
+                        timeout_seconds,
+                        float(getattr(dask_timeout_cfg, "amazingdata_init", timeout_seconds)),
+                    )
+                # 预留注册阶段调度与 Worker setup 抖动空间，避免刚完成 setup 就被误判超时。
+                timeout_seconds += 15.0
+        except Exception:
+            pass
+        return max(10.0, timeout_seconds)
 
     async def _register_all_plugins(self) -> None:
         """注册所有 Plugins
@@ -1285,54 +1362,144 @@ class DaskWorkerManager:
             name for name, p in self._plugins.items() if p.state == PluginState.REGISTERED
         ]
         failed = [name for name, p in self._plugins.items() if p.state == PluginState.FAILED]
+        registering = [
+            name for name, p in self._plugins.items() if p.state == PluginState.REGISTERING
+        ]
 
         if registered:
             self._logger.info(f"Plugins 已注册: {registered}")
         if failed:
             self._logger.warning(f"Plugins 注册失败: {failed}")
+        if registering:
+            self._logger.info(f"Plugins 注册进行中: {registering}")
+        if "amazingdata" in failed and "amazingdata" not in registering:
+            self._logger.warning(
+                "AmazingData Plugin 当前状态=failed，将继续通过 Redis/Actor 探测确认最终可用性"
+            )
+
+        amazingdata_plugin = self._plugins.get("amazingdata")
+        should_probe_amazingdata_setup = False
+        if amazingdata_plugin is not None:
+            if amazingdata_plugin.state in (PluginState.REGISTERED, PluginState.REGISTERING):
+                should_probe_amazingdata_setup = True
+            elif amazingdata_plugin.state == PluginState.FAILED:
+                error_text = (amazingdata_plugin.error or "").lower()
+                should_probe_amazingdata_setup = "超时" in error_text or "timeout" in error_text
+        if not should_probe_amazingdata_setup:
+            self._amazingdata_plugin_ready_ok = False
+            self._amazingdata_plugin_ready.set()
+            self._logger.warning("AmazingData Plugin 未注册，标记为未就绪")
+            return
 
         # 等待 AmazingData Plugin 在 Worker 上完成 setup
         # 这是关键步骤：确保 Actor 真正可用后再设置就绪事件
-        if "amazingdata" in registered:
-            # 关键修复：等待 Plugin 被 Scheduler 发送到 Worker
-            # client.register_plugin() 返回后，Plugin 只是被发送给了 Scheduler
-            # 还需要额外时间让 Scheduler 将 Plugin 调度到 Worker 并开始执行 setup
-            self._logger.info("等待 Plugin 被调度到 Worker...")
-            await asyncio.sleep(3.0)
+        # 关键修复：等待 Plugin 被 Scheduler 发送到 Worker
+        # client.register_plugin() 返回后，Plugin 只是被发送给了 Scheduler
+        # 还需要额外时间让 Scheduler 将 Plugin 调度到 Worker 并开始执行 setup
+        self._logger.info("等待 Plugin 被调度到 Worker...")
+        await asyncio.sleep(3.0)
 
-            self._logger.info("等待 AmazingData Plugin 在 Worker 上完成 setup...")
-            # 从统一超时配置读取
-            _ad_timeout = 45.0
-            try:
-                from core.config import get_config as _get_cfg
+        self._logger.info("等待 AmazingData Plugin 在 Worker 上完成 setup...")
+        # 从统一超时配置读取
+        _ad_timeout = 45.0
+        try:
+            from core.config import get_config as _get_cfg
 
-                _tc = getattr(_get_cfg(), "timeouts", None)
-                if _tc:
-                    _ad_timeout = _tc.amazingdata.normal_call
-            except Exception:
-                pass
-            plugin_ready = await self._wait_for_plugin_setup(
-                actor_name="amazingdata",
-                timeout=_ad_timeout,
+            _tc = getattr(_get_cfg(), "timeouts", None)
+            if _tc:
+                _ad_timeout = _tc.amazingdata.normal_call
+        except Exception:
+            pass
+        plugin_ready = await self._wait_for_plugin_setup(
+            actor_name="amazingdata",
+            timeout=_ad_timeout,
+        )
+        if plugin_ready:
+            async with self._plugin_lock:
+                plugin = self._plugins.get("amazingdata")
+                if plugin is not None:
+                    plugin.state = PluginState.REGISTERED
+                    plugin.error = None
+                    plugin.registered_at = datetime.now()
+            self._amazingdata_plugin_ready_ok = True
+            self._amazingdata_plugin_ready.set()
+            self._logger.info("AmazingData Plugin 已在 Worker 上就绪")
+        else:
+            async with self._plugin_lock:
+                plugin = self._plugins.get("amazingdata")
+                if plugin is not None and plugin.state != PluginState.REGISTERED:
+                    plugin.state = PluginState.FAILED
+                    if not plugin.error:
+                        plugin.error = f"AmazingData Plugin setup 超时（{_ad_timeout:.1f}s）"
+            # 超时时也设置 Event，通知等待者结束阻塞；
+            # 但 ready 结果必须明确为 False，避免误判为可用。
+            self._amazingdata_plugin_ready_ok = False
+            self._amazingdata_plugin_ready.set()
+            self._logger.warning(
+                "AmazingData Plugin setup 超时，但将继续执行 | "
+                "后续 Adapter 初始化会再次检查 Actor 可用性"
             )
-            if plugin_ready:
-                self._amazingdata_plugin_ready.set()
-                self._logger.info("AmazingData Plugin 已在 Worker 上就绪")
-            else:
-                # 关键修复：超时时也设置 Event，避免上层无限等待
-                # Event 语义应该是"等待结束"而非"成功完成"
-                self._amazingdata_plugin_ready.set()
-                self._logger.warning(
-                    "AmazingData Plugin setup 超时，但将继续执行 | "
-                    "后续 Adapter 初始化会再次检查 Actor 可用性"
-                )
 
     async def _register_plugin_safe(self, name: str, scheduler_address: str) -> None:
         """安全注册单个 Plugin"""
+        register_timeout = self._plugin_register_timeout_seconds(name)
+        self._logger.info(
+            "{} Plugin 注册开始 | scheduler={} | timeout={:.1f}s",
+            name,
+            scheduler_address,
+            register_timeout,
+        )
+        register_task = asyncio.create_task(
+            self._register_plugin(name, scheduler_address),
+            name=f"register_plugin_{name}",
+        )
+        register_task_drained = False
         try:
-            await self._register_plugin(name, scheduler_address)
+            await asyncio.wait_for(
+                asyncio.shield(register_task),
+                timeout=register_timeout,
+            )
+        except asyncio.TimeoutError:
+            error = f"注册超时({register_timeout:.1f}s)"
+            self._logger.error("Plugin {} 注册超时: {}", name, error)
+            normalized = name.strip().lower()
+            if normalized == "amazingdata":
+                self._logger.warning(
+                    "AmazingData Plugin 注册任务超时后继续后台执行，后续以 setup 探测结果为准"
+                )
+                async with self._plugin_lock:
+                    plugin = self._plugins.get(name)
+                    if plugin is not None:
+                        if plugin.state == PluginState.UNREGISTERED:
+                            plugin.state = PluginState.REGISTERING
+                        plugin.error = error
+                return
+
+            async with self._plugin_lock:
+                plugin = self._plugins.get(name)
+                if plugin is not None:
+                    plugin.state = PluginState.FAILED
+                    plugin.error = error
+
+            if not register_task.done():
+                register_task.cancel()
+            try:
+                await register_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                self._logger.debug("Plugin {} 注册任务结束异常: {}", name, exc)
+            register_task_drained = True
         except Exception as e:
             self._logger.error(f"Plugin {name} 注册失败: {e}")
+        finally:
+            if not register_task_drained and register_task.done():
+                try:
+                    await register_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as exc:
+                    self._logger.debug("Plugin {} 注册任务结束异常: {}", name, exc)
 
     async def _register_plugin(self, name: str, scheduler_address: str) -> bool:
         """
@@ -1359,6 +1526,7 @@ class DaskWorkerManager:
             async with self._plugin_lock:
                 if success:
                     plugin.state = PluginState.REGISTERED
+                    plugin.error = None
                     plugin.registered_at = datetime.now()
                 else:
                     plugin.state = PluginState.FAILED
@@ -1447,6 +1615,7 @@ class DaskWorkerManager:
                     self._logger.warning(f"未知的 Plugin: {name}")
                     return False
 
+                self._logger.info("{} Plugin 正在向 Scheduler 注册...", name)
                 await client.register_plugin(plugin)
                 self._logger.info(f"{name} Plugin 已注册 | redis_url={redis_url}")
                 return True
@@ -1480,7 +1649,7 @@ class DaskWorkerManager:
                 timeout=timeout,
             )
             self._logger.info("AmazingData Plugin 就绪事件已触发")
-            return True
+            return self._amazingdata_plugin_ready_ok
         except asyncio.TimeoutError:
             self._logger.warning(f"等待 AmazingData Plugin 就绪超时 ({timeout}s)")
             return False
