@@ -185,7 +185,10 @@ export const AppProvider = ({ children }: AppProviderProps) => {
       try {
         dispatch({ type: ActionTypes.SET_LOADING, payload: true })
         const raw = await request.post('/auth/login', credentials as Record<string, unknown>)
-        const payload = (raw && typeof raw === 'object' && 'data' in (raw as Record<string, unknown>))
+        const rawRecord = raw && typeof raw === 'object'
+          ? raw as unknown as Record<string, unknown>
+          : null
+        const payload = rawRecord && 'data' in rawRecord
           ? (raw as { data: unknown }).data
           : raw
         const response = payload as { token?: string; user?: User } | null

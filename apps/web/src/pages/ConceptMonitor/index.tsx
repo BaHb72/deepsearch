@@ -293,7 +293,7 @@ const ConceptMonitor: React.FC = () => {
       const encodedName = encodeURIComponent(board.concept_name)
       const payload = await request.get<unknown>(`/trading/market/concept-ths/${encodedName}/constituents`)
       const rows = normalizeConstituentRows(payload)
-      const payloadObj = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
+      const payloadObj = payload && typeof payload === 'object' ? (payload as unknown as Record<string, unknown>) : {}
       const source = typeof payloadObj._data_source === 'string'
         ? payloadObj._data_source
         : typeof payloadObj.source === 'string'

@@ -50,7 +50,7 @@ interface ScreenerTemplateViewModel {
     description: string;
     capabilityNote: string;
     backendNote: string;
-    payload: Record<string, unknown>;
+    payload: unknown;
 }
 
 const TEMPLATE_ORDER: ScreenerTemplateKey[] = [
@@ -250,7 +250,7 @@ const Screener: React.FC = () => {
             description: '单策略快速筛选，适合盘中快速复核。',
             capabilityNote: '字段映射：strategy_id / stock_pool / limit / params',
             backendNote: '后端已生效 strategy_id、stock_pool、limit、params（基于策略参数定义动态下发）。',
-            payload: quickPayload as Record<string, unknown>,
+            payload: quickPayload,
         },
         composite_growth: {
             key: 'composite_growth',

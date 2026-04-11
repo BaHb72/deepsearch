@@ -28,6 +28,16 @@ function formatLatency(value?: number | null): string {
   return `${value.toFixed(1)} ms`
 }
 
+function isSourceAvailable(source: DataSource): boolean {
+  if (typeof source.available === 'boolean') {
+    return source.available
+  }
+  if (typeof source.is_available === 'boolean') {
+    return source.is_available
+  }
+  return false
+}
+
 const DataSourceMonitor: React.FC = () => {
   const { data, isLoading, error } = useDataSourceMonitor({
     refetchInterval: 15000,
@@ -38,6 +48,7 @@ const DataSourceMonitor: React.FC = () => {
   const sources = Array.isArray(data?.sources) ? data.sources : []
   const timeline = Array.isArray(data?.timeline) ? data.timeline : []
   const alerts = Array.isArray(data?.alerts) ? data.alerts : []
+  const availableSourceCount = sources.filter(isSourceAvailable).length
 
   const sourceColumns: ColumnsType<DataSource> = useMemo(
     () => [
@@ -66,12 +77,7 @@ const DataSourceMonitor: React.FC = () => {
         dataIndex: 'available',
         key: 'available',
         render: (_: unknown, record: DataSource) => {
-          const available =
-            typeof record.available === 'boolean'
-              ? record.available
-              : typeof record.is_available === 'boolean'
-                ? record.is_available
-                : false
+          const available = isSourceAvailable(record)
           return <Tag color={available ? 'success' : 'error'}>{available ? '是' : '否'}</Tag>
         },
       },
@@ -202,10 +208,10 @@ const DataSourceMonitor: React.FC = () => {
 
       <ProCard ghost gutter={[16, 16]}>
         <ProCard colSpan={{ xs: 24, md: 6 }}>
-          <Statistic title="数据源总数" value={Number(overview?.total ?? sources.length)} />
+          <Statistic title="数据源总数" value={sources.length} />
         </ProCard>
         <ProCard colSpan={{ xs: 24, md: 6 }}>
-          <Statistic title="可用数据源" value={Number(overview?.available ?? 0)} />
+          <Statistic title="可用数据源" value={availableSourceCount} />
         </ProCard>
         <ProCard colSpan={{ xs: 24, md: 6 }}>
           <Statistic title="总请求数" value={Number(overview?.totalRequests ?? 0)} />

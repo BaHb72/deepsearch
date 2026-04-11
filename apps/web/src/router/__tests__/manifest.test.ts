@@ -33,7 +33,7 @@ describe('router manifest consistency', () => {
   })
 
   it('menu should not expose legacy alias routes', () => {
-    const legacyPaths = new Set([
+    const legacyPaths = new Set<string>([
       APP_PATHS.aliasMarket,
       APP_PATHS.aliasScreener,
       APP_PATHS.devAmazingDataLegacy,
