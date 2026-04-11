@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query'
 // React Query Hooks
 import {
     useConceptStrength,
+    useIndexConceptPulse,
     useBoardOverview,
     useConceptFlow,
     getRefreshIntervalByPhase,
@@ -22,6 +23,8 @@ import MarketHeader from './components/MarketHeader'
 import StrengthTable from './components/StrengthTable'
 import BoardOverviewTable from './components/BoardOverviewTable'
 import ConceptFlowTable from './components/ConceptFlowTable'
+import IndexConceptPulseChart from './components/IndexConceptPulseChart'
+import ConceptPulseEventPanel from './components/ConceptPulseEventPanel'
 
 // 工具函数
 import {
@@ -47,6 +50,7 @@ const MarketData: React.FC = () => {
     const [boardType, setBoardType] = useState<'concept' | 'industry'>('concept')
     const [autoRefresh, setAutoRefresh] = useState<boolean>(true)
     const [phase, setPhase] = useState<PhaseState>('unknown')
+    const [selectedPulseEventAt, setSelectedPulseEventAt] = useState<string | null>(null)
     const [moduleSources, setModuleSources] = useState<Record<ModuleSourceKey, string | null>>({
         strength: null,
         board_overview: null,
@@ -66,6 +70,22 @@ const MarketData: React.FC = () => {
         error: strengthError,
     } = useConceptStrength(
         { source: moduleSources.strength, limit: 50 },
+        { refetchInterval }
+    )
+
+    const {
+        data: indexConceptPulse,
+        isLoading: pulseLoading,
+        isFetching: pulseFetching,
+        error: pulseError,
+    } = useIndexConceptPulse(
+        {
+            source: moduleSources.board_overview,
+            board_limit: 6,
+            event_limit: 16,
+            candidate_limit: 6,
+            threshold: 72,
+        },
         { refetchInterval }
     )
 
@@ -105,14 +125,18 @@ const MarketData: React.FC = () => {
 
     // ============ 派生状态 ============
 
-    const loading = strengthLoading || boardLoading || conceptFlowLoading
-    const refreshing = strengthFetching || boardFetching || conceptFlowFetching
-    const fetchError = strengthError?.message || boardError?.message || conceptFlowError?.message || null
+    const loading = pulseLoading || strengthLoading || boardLoading || conceptFlowLoading
+    const refreshing = pulseFetching || strengthFetching || boardFetching || conceptFlowFetching
+    const fetchError =
+        pulseError?.message || strengthError?.message || boardError?.message || conceptFlowError?.message || null
 
-    const globalAsOf = strength?.asOf || boardOverview?.asOf || conceptFlow?.retrieved_at || null
-    const retrievedAt = strength?.retrieved_at || boardOverview?.retrieved_at || conceptFlow?.retrieved_at || null
-    const dataSource = strength?.data_source || boardOverview?.data_source || conceptFlow?.data_source || 'amazingdata'
-    const isStale = Boolean(strength?.stale) || Boolean(boardOverview?.stale) || Boolean(conceptFlow?.stale)
+    const globalAsOf = indexConceptPulse?.asOf || strength?.asOf || boardOverview?.asOf || conceptFlow?.retrieved_at || null
+    const retrievedAt =
+        indexConceptPulse?.retrieved_at || strength?.retrieved_at || boardOverview?.retrieved_at || conceptFlow?.retrieved_at || null
+    const dataSource =
+        indexConceptPulse?.data_source || strength?.data_source || boardOverview?.data_source || conceptFlow?.data_source || 'amazingdata'
+    const isStale =
+        Boolean(indexConceptPulse?.stale) || Boolean(strength?.stale) || Boolean(boardOverview?.stale) || Boolean(conceptFlow?.stale)
     const phaseAllowsAutoRefresh = !AUTO_REFRESH_DISABLED_PHASES.includes(phase)
 
     const cacheInfo = useMemo(() => {
@@ -156,6 +180,25 @@ const MarketData: React.FC = () => {
     const conceptFlowItems = useMemo(() => {
         return conceptFlow?.items ?? []
     }, [conceptFlow])
+
+    const selectedPulseEvent = useMemo(() => {
+        const events = indexConceptPulse?.events ?? []
+        if (!events.length) return null
+        if (!selectedPulseEventAt) return events[events.length - 1]
+        return events.find((item) => item.captured_at === selectedPulseEventAt) ?? events[events.length - 1]
+    }, [indexConceptPulse?.events, selectedPulseEventAt])
+
+    useEffect(() => {
+        const events = indexConceptPulse?.events ?? []
+        if (!events.length) {
+            if (selectedPulseEventAt !== null) setSelectedPulseEventAt(null)
+            return
+        }
+        const matched = selectedPulseEventAt && events.some((item) => item.captured_at === selectedPulseEventAt)
+        if (!matched) {
+            setSelectedPulseEventAt(events[events.length - 1].captured_at)
+        }
+    }, [indexConceptPulse?.events, selectedPulseEventAt])
 
     // ============ 数据源选项 ============
 
@@ -263,25 +306,45 @@ const MarketData: React.FC = () => {
                 />
             </ProCard>
 
-            {/* Row 1: Strength */}
-            <ProCard colSpan={24} bordered boxShadow title="资金脉冲 (Real-time Flow)" headStyle={{ fontWeight: 'bold' }}>
-                <StrengthTable
-                    items={strengthItems}
+            {/* Row 1: Index Pulse */}
+            <ProCard colSpan={24} bordered boxShadow title="上证指数与概念启动" headStyle={{ fontWeight: 'bold' }}>
+                <IndexConceptPulseChart
+                    indexPoints={indexConceptPulse?.index.points ?? []}
+                    events={indexConceptPulse?.events ?? []}
+                    selectedEventAt={selectedPulseEventAt}
+                    loading={pulseLoading || pulseFetching}
+                    onSelectEvent={setSelectedPulseEventAt}
+                />
+            </ProCard>
+
+            {/* Row 2: Pulse Detail & Concept Flow */}
+            <ProCard
+                colSpan={{ xs: 24, xl: 15 }}
+                bordered
+                boxShadow
+                title="启动概念与高质量个股"
+                headStyle={{ fontWeight: 'bold' }}
+            >
+                <ConceptPulseEventPanel
+                    event={selectedPulseEvent}
+                    loading={pulseLoading || pulseFetching}
+                />
+            </ProCard>
+            <ProCard colSpan={{ xs: 24, xl: 9 }} bordered boxShadow title="概念资金流 (Concept Flow)" headStyle={{ fontWeight: 'bold' }}>
+                <ConceptFlowTable
+                    items={conceptFlowItems}
                     loading={loading}
                     refreshing={refreshing}
                     isStale={isStale}
-                    windows={strength?.windows ?? []}
-                    selectedWindow={selectedWindow}
-                    onWindowChange={setSelectedWindow}
-                    moduleSource={moduleSources.strength}
+                    moduleSource={moduleSources.concept_flow}
                     moduleSourceOptions={moduleSourceOptions}
-                    fallbackLabel={strengthFallbackLabel}
+                    fallbackLabel={conceptFlowFallbackLabel}
                     onModuleSourceChange={handleModuleSourceChange}
                 />
             </ProCard>
 
-            {/* Row 2: Board Overview & Concept Flow */}
-            <ProCard colSpan={14} bordered boxShadow title="板块概览 (Board Overview)" headStyle={{ fontWeight: 'bold' }}>
+            {/* Row 3: Board Overview */}
+            <ProCard colSpan={24} bordered boxShadow title="板块概览 (Board Overview)" headStyle={{ fontWeight: 'bold' }}>
                 <BoardOverviewTable
                     items={boardItems}
                     loading={loading}
@@ -295,15 +358,20 @@ const MarketData: React.FC = () => {
                     onModuleSourceChange={handleModuleSourceChange}
                 />
             </ProCard>
-            <ProCard colSpan={10} bordered boxShadow title="概念资金流 (Concept Flow)" headStyle={{ fontWeight: 'bold' }}>
-                <ConceptFlowTable
-                    items={conceptFlowItems}
+
+            {/* Row 4: Strength */}
+            <ProCard colSpan={24} bordered boxShadow title="资金脉冲 (Real-time Flow)" headStyle={{ fontWeight: 'bold' }}>
+                <StrengthTable
+                    items={strengthItems}
                     loading={loading}
                     refreshing={refreshing}
                     isStale={isStale}
-                    moduleSource={moduleSources.concept_flow}
+                    windows={strength?.windows ?? []}
+                    selectedWindow={selectedWindow}
+                    onWindowChange={setSelectedWindow}
+                    moduleSource={moduleSources.strength}
                     moduleSourceOptions={moduleSourceOptions}
-                    fallbackLabel={conceptFlowFallbackLabel}
+                    fallbackLabel={strengthFallbackLabel}
                     onModuleSourceChange={handleModuleSourceChange}
                 />
             </ProCard>

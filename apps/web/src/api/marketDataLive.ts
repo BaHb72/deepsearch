@@ -177,6 +177,68 @@ export interface ConceptFlowResponse extends BaseLiveResponse {
     count: number
 }
 
+export interface ConceptPulseIndexPoint {
+    ts: string
+    time: string
+    value: number
+    change_pct?: number | null
+}
+
+export interface ConceptPulseLeader {
+    symbol: string
+    name: string
+    last_price: number
+    change_pct: number
+    amount: number
+    quality_score: number
+    technical_score: number
+    capital_score: number
+    fundamental_score: number
+    main_net_inflow?: number | null
+    main_net_inflow_pct?: number | null
+    recent_positive_days?: number
+    return_5d?: number | null
+    return_20d?: number | null
+    above_ma20?: boolean
+    roe_like?: number | null
+    profit_margin?: number | null
+    debt_ratio?: number | null
+    confidence_score: number
+    technical_coverage: number
+    capital_coverage: number
+    fundamental_coverage: number
+    selection_reasons: string[]
+    risk_flags: string[]
+}
+
+export interface ConceptPulseBoard {
+    board: string
+    activity_score: number
+    speed_per_min: number
+    amount_total: number
+    lead_stock?: string | null
+    lead_change?: number | null
+    leader?: ConceptPulseLeader | null
+    candidates: ConceptPulseLeader[]
+}
+
+export interface IndexConceptPulseEvent {
+    captured_at: string
+    time: string
+    label: string
+    strongest_board: string
+    boards: ConceptPulseBoard[]
+}
+
+export interface IndexConceptPulseResponse extends BaseLiveResponse {
+    index: {
+        symbol: string
+        name: string
+        points: ConceptPulseIndexPoint[]
+    }
+    events: IndexConceptPulseEvent[]
+}
+
 export const marketDataLiveApi = {
     getStrength: (params?: { windows?: string; boards?: string; limit?: number; source?: string | null }) =>
         request.get<StrengthResponse>('/market/live/strength', { params }) as unknown as Promise<StrengthResponse>,
@@ -194,6 +256,14 @@ export const marketDataLiveApi = {
     // 概念资金流 (替代订单失衡)
     getConceptFlow: (params?: { period?: ConceptFlowPeriod; limit?: number; source?: string | null }) =>
         request.get<ConceptFlowResponse>('/market/live/concept-flow', { params }) as unknown as Promise<ConceptFlowResponse>,
+    getIndexConceptPulse: (params?: {
+        source?: string | null
+        board_limit?: number
+        event_limit?: number
+        candidate_limit?: number
+        threshold?: number
+    }) =>
+        request.get<IndexConceptPulseResponse>('/market/live/index-concept-pulse', { params }) as unknown as Promise<IndexConceptPulseResponse>,
     getDataSourceStatus: () =>
         request.get<RealtimeSourceStatus>('/market/live/data-source/status') as unknown as Promise<RealtimeSourceStatus>,
     switchDataSource: (target: string) =>

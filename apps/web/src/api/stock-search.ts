@@ -92,7 +92,7 @@ export async function loadStockOptions(): Promise<StockListLoadResult> {
 
     try {
         const chartResp = await axios.get('/api/chart/stock-list', {
-            timeout: 8000,
+            timeout: 12000,
             validateStatus: () => true,
         })
 
@@ -119,4 +119,27 @@ export async function loadStockOptions(): Promise<StockListLoadResult> {
     }
 
     return _fallbackResult()
+}
+
+export async function searchStockOptions(keyword: string): Promise<StockOption[]> {
+    const trimmedKeyword = keyword.trim()
+    if (!trimmedKeyword) return []
+
+    try {
+        const chartResp = await axios.get('/api/chart/stock-list', {
+            params: { keyword: trimmedKeyword },
+            timeout: 12000,
+            validateStatus: () => true,
+        })
+
+        if (chartResp.status >= 200 && chartResp.status < 300) {
+            return _dedupe(
+                _extractRows(chartResp.data).map(_normalizeOption).filter(Boolean) as StockOption[]
+            )
+        }
+    } catch {
+        // 即时搜索失败时返回空结果，避免影响用户手动输入
+    }
+
+    return []
 }

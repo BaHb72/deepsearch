@@ -126,6 +126,27 @@ def test_adapter_sequence_prefers_realtime_order():
     assert tuple(orchestrator._adapter_sequence()) == ("cloudflare", "akshare")
 
 
+def test_adapter_sequence_preserves_declared_order_for_same_priority():
+    specs = [
+        RealtimeAdapterSpec(name="cloudflare", driver="akshare_polling", priority=1),
+        RealtimeAdapterSpec(name="akshare", driver="akshare_polling", priority=1),
+        RealtimeAdapterSpec(name="amazingdata", driver="amazingdata", priority=2),
+    ]
+    orchestrator = RealtimeDataOrchestrator(_build_settings(specs))
+    assert tuple(orchestrator._adapter_sequence()) == ("cloudflare", "akshare", "amazingdata")
+
+
+def test_adapter_sequence_deduplicates_realtime_names_case_insensitive():
+    specs = [
+        RealtimeAdapterSpec(name="AmazingData", driver="amazingdata", priority=1),
+        RealtimeAdapterSpec(name="amazingdata", driver="akshare_polling", priority=2),
+        RealtimeAdapterSpec(name="akshare", driver="akshare_polling", priority=3),
+    ]
+    orchestrator = RealtimeDataOrchestrator(_build_settings(specs))
+    assert tuple(orchestrator._adapter_sequence()) == ("AmazingData", "akshare")
+    assert orchestrator._adapter_specs["amazingdata"].driver == "amazingdata"
+
+
 @pytest.mark.asyncio
 async def test_probe_adapters_reports_status(monkeypatch):
     specs = [

@@ -264,6 +264,8 @@ def _select_sources(
         base = [DataSourceType.AMAZINGDATA, DataSourceType.AKSHARE, DataSourceType.MINIQMT]
     elif capability in {"sector_list", "sector_stocks", "sector_capital_flow"}:
         base = [DataSourceType.AKSHARE, DataSourceType.MINIQMT]
+    elif capability == "capital_flow":
+        base = [DataSourceType.MINIQMT, DataSourceType.AKSHARE]
     elif capability in {
         "block_trading",
         "dragon_tiger",
@@ -726,6 +728,44 @@ async def _run_capability_call(
         )
         return _coerce_rows(payload), None
 
+    if capability == "capital_flow":
+        symbol = symbols[0] if symbols else ""
+        if not symbol:
+            return [], "missing_symbol"
+
+        start_date = _normalize_date_digits(params.get("startDate") or params.get("start_date"))
+        end_date = _normalize_date_digits(params.get("endDate") or params.get("end_date"))
+        period = str(params.get("period", "1d"))
+
+        symbol_candidates = _stock_symbol_candidates(symbol)
+        for candidate in symbol_candidates:
+            payload = await _invoke_method(
+                provider,
+                "get_capital_flow",
+                symbol=candidate,
+                period=period,
+                start_date=start_date,
+                end_date=end_date,
+            )
+            rows = _coerce_rows(payload)
+            if rows:
+                return rows, None
+
+        plain_symbol = _strip_market_suffix(symbol)
+        market = "sh"
+        suffixed_symbol = _append_market_suffix(plain_symbol)
+        if suffixed_symbol.endswith(".SZ"):
+            market = "sz"
+        elif suffixed_symbol.endswith(".BJ"):
+            market = "bj"
+        payload = await _invoke_method(
+            provider,
+            "get_individual_capital_flow",
+            symbol=plain_symbol,
+            market=market,
+        )
+        return _coerce_rows(payload), None
+
     if capability == "tick_data":
         if not symbols:
             return [], "missing_symbol"
@@ -1185,6 +1225,7 @@ async def query_unified(request: UnifiedQueryRequest):
     - `income_statement`
     - `balance_sheet`
     - `cash_flow`
+    - `capital_flow`
     - `shareholder_num`
     - `top_holders`
     - `sector_list`
@@ -1208,6 +1249,7 @@ async def query_unified(request: UnifiedQueryRequest):
         "income_statement",
         "balance_sheet",
         "cash_flow",
+        "capital_flow",
         "shareholder_num",
         "top_holders",
         "sector_list",
@@ -1424,6 +1466,7 @@ async def get_capabilities():
         "income_statement": ["amazingdata"],
         "balance_sheet": ["amazingdata"],
         "cash_flow": ["amazingdata"],
+        "capital_flow": ["miniqmt", "akshare"],
         "shareholder_num": ["amazingdata"],
         "top_holders": ["amazingdata"],
         "sector_list": ["akshare", "miniqmt"],

@@ -3,9 +3,14 @@
  * 支持多数据源切换：MiniQMT / AmazingData
  * 使用适配器模式实现数据源解耦
  */
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Select, Spin, Button, Space, Typography } from 'antd'
-import { loadStockOptions, type StockListSource, type StockOption } from '@/api/stock-search'
+import {
+    loadStockOptions,
+    searchStockOptions,
+    type StockListSource,
+    type StockOption,
+} from '@/api/stock-search'
 
 const { Option } = Select
 const { Text } = Typography
@@ -89,13 +94,31 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
 }) => {
     const [options, setOptions] = useState<StockOption[]>([])
     const [loading, setLoading] = useState(false)
+    const [searching, setSearching] = useState(false)
     const [searchValue, setSearchValue] = useState('')
     const [refreshing, setRefreshing] = useState(false)
     const [isFallbackSource, setIsFallbackSource] = useState(false)
+    const [dynamicOptions, setDynamicOptions] = useState<StockOption[]>([])
+    const retryTimerRef = useRef<number | null>(null)
 
     // 获取当前数据源适配器 (默认使用 miniqmt)
     const actualSource = dataSource || 'miniqmt'
     const adapter = dataSourceAdapters[actualSource]
+
+    const isKeywordMatch = useCallback((stock: StockOption, keyword: string): boolean => {
+        const lower = keyword.toLowerCase()
+        return (
+            stock.symbol.toLowerCase().includes(lower) ||
+            stock.name.toLowerCase().includes(lower) ||
+            (stock.pinyin?.toLowerCase().includes(lower) ?? false)
+        )
+    }, [])
+
+    const isLikelyStockCode = useCallback((input: string): boolean => {
+        const normalized = input.trim().toUpperCase()
+        if (!normalized) return false
+        return /^(?:\d{6}|(?:\d{6}\.(?:SH|SZ|BJ))|(?:(?:SH|SZ|BJ)\d{6}))$/i.test(normalized)
+    }, [])
 
     // 从数据源加载股票列表
     const fetchStockList = useCallback(async () => {
@@ -105,7 +128,13 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
             if (result.refreshing) {
                 setRefreshing(true)
                 setIsFallbackSource(false)
-                setTimeout(fetchStockList, 3000) // 缓存初始化中，3秒后重试
+                if (retryTimerRef.current !== null) {
+                    window.clearTimeout(retryTimerRef.current)
+                }
+                retryTimerRef.current = window.setTimeout(() => {
+                    retryTimerRef.current = null
+                    void fetchStockList()
+                }, 3000)
             } else {
                 setOptions(result.data)
                 setRefreshing(false)
@@ -124,25 +153,85 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
     // 数据源变化时重新加载
     useEffect(() => {
         setOptions([]) // 清空旧数据
+        setDynamicOptions([])
+        setSearching(false)
         setIsFallbackSource(false)
         fetchStockList()
+        return () => {
+            if (retryTimerRef.current !== null) {
+                window.clearTimeout(retryTimerRef.current)
+                retryTimerRef.current = null
+            }
+        }
     }, [actualSource, fetchStockList])
 
+    // 全量股票列表为空时，按关键字实时查询候选项
+    useEffect(() => {
+        const keyword = searchValue.trim()
+        if (!keyword || refreshing) {
+            setDynamicOptions([])
+            setSearching(false)
+            return
+        }
+
+        const localMatches = options.filter((item) => isKeywordMatch(item, keyword))
+        if (localMatches.length > 0) {
+            setDynamicOptions([])
+            setSearching(false)
+            return
+        }
+
+        let cancelled = false
+        const timer = window.setTimeout(async () => {
+            setSearching(true)
+            try {
+                const matches = await searchStockOptions(keyword)
+                if (!cancelled) {
+                    setDynamicOptions(matches)
+                }
+            } catch {
+                if (!cancelled) {
+                    setDynamicOptions([])
+                }
+            } finally {
+                if (!cancelled) {
+                    setSearching(false)
+                }
+            }
+        }, 250)
+
+        return () => {
+            cancelled = true
+            window.clearTimeout(timer)
+        }
+    }, [isKeywordMatch, options, refreshing, searchValue])
+
+    const effectiveOptions = React.useMemo(() => {
+        if (dynamicOptions.length === 0) {
+            return options
+        }
+        const merged = new Map<string, StockOption>()
+        for (const option of dynamicOptions) {
+            merged.set(option.symbol, option)
+        }
+        for (const option of options) {
+            if (!merged.has(option.symbol)) {
+                merged.set(option.symbol, option)
+            }
+        }
+        return Array.from(merged.values())
+    }, [dynamicOptions, options])
+
     // 根据搜索词过滤选项
-    const filteredOptions = options.filter((stock) => {
+    const filteredOptions = effectiveOptions.filter((stock) => {
         if (!searchValue) return true
-        const lower = searchValue.toLowerCase()
-        return (
-            stock.symbol.toLowerCase().includes(lower) ||
-            stock.name.toLowerCase().includes(lower) ||
-            (stock.pinyin?.toLowerCase().includes(lower) ?? false)
-        )
+        return isKeywordMatch(stock, searchValue)
     })
 
     // 处理选择或输入
     const handleSelect = (val: string) => {
         // 查找对应的股票名称
-        const matched = options.find((opt) => opt.symbol === val)
+        const matched = effectiveOptions.find((opt) => opt.symbol === val)
         const name = matched?.name || undefined
         onChange(val, name)
         setSearchValue('')
@@ -151,7 +240,7 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
     // 获取显示值
     const getDisplayValue = () => {
         if (!value) return undefined
-        const matched = options.find((opt) => opt.symbol === value)
+        const matched = effectiveOptions.find((opt) => opt.symbol === value)
         if (matched) {
             return { value: matched.symbol, label: `${matched.name} (${matched.symbol})` }
         }
@@ -160,6 +249,7 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
 
     const currentPlaceholder =
         placeholder || (isFallbackSource ? '数据源未就绪，支持直接输入股票代码' : adapter.placeholder)
+    const canUseRawCode = isLikelyStockCode(searchValue)
 
     return (
         <Space>
@@ -176,23 +266,29 @@ export const UniversalStockSearch: React.FC<UniversalStockSearchProps> = ({
                 onSearch={setSearchValue}
                 searchValue={searchValue}
                 filterOption={false}
-                loading={loading}
+                loading={loading || searching}
                 placeholder={refreshing ? '缓存初始化中...' : currentPlaceholder}
                 style={style}
                 dropdownMatchSelectWidth={false}
                 optionLabelProp="label"
                 notFoundContent={
-                    loading ? (
+                    loading || searching ? (
                         <Spin size="small" />
                     ) : searchValue ? (
                         <div style={{ padding: 8 }}>
-                            <Button
-                                type="link"
-                                size="small"
-                                onClick={() => handleSelect(searchValue)}
-                            >
-                                使用 "{searchValue}" 作为股票代码
-                            </Button>
+                            {canUseRawCode ? (
+                                <Button
+                                    type="link"
+                                    size="small"
+                                    onClick={() => handleSelect(searchValue.trim().toUpperCase())}
+                                >
+                                    使用 {searchValue.trim().toUpperCase()} 作为股票代码
+                                </Button>
+                            ) : (
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                    未匹配到股票，请尝试输入代码（如 300757 或 300757.SZ）
+                                </Text>
+                            )}
                         </div>
                     ) : refreshing ? (
                         '缓存初始化中...'

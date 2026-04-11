@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time as time_module
 from datetime import datetime
 from datetime import time as time_type
@@ -18,7 +19,25 @@ from loguru import logger
 from pydantic import BaseModel
 from starlette.status import HTTP_200_OK
 
+from apps.api.api.endpoints.data.unified_query import query_capability_bridge
 from apps.api.api.middleware.deduplication import RequestDeduplicator
+from apps.api.services.market_concept_pulse import (
+    ConceptPulseHistory,
+    StockCandidateMetrics,
+    build_activation_events,
+    build_capital_coverage,
+    build_capital_raw,
+    build_fundamental_coverage,
+    build_fundamental_raw,
+    build_ranked_stock_candidates,
+    build_technical_coverage,
+    build_technical_raw,
+    extract_capital_metrics,
+    extract_fundamental_metrics,
+    extract_technical_metrics,
+    group_rows_by_symbol,
+    normalize_strength_points,
+)
 from apps.api.services.market_data_runtime import (
     bind_market_data_handle,
     ensure_market_data_runtime,
@@ -26,6 +45,7 @@ from apps.api.services.market_data_runtime import (
 )
 
 router = APIRouter(prefix="/api/market/live", tags=["MarketLive"])
+_MARKET_TZ = ZoneInfo("Asia/Shanghai")
 
 MODULE_STORAGE_MAP: dict[str, str] = {
     "strength": "strength",
@@ -51,6 +71,7 @@ _AKSHARE_GUARD_PRIMARY_SOURCES = ("amazingdata", "miniqmt")
 _RECENT_SUCCESS_PAYLOADS: dict[str, dict[str, Any]] = {}
 _CONCEPT_FLOW_BREAKERS: dict[str, CircuitBreaker] = {}
 _AKSHARE_DIRECT_FALLBACK_PROVIDER: Any | None = None
+_CONCEPT_PULSE_HISTORY = ConceptPulseHistory()
 
 
 class SwitchDataSourceRequest(BaseModel):
@@ -1003,23 +1024,40 @@ def _unique(sequence: Iterable[str]) -> list[str]:
 
 
 def _configured_adapter_names(settings: Any | None) -> list[str]:
-    """返回显式配置且启用的 realtime adapter 列表（无默认回填）。"""
+    """返回显式配置且启用的 realtime adapter 列表（按 priority 排序）。"""
 
     ds_cfg = getattr(settings, "data_sources", None)
     realtime_cfg = getattr(ds_cfg, "realtime", None) if ds_cfg else None
     adapters = getattr(realtime_cfg, "adapters", None) or ()
-    names: list[str] = []
-    for spec in adapters:
-        if getattr(spec, "enabled", False):
-            names.append(getattr(spec, "name", "").strip())
-    normalized = [name for name in (item.lower() for item in names) if name]
-    return _unique(normalized)
+    normalized_specs: list[tuple[int, int, str]] = []
+    for index, spec in enumerate(adapters):
+        if not getattr(spec, "enabled", False):
+            continue
+        name = str(getattr(spec, "name", "")).strip().lower()
+        if not name:
+            continue
+        priority = int(getattr(spec, "priority", 100))
+        normalized_specs.append((priority, index, name))
+    normalized_specs.sort(key=lambda item: (item[0], item[1]))
+    return _unique(item[2] for item in normalized_specs)
 
 
 def _enabled_adapter_names(settings: Any | None) -> list[str]:
     normalized = _configured_adapter_names(settings)
     if normalized:
         return normalized
+    ds_cfg = getattr(settings, "data_sources", None)
+    fallback_order = getattr(ds_cfg, "fallback_order", None) if ds_cfg else None
+    if fallback_order:
+        normalized_fallbacks = [
+            name
+            for name in (
+                _normalize_source_param(str(item).strip()) for item in (fallback_order or ())
+            )
+            if name
+        ]
+        if normalized_fallbacks:
+            return _unique(normalized_fallbacks)
     return ["amazingdata", "miniqmt", "akshare"]
 
 
@@ -1279,6 +1317,349 @@ def _extract_records(payload: Any) -> list[dict[str, Any]]:
         except Exception:
             return []
     return []
+
+
+def _json_response_payload(response: JSONResponse) -> dict[str, Any]:
+    try:
+        return json.loads(response.body.decode("utf-8"))
+    except Exception:
+        return {}
+
+
+def _coalesce_text(payload: Mapping[str, Any], *keys: str) -> str | None:
+    for key in keys:
+        value = payload.get(key)
+        text = str(value or "").strip()
+        if text:
+            return text
+    return None
+
+
+def _coalesce_number(payload: Mapping[str, Any], *keys: str) -> float | None:
+    for key in keys:
+        value = _safe_float(payload.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def _parse_market_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        normalized = text.replace("Z", "+00:00")
+        parsed = None
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            for fmt in (
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%d %H:%M",
+                "%Y/%m/%d %H:%M:%S",
+                "%Y/%m/%d %H:%M",
+                "%Y%m%d%H%M%S",
+                "%Y%m%d%H%M",
+                "%Y%m%d %H%M",
+                "%Y%m%d",
+            ):
+                try:
+                    parsed = datetime.strptime(text, fmt)
+                    break
+                except ValueError:
+                    continue
+        if parsed is None:
+            return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_MARKET_TZ)
+    return parsed.astimezone(_MARKET_TZ)
+
+
+def _extract_bridge_rows(payload: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(payload, Mapping):
+        return []
+    return [item for item in _extract_records(dict(payload)) if isinstance(item, dict)]
+
+
+async def _query_bridge_rows_safe(
+    capability: str,
+    params: dict[str, Any],
+    *,
+    preferred_source: str | None = None,
+    strict_source: bool = False,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    try:
+        payload = await query_capability_bridge(
+            capability,
+            params,
+            preferred_source=preferred_source,
+            strict_source=strict_source,
+        )
+        if isinstance(payload, dict):
+            return _extract_bridge_rows(payload), payload
+        return [], None
+    except HTTPException as exc:
+        detail = exc.detail if isinstance(exc.detail, dict) else {"message": str(exc.detail)}
+        logger.warning("统一查询失败 capability={} detail={}", capability, detail)
+        return [], {"detail": detail, "status_code": exc.status_code}
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.warning("统一查询异常 capability={} error={}", capability, exc)
+        return [], {"detail": {"message": str(exc)}, "status_code": 500}
+
+
+def _normalize_grouped_rows(
+    rows: Iterable[dict[str, Any]],
+    *keys: str,
+) -> dict[str, list[dict[str, Any]]]:
+    grouped = group_rows_by_symbol(rows, *keys)
+    normalized: dict[str, list[dict[str, Any]]] = {}
+    for symbol, items in grouped.items():
+        normalized_symbol = _normalize_quote_symbol(symbol)
+        if normalized_symbol:
+            normalized[normalized_symbol] = items
+    return normalized
+
+
+def _quote_amount_value(payload: Mapping[str, Any]) -> float | None:
+    return _coalesce_number(payload, "amount", "turnover", "trade_amount", "成交额")
+
+
+def _quote_last_price_value(payload: Mapping[str, Any]) -> float | None:
+    return _coalesce_number(payload, "last", "close", "price", "last_price", "最新价")
+
+
+def _quote_name_value(payload: Mapping[str, Any], symbol: str) -> str:
+    return (
+        _coalesce_text(payload, "name", "security_name", "stock_name", "证券简称", "名称") or symbol
+    )
+
+
+def _extract_symbol_from_row(payload: Mapping[str, Any]) -> str:
+    raw_symbol = _coalesce_text(
+        payload,
+        "symbol",
+        "code",
+        "ticker",
+        "MARKET_CODE",
+        "SECURITY_CODE",
+    )
+    return _normalize_quote_symbol(raw_symbol)
+
+
+def _build_intraday_index_points(rows: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_minute: dict[datetime, dict[str, Any]] = {}
+    previous_close: float | None = None
+
+    for row in rows:
+        captured_at = _parse_market_datetime(
+            _coalesce_text(row, "trade_time", "time", "date", "datetime", "ts")
+        )
+        price = _coalesce_number(row, "close", "last", "price", "最新价")
+        if captured_at is None or price is None:
+            continue
+        minute_key = captured_at.replace(second=0, microsecond=0)
+        if previous_close is None:
+            previous_close = _coalesce_number(row, "pre_close", "PRECLOSE", "昨收", "昨收价")
+        change_pct = _safe_percentage(
+            row.get("change_pct") or row.get("pct_chg") or row.get("change_percent")
+        )
+        if change_pct is None and previous_close:
+            change_pct = round((price / previous_close - 1.0) * 100.0, 2)
+        by_minute[minute_key] = {
+            "ts": minute_key.isoformat(),
+            "time": minute_key.strftime("%H:%M"),
+            "value": round(price, 2),
+            "change_pct": change_pct,
+        }
+
+    return [by_minute[key] for key in sorted(by_minute.keys())]
+
+
+def _chunked(items: Sequence[str], size: int) -> list[list[str]]:
+    return [list(items[index : index + size]) for index in range(0, len(items), size)]
+
+
+def _select_candidate_symbols_for_board(
+    *,
+    board_codes: Sequence[str],
+    quote_map: Mapping[str, Mapping[str, Any]],
+    lead_stock: str | None,
+    limit: int,
+) -> list[str]:
+    selected: list[str] = []
+    lead_symbol = _normalize_quote_symbol(lead_stock) if lead_stock else ""
+    normalized_board_codes = [_normalize_quote_symbol(item) for item in board_codes if item]
+    normalized_board_codes = [item for item in normalized_board_codes if item]
+    available_codes = [code for code in normalized_board_codes if code in quote_map]
+    liquidity_sorted = sorted(
+        available_codes,
+        key=lambda code: (
+            abs(_quote_amount_value(quote_map.get(code, {})) or 0.0),
+            _quote_change_pct(quote_map.get(code, {})) or -999.0,
+        ),
+        reverse=True,
+    )
+    momentum_sorted = sorted(
+        available_codes,
+        key=lambda code: (
+            _quote_change_pct(quote_map.get(code, {})) or -999.0,
+            abs(_quote_amount_value(quote_map.get(code, {})) or 0.0),
+        ),
+        reverse=True,
+    )
+    balanced_sorted = sorted(
+        available_codes,
+        key=lambda code: (
+            ((_quote_change_pct(quote_map.get(code, {})) or 0.0) > 0.0),
+            abs(_quote_amount_value(quote_map.get(code, {})) or 0.0),
+        ),
+        reverse=True,
+    )
+
+    for code in (
+        lead_symbol,
+        *liquidity_sorted[: max(2, limit // 2)],
+        *momentum_sorted[: max(2, limit // 2)],
+        *balanced_sorted,
+    ):
+        if not code or code in selected:
+            continue
+        selected.append(code)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+async def _fetch_index_intraday_points_for_pulse(
+    *,
+    preferred_source: str | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    today = datetime.now(_MARKET_TZ).strftime("%Y-%m-%d")
+    rows, payload = await _query_bridge_rows_safe(
+        "stock_kline",
+        {
+            "code": "000001.SH",
+            "period": "1m",
+            "start_date": today,
+            "end_date": today,
+            "limit": 320,
+        },
+        preferred_source=preferred_source,
+    )
+    return _build_intraday_index_points(rows), payload
+
+
+async def _load_board_symbols_for_pulse(
+    reader: Any,
+    *,
+    boards: Sequence[str],
+    preferred_source: str | None,
+) -> dict[str, list[str]]:
+    board_snapshot, _ = await reader.fetch_board_universe(source=preferred_source)
+    result: dict[str, list[str]] = {}
+    for board in boards:
+        cached_codes = [
+            _normalize_quote_symbol(item)
+            for item in board_snapshot.get(board, ())
+            if _normalize_quote_symbol(item)
+        ]
+        if cached_codes:
+            result[board] = list(dict.fromkeys(cached_codes))
+            continue
+
+        rows, _ = await _query_bridge_rows_safe(
+            "sector_stocks",
+            {"sector": board, "sector_type": "concept"},
+        )
+        bridge_codes = []
+        for row in rows:
+            symbol = _extract_symbol_from_row(row)
+            if symbol:
+                bridge_codes.append(symbol)
+        if bridge_codes:
+            result[board] = list(dict.fromkeys(bridge_codes))
+    return result
+
+
+async def _fetch_quote_map_for_pulse(
+    *,
+    symbols: Sequence[str],
+    preferred_source: str | None,
+) -> dict[str, dict[str, Any]]:
+    normalized_symbols = list(
+        dict.fromkeys(_normalize_quote_symbol(item) for item in symbols if item)
+    )
+    normalized_symbols = [item for item in normalized_symbols if item]
+    quote_map: dict[str, dict[str, Any]] = {}
+    for batch in _chunked(normalized_symbols, 80):
+        rows, _ = await _query_bridge_rows_safe(
+            "realtime_quote",
+            {"codes": batch},
+            preferred_source=preferred_source,
+        )
+        for row in rows:
+            symbol = _extract_symbol_from_row(row)
+            if symbol:
+                quote_map[symbol] = row
+    return quote_map
+
+
+async def _fetch_rows_by_symbol_for_pulse(
+    *,
+    capability: str,
+    symbols: Sequence[str],
+    params_builder: Callable[[str], dict[str, Any]],
+    preferred_source: str | None = None,
+    concurrency: int = 6,
+) -> dict[str, list[dict[str, Any]]]:
+    result: dict[str, list[dict[str, Any]]] = {}
+    normalized_symbols = list(
+        dict.fromkeys(_normalize_quote_symbol(item) for item in symbols if item)
+    )
+    normalized_symbols = [item for item in normalized_symbols if item]
+    if not normalized_symbols:
+        return result
+
+    semaphore = asyncio.Semaphore(max(1, concurrency))
+
+    async def _runner(symbol: str) -> None:
+        async with semaphore:
+            rows, _ = await _query_bridge_rows_safe(
+                capability,
+                params_builder(symbol),
+                preferred_source=preferred_source,
+            )
+            result[symbol] = rows
+
+    await asyncio.gather(*(_runner(symbol) for symbol in normalized_symbols))
+    return result
+
+
+async def _fetch_financial_rows_for_pulse(
+    *,
+    symbols: Sequence[str],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    normalized_symbols = list(
+        dict.fromkeys(_normalize_quote_symbol(item) for item in symbols if item)
+    )
+    normalized_symbols = [item for item in normalized_symbols if item]
+    if not normalized_symbols:
+        return {}, {}
+
+    income_rows, _ = await _query_bridge_rows_safe(
+        "income_statement",
+        {"codes": normalized_symbols},
+    )
+    balance_rows, _ = await _query_bridge_rows_safe(
+        "balance_sheet",
+        {"codes": normalized_symbols},
+    )
+    return (
+        _normalize_grouped_rows(income_rows, "symbol", "code", "MARKET_CODE"),
+        _normalize_grouped_rows(balance_rows, "symbol", "code", "MARKET_CODE"),
+    )
 
 
 def _normalize_concept_period(period: str | None) -> str:
@@ -2264,6 +2645,305 @@ async def get_concept_strength(
             },
         }
     )
+
+
+async def _build_leaders_by_board_for_pulse(
+    *,
+    reader: Any,
+    boards: Sequence[str],
+    board_lead_stocks: Mapping[str, str | None],
+    preferred_quote_source: str | None,
+    candidate_limit: int,
+) -> dict[str, list[dict[str, Any]]]:
+    board_symbols = await _load_board_symbols_for_pulse(
+        reader,
+        boards=boards,
+        preferred_source=preferred_quote_source,
+    )
+    all_symbols = [symbol for board in boards for symbol in board_symbols.get(board, ()) if symbol]
+    quote_map = await _fetch_quote_map_for_pulse(
+        symbols=all_symbols,
+        preferred_source=preferred_quote_source,
+    )
+    if not quote_map:
+        return {}
+
+    candidate_symbols_by_board: dict[str, list[str]] = {}
+    all_candidate_symbols: list[str] = []
+    for board in boards:
+        candidates = _select_candidate_symbols_for_board(
+            board_codes=board_symbols.get(board, ()),
+            quote_map=quote_map,
+            lead_stock=board_lead_stocks.get(board),
+            limit=candidate_limit,
+        )
+        if not candidates:
+            continue
+        candidate_symbols_by_board[board] = candidates
+        for symbol in candidates:
+            if symbol not in all_candidate_symbols:
+                all_candidate_symbols.append(symbol)
+
+    if not all_candidate_symbols:
+        return {}
+
+    kline_preferred_source = preferred_quote_source
+    capital_preferred_source = (
+        preferred_quote_source
+        if _source_family(preferred_quote_source) in {"miniqmt", "akshare"}
+        else None
+    )
+    kline_rows_by_symbol = await _fetch_rows_by_symbol_for_pulse(
+        capability="stock_kline",
+        symbols=all_candidate_symbols,
+        preferred_source=kline_preferred_source,
+        params_builder=lambda symbol: {
+            "code": symbol,
+            "period": "1d",
+            "limit": 40,
+        },
+        concurrency=6,
+    )
+    capital_rows_by_symbol = await _fetch_rows_by_symbol_for_pulse(
+        capability="capital_flow",
+        symbols=all_candidate_symbols,
+        preferred_source=capital_preferred_source,
+        params_builder=lambda symbol: {
+            "code": symbol,
+            "period": "1d",
+            "limit": 30,
+        },
+        concurrency=4,
+    )
+    income_rows_by_symbol, balance_rows_by_symbol = await _fetch_financial_rows_for_pulse(
+        symbols=all_candidate_symbols,
+    )
+
+    leaders_by_board: dict[str, list[dict[str, Any]]] = {}
+    for board in boards:
+        metrics: list[StockCandidateMetrics] = []
+        for symbol in candidate_symbols_by_board.get(board, ()):
+            quote_payload = quote_map.get(symbol)
+            if not quote_payload:
+                continue
+            last_price = _quote_last_price_value(quote_payload) or 0.0
+            if last_price <= 0:
+                continue
+            change_pct = _quote_change_pct(quote_payload) or 0.0
+            amount = _quote_amount_value(quote_payload) or 0.0
+            technical_metrics = extract_technical_metrics(
+                current_price=last_price,
+                current_change_pct=change_pct,
+                kline_rows=kline_rows_by_symbol.get(symbol, ()),
+            )
+            capital_metrics = extract_capital_metrics(capital_rows_by_symbol.get(symbol, ()))
+            fundamental_metrics = extract_fundamental_metrics(
+                income_rows=income_rows_by_symbol.get(symbol, ()),
+                balance_rows=balance_rows_by_symbol.get(symbol, ()),
+            )
+            return_5d = technical_metrics.get("return_5d")
+            return_20d = technical_metrics.get("return_20d")
+            range_position = technical_metrics.get("range_position")
+            main_net_inflow = capital_metrics.get("main_net_inflow")
+            main_net_inflow_pct = capital_metrics.get("main_net_inflow_pct")
+            recent_positive_days = int(capital_metrics.get("recent_positive_days") or 0)
+            roe_like = fundamental_metrics.get("roe_like")
+            profit_margin = fundamental_metrics.get("profit_margin")
+            debt_ratio = fundamental_metrics.get("debt_ratio")
+            technical_coverage = build_technical_coverage(
+                return_5d=return_5d if isinstance(return_5d, float | int) else None,
+                return_20d=return_20d if isinstance(return_20d, float | int) else None,
+                range_position=range_position if isinstance(range_position, float | int) else None,
+            )
+            capital_coverage = build_capital_coverage(
+                main_net_inflow=(
+                    main_net_inflow if isinstance(main_net_inflow, float | int) else None
+                ),
+                main_net_inflow_pct=(
+                    main_net_inflow_pct if isinstance(main_net_inflow_pct, float | int) else None
+                ),
+                has_rows=bool(capital_rows_by_symbol.get(symbol, ())),
+            )
+            fundamental_coverage = build_fundamental_coverage(
+                roe_like=roe_like if isinstance(roe_like, float | int) else None,
+                profit_margin=profit_margin if isinstance(profit_margin, float | int) else None,
+                debt_ratio=debt_ratio if isinstance(debt_ratio, float | int) else None,
+            )
+            metrics.append(
+                StockCandidateMetrics(
+                    symbol=symbol,
+                    name=_quote_name_value(quote_payload, symbol),
+                    last_price=round(last_price, 2),
+                    change_pct=round(change_pct, 2),
+                    amount=round(amount, 2),
+                    technical_raw=build_technical_raw(
+                        change_pct=change_pct,
+                        return_5d=return_5d if isinstance(return_5d, float | int) else None,
+                        return_20d=return_20d if isinstance(return_20d, float | int) else None,
+                        above_ma20=bool(technical_metrics.get("above_ma20")),
+                        range_position=(
+                            range_position if isinstance(range_position, float | int) else None
+                        ),
+                    ),
+                    capital_raw=build_capital_raw(
+                        amount=amount,
+                        main_net_inflow=(
+                            main_net_inflow if isinstance(main_net_inflow, float | int) else None
+                        ),
+                        main_net_inflow_pct=(
+                            main_net_inflow_pct
+                            if isinstance(main_net_inflow_pct, float | int)
+                            else None
+                        ),
+                        recent_positive_days=recent_positive_days,
+                    ),
+                    fundamental_raw=build_fundamental_raw(
+                        roe_like=roe_like if isinstance(roe_like, float | int) else None,
+                        profit_margin=(
+                            profit_margin if isinstance(profit_margin, float | int) else None
+                        ),
+                        debt_ratio=debt_ratio if isinstance(debt_ratio, float | int) else None,
+                    ),
+                    main_net_inflow=(
+                        main_net_inflow if isinstance(main_net_inflow, float | int) else None
+                    ),
+                    main_net_inflow_pct=(
+                        main_net_inflow_pct
+                        if isinstance(main_net_inflow_pct, float | int)
+                        else None
+                    ),
+                    recent_positive_days=recent_positive_days,
+                    return_5d=return_5d if isinstance(return_5d, float | int) else None,
+                    return_20d=return_20d if isinstance(return_20d, float | int) else None,
+                    above_ma20=bool(technical_metrics.get("above_ma20")),
+                    roe_like=roe_like if isinstance(roe_like, float | int) else None,
+                    profit_margin=profit_margin if isinstance(profit_margin, float | int) else None,
+                    debt_ratio=debt_ratio if isinstance(debt_ratio, float | int) else None,
+                    technical_coverage=technical_coverage,
+                    capital_coverage=capital_coverage,
+                    fundamental_coverage=fundamental_coverage,
+                )
+            )
+        ranked = build_ranked_stock_candidates(metrics)
+        if ranked:
+            leaders_by_board[board] = [item.to_payload() for item in ranked[:3]]
+    return leaders_by_board
+
+
+@router.get("/index-concept-pulse")
+async def get_index_concept_pulse(
+    request: Request,
+    source: str | None = Query(None, description="指定指数与分时所用数据源，默认当前激活源"),
+    board_limit: int = Query(6, ge=1, le=12, description="最多返回多少个概念的优质股"),
+    event_limit: int = Query(16, ge=1, le=40, description="最多返回多少个概念启动事件"),
+    candidate_limit: int = Query(6, ge=2, le=12, description="每个概念最多评估多少只候选股"),
+    threshold: float = Query(72.0, ge=0.0, le=100.0, description="概念启动阈值"),
+) -> JSONResponse:
+    """返回上证指数分时上的概念启动事件，以及各概念的高质量个股。"""
+
+    settings = getattr(request.app.state, "settings", None)
+    await ensure_market_data_runtime(request.app.state.app_state, settings)
+    app_state, reader, _ = _ensure_runtime_components(request)
+
+    preferred_source = _normalize_source_param(source) or _resolve_data_source_name(app_state)
+    strength_response = await get_concept_strength(request, limit=120, source=source)
+    strength_payload = _json_response_payload(strength_response)
+    strength_items = [item for item in strength_payload.get("items", []) if isinstance(item, dict)]
+    captured_at = _parse_market_datetime(
+        strength_payload.get("asOf") or strength_payload.get("retrieved_at")
+    ) or datetime.now(_MARKET_TZ)
+
+    strength_points = normalize_strength_points(strength_items)
+    _CONCEPT_PULSE_HISTORY.record(captured_at=captured_at, boards=strength_points)
+    history_frames = _CONCEPT_PULSE_HISTORY.frames()
+    events = build_activation_events(
+        history_frames,
+        score_threshold=threshold,
+        limit=event_limit,
+    )
+
+    tracked_boards: list[str] = []
+    board_lead_stocks: dict[str, str | None] = {}
+    for event in reversed(events):
+        for activated in event.boards:
+            if activated.board in board_lead_stocks:
+                continue
+            tracked_boards.append(activated.board)
+            board_lead_stocks[activated.board] = activated.lead_stock
+            if len(tracked_boards) >= board_limit:
+                break
+        if len(tracked_boards) >= board_limit:
+            break
+
+    leaders_by_board = await _build_leaders_by_board_for_pulse(
+        reader=reader,
+        boards=tracked_boards,
+        board_lead_stocks=board_lead_stocks,
+        preferred_quote_source=preferred_source,
+        candidate_limit=candidate_limit,
+    )
+
+    event_payloads: list[dict[str, Any]] = []
+    for event in events:
+        event_time = event.captured_at.astimezone(_MARKET_TZ)
+        boards_payload: list[dict[str, Any]] = []
+        for activated in event.boards:
+            ranked_candidates = leaders_by_board.get(activated.board, [])
+            boards_payload.append(
+                {
+                    "board": activated.board,
+                    "activity_score": activated.activity_score,
+                    "speed_per_min": activated.speed_per_min,
+                    "amount_total": activated.amount_total,
+                    "lead_stock": activated.lead_stock,
+                    "lead_change": activated.lead_change,
+                    "leader": ranked_candidates[0] if ranked_candidates else None,
+                    "candidates": ranked_candidates,
+                }
+            )
+        event_payloads.append(
+            {
+                "captured_at": event_time.isoformat(),
+                "time": event_time.strftime("%H:%M"),
+                "label": event.label,
+                "strongest_board": event.strongest_board,
+                "boards": boards_payload,
+            }
+        )
+
+    index_points, index_meta = await _fetch_index_intraday_points_for_pulse(
+        preferred_source=preferred_source,
+    )
+    latest_index_time = index_points[-1]["ts"] if index_points else None
+    detail: dict[str, Any] = {
+        "history_mode": "runtime_memory",
+        "history_frames": len(history_frames),
+        "history_ready": len(history_frames) >= 2,
+        "tracked_boards": tracked_boards,
+        "strength_source": strength_payload.get("data_source"),
+        "index_source": index_meta.get("source") if isinstance(index_meta, dict) else None,
+    }
+    strength_detail = strength_payload.get("detail")
+    if isinstance(strength_detail, dict):
+        detail["strength_detail"] = strength_detail
+    if isinstance(index_meta, dict) and index_meta.get("detail"):
+        detail["index_detail"] = index_meta.get("detail")
+
+    payload = {
+        "index": {
+            "symbol": "000001.SH",
+            "name": "上证指数",
+            "points": index_points,
+        },
+        "events": event_payloads,
+        "asOf": strength_payload.get("asOf") or latest_index_time or _iso_now(),
+        "retrieved_at": _iso_now(),
+        "stale": bool(strength_payload.get("stale")) or not index_points,
+        "phase_state": strength_payload.get("phase_state") or _resolve_market_phase(),
+        "data_source": strength_payload.get("data_source") or preferred_source,
+        "detail": detail,
+    }
+    return JSONResponse(payload)
 
 
 @router.get("/board-overview")

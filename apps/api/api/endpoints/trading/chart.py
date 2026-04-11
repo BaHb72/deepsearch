@@ -7,7 +7,10 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import inspect
 import json
+import re
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional
@@ -42,6 +45,10 @@ class ChartService:
         self._data_provider = data_provider
         self._indicator_calculator = indicator_calculator
         self._redis_url = redis_url
+        self._stock_list_cache: List[Dict[str, str]] = []
+        self._stock_list_cache_source: str = "none"
+        self._stock_list_cache_at: float = 0.0
+        self._stock_list_cache_ttl_seconds: float = 300.0
 
     async def get_series(
         self,
@@ -118,8 +125,330 @@ class ChartService:
     async def get_stock_meta(self, symbol: str) -> Dict[str, Any]:
         return {"symbol": symbol, "meta": {}}
 
+    @staticmethod
+    def _as_clean_string(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        return str(value).strip()
+
+    @classmethod
+    def _normalize_stock_item(cls, raw: Any) -> Dict[str, str] | None:
+        if not isinstance(raw, dict):
+            return None
+
+        symbol = cls._normalize_symbol(
+            raw.get("code")
+            or raw.get("SECURITY_CODE")
+            or raw.get("MARKET_CODE")
+            or raw.get("symbol")
+            or raw.get("value")
+        )
+        if not symbol:
+            return None
+
+        raw_symbol_text = cls._as_clean_string(raw.get("symbol"))
+        name = cls._as_clean_string(
+            raw.get("name")
+            or raw.get("SECURITY_NAME")
+            or raw.get("sec_name")
+            or raw.get("short_name")
+            or (raw_symbol_text if raw_symbol_text != symbol else "")
+            or symbol
+        )
+        pinyin = cls._as_clean_string(raw.get("pinyin") or raw.get("PINYIN"))
+
+        return {
+            "symbol": symbol,
+            "name": name or symbol,
+            "pinyin": pinyin.lower(),
+        }
+
+    @classmethod
+    def _normalize_symbol(cls, value: Any) -> str:
+        symbol = cls._as_clean_string(value).upper().replace(" ", "")
+        if not symbol:
+            return ""
+
+        if "." in symbol:
+            try:
+                from apps.api.api.providers import normalize_stock_code
+
+                normalized = cls._as_clean_string(normalize_stock_code(symbol)).upper()
+                return normalized or symbol
+            except Exception:
+                return symbol
+
+        if len(symbol) == 8 and symbol[:2] in ("SH", "SZ", "BJ") and symbol[2:].isdigit():
+            return f"{symbol[2:]}.{symbol[:2]}"
+
+        if len(symbol) == 6 and symbol.isdigit():
+            if symbol.startswith(("8", "4")):
+                return f"{symbol}.BJ"
+            if symbol.startswith(("6", "9", "5")):
+                return f"{symbol}.SH"
+            return f"{symbol}.SZ"
+
+        return symbol
+
+    @classmethod
+    def _normalize_stock_items(cls, rows: List[Any]) -> List[Dict[str, str]]:
+        dedup: Dict[str, Dict[str, str]] = {}
+        for row in rows:
+            item = cls._normalize_stock_item(row)
+            if not item:
+                continue
+            symbol = item["symbol"]
+            if symbol in dedup:
+                # 已存在记录优先保留较完整名称
+                if not dedup[symbol].get("name") and item.get("name"):
+                    dedup[symbol] = item
+                continue
+            dedup[symbol] = item
+        return list(dedup.values())
+
+    @staticmethod
+    def _extract_rows(payload: Any) -> List[Any]:
+        if payload is None:
+            return []
+        if isinstance(payload, list):
+            return payload
+        if isinstance(payload, tuple):
+            return list(payload)
+        if isinstance(payload, dict):
+            for field in ("items", "data", "rows", "result", "records", "legacy"):
+                value = payload.get(field)
+                if isinstance(value, list):
+                    return value
+            return [payload]
+
+        legacy = getattr(payload, "legacy", None)
+        if isinstance(legacy, tuple):
+            return [dict(item) for item in legacy]
+        if isinstance(legacy, list):
+            return legacy
+
+        records = getattr(payload, "records", None)
+        if isinstance(records, tuple):
+            return [dict(record.as_mapping()) for record in records]
+        if isinstance(records, list):
+            normalized_records: List[Dict[str, Any]] = []
+            for record in records:
+                if isinstance(record, dict):
+                    normalized_records.append(record)
+                elif hasattr(record, "as_mapping") and callable(getattr(record, "as_mapping")):
+                    normalized_records.append(dict(record.as_mapping()))
+            if normalized_records:
+                return normalized_records
+
+        return []
+
+    @staticmethod
+    def _match_keyword(item: Dict[str, str], keyword: str) -> bool:
+        key = keyword.strip().lower()
+        if not key:
+            return True
+        symbol = item.get("symbol", "").lower()
+        symbol_no_exchange = symbol.split(".", 1)[0]
+        name = item.get("name", "").lower()
+        pinyin = item.get("pinyin", "").lower()
+        return (
+            key in symbol
+            or key in symbol_no_exchange
+            or key in name
+            or (bool(pinyin) and key in pinyin)
+        )
+
+    @classmethod
+    def _build_keyword_fallback_items(cls, keyword: str) -> List[Dict[str, str]]:
+        raw = cls._as_clean_string(keyword).upper().replace(" ", "")
+        if not raw:
+            return []
+
+        seen: set[str] = set()
+        candidates: List[Dict[str, str]] = []
+
+        def _add(symbol: str) -> None:
+            normalized = cls._normalize_symbol(symbol)
+            if not normalized:
+                return
+            if normalized in seen:
+                return
+            seen.add(normalized)
+            candidates.append({"symbol": normalized, "name": normalized, "pinyin": ""})
+
+        if raw.isdigit() and len(raw) == 6:
+            if raw.startswith(("8", "4")):
+                exchanges = ("BJ", "SZ", "SH")
+            elif raw.startswith(("6", "9", "5")):
+                exchanges = ("SH", "SZ")
+            else:
+                exchanges = ("SZ", "SH")
+            for exchange in exchanges:
+                _add(f"{raw}.{exchange}")
+            _add(raw)
+            return candidates
+
+        if len(raw) == 8 and raw[:2] in ("SH", "SZ", "BJ") and raw[2:].isdigit():
+            _add(f"{raw[2:]}.{raw[:2]}")
+            return candidates
+
+        if "." in raw and all(part for part in raw.split(".", 1)):
+            _add(raw)
+            return candidates
+
+        # 仅在字母数字输入时兜底，避免中文关键字误命中候选代码。
+        if re.fullmatch(r"[A-Z0-9]+", raw):
+            _add(raw)
+        return candidates
+
+    async def _load_stock_items(self) -> tuple[List[Dict[str, str]], str]:
+        now = time.time()
+        if (
+            self._stock_list_cache
+            and (now - self._stock_list_cache_at) < self._stock_list_cache_ttl_seconds
+        ):
+            return list(self._stock_list_cache), self._stock_list_cache_source
+
+        merged: Dict[str, Dict[str, str]] = {}
+        source_parts: List[str] = []
+
+        def _merge(items: List[Dict[str, str]], source_name: str) -> None:
+            if not items:
+                return
+
+            for item in items:
+                symbol = self._as_clean_string(item.get("symbol"))
+                if not symbol:
+                    continue
+
+                incoming_name = self._as_clean_string(item.get("name")) or symbol
+                incoming_pinyin = self._as_clean_string(item.get("pinyin")).lower()
+                existed = merged.get(symbol)
+                if existed is None:
+                    merged[symbol] = {
+                        "symbol": symbol,
+                        "name": incoming_name,
+                        "pinyin": incoming_pinyin,
+                    }
+                    continue
+
+                existed_name = self._as_clean_string(existed.get("name"))
+                if (not existed_name or existed_name == symbol) and incoming_name != symbol:
+                    existed["name"] = incoming_name
+
+                existed_pinyin = self._as_clean_string(existed.get("pinyin"))
+                if not existed_pinyin and incoming_pinyin:
+                    existed["pinyin"] = incoming_pinyin
+
+            source_parts.append(source_name)
+
+        # 0) 优先使用 UnifiedDataFeed 的引用数据缓存（通常覆盖更全）
+        try:
+            from core.application.services.unified_data import get_unified_feed
+            from core.ports.data.requests import StockListRequest
+
+            feed = get_unified_feed()
+            response = await asyncio.wait_for(
+                feed.list_instruments(StockListRequest()), timeout=2.5
+            )
+            raw_items: List[Dict[str, Any]] = []
+            for stock in response.stocks:
+                raw_items.append(
+                    {
+                        "symbol": stock.asset.to_standard(),
+                        "name": stock.name,
+                    }
+                )
+
+            normalized_items = self._normalize_stock_items(raw_items)
+            source_value = getattr(response.source, "value", None)
+            source_name = self._as_clean_string(source_value) or "unified"
+            _merge(normalized_items, source_name)
+        except Exception as exc:
+            logger.debug(f"UnifiedDataFeed 股票列表加载失败: {exc!r}")
+
+        # 1) 再使用 DataSourceManager 聚合能力补全股票池
+        try:
+            from core.infrastructure.providers.managers.data_source_manager import (
+                StockListFetchResult,
+                get_data_source_manager,
+            )
+
+            manager = get_data_source_manager()
+            stock_result = await asyncio.wait_for(manager.get_stock_list(limit=None), timeout=4.5)
+            raw_items: List[Dict[str, Any]] = []
+            source_name = "manager"
+
+            if isinstance(stock_result, StockListFetchResult):
+                source_name = stock_result.source or "manager"
+                if stock_result.legacy:
+                    raw_items = [dict(item) for item in stock_result.legacy]
+                else:
+                    raw_items = [dict(record.as_mapping()) for record in stock_result.records]
+            elif isinstance(stock_result, list):
+                raw_items = [dict(item) for item in stock_result if isinstance(item, dict)]
+
+            _merge(self._normalize_stock_items(raw_items), source_name)
+        except Exception as exc:
+            logger.debug(f"DataSourceManager 股票列表回退失败: {exc!r}")
+
+        # 2) 复用 chart service 已解析的数据 provider（兜底补充）
+        provider = self._data_provider
+        if provider is not None:
+            for method_name in ("get_stock_list_records", "get_stock_list"):
+                fetcher = getattr(provider, method_name, None)
+                if not callable(fetcher):
+                    continue
+                try:
+                    maybe_payload = fetcher(limit=None)
+                    payload = (
+                        await maybe_payload if inspect.isawaitable(maybe_payload) else maybe_payload
+                    )
+                    normalized_items = self._normalize_stock_items(self._extract_rows(payload))
+                    _merge(normalized_items, f"provider:{method_name}")
+                    if normalized_items:
+                        break
+                except Exception as exc:
+                    logger.debug(f"Provider {method_name} 股票列表加载失败: {exc!r}")
+
+        # 3) 最后尝试读取 MiniQMT 股票缓存（若已由后台任务预热）
+        try:
+            from apps.api.api.services.stock_cache import get_stock_list_from_cache
+
+            cached = get_stock_list_from_cache("沪深A股", 0) or []
+            _merge(self._normalize_stock_items(list(cached)), "miniqmt_cache")
+        except Exception as exc:
+            logger.debug(f"MiniQMT 股票缓存回退失败: {exc!r}")
+
+        items = list(merged.values())
+        source = "+".join(source_parts) if source_parts else "none"
+
+        if items:
+            self._stock_list_cache = list(items)
+            self._stock_list_cache_source = source
+            self._stock_list_cache_at = time.time()
+
+        return items, source
+
     async def get_stock_list(self, keyword: Optional[str] = None) -> Dict[str, Any]:
-        return {"keyword": keyword, "items": [], "total": 0}
+        items, source = await self._load_stock_items()
+        filtered = items
+        if keyword:
+            filtered = [item for item in items if self._match_keyword(item, keyword)]
+            if not filtered:
+                fallback = self._build_keyword_fallback_items(keyword)
+                if fallback:
+                    filtered = fallback
+                    if source == "none":
+                        source = "keyword_fallback"
+        return {
+            "keyword": keyword,
+            "items": filtered,
+            "total": len(filtered),
+            "source": source,
+        }
 
     async def validate_data_sources(self, symbol: str, timeframe: str) -> Dict[str, Any]:
         return {

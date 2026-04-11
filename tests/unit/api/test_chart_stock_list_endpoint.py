@@ -44,3 +44,21 @@ async def test_chart_stock_list_raises_503_when_service_unavailable(
     assert exc.status_code == 503
     assert isinstance(exc.detail, dict)
     assert exc.detail["code"] == "CHART_STOCK_LIST_UNAVAILABLE"
+
+
+def test_chart_stock_list_keyword_fallback_skips_chinese_name() -> None:
+    fallback = trading_chart.ChartService._build_keyword_fallback_items("罗博特科")
+    assert fallback == []
+
+
+def test_chart_stock_list_normalize_stock_item_prefers_code() -> None:
+    item = trading_chart.ChartService._normalize_stock_item(
+        {
+            "symbol": "罗博特科",
+            "code": "SZ300757",
+            "name": "罗博特科",
+        }
+    )
+    assert item is not None
+    assert item["symbol"] == "300757.SZ"
+    assert item["name"] == "罗博特科"

@@ -13,6 +13,7 @@ import {
     type OrderImbalanceParams,
     type AuctionQualityParams,
     type ConceptFlowParams,
+    type IndexConceptPulseParams,
     type FetchAllMarketDataParams,
 } from '@/services/market/marketData.service'
 import { marketQueryKeys } from './keys'
@@ -145,6 +146,19 @@ export function useConceptFlow(
     return useQuery({
         queryKey: marketQueryKeys.conceptFlow(params),
         queryFn: () => marketDataService.getConceptFlow(params),
+        staleTime: 10_000,
+        refetchInterval: options?.refetchInterval ?? 15_000,
+        enabled: options?.enabled,
+    })
+}
+
+export function useIndexConceptPulse(
+    params?: IndexConceptPulseParams,
+    options?: QueryHookOptions
+) {
+    return useQuery({
+        queryKey: marketQueryKeys.indexConceptPulse(params),
+        queryFn: () => marketDataService.getIndexConceptPulse(params),
         staleTime: 10_000,
         refetchInterval: options?.refetchInterval ?? 15_000,
         enabled: options?.enabled,

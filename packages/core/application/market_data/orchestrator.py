@@ -466,16 +466,28 @@ class RealtimeDataOrchestrator:
         if realtime_cfg is None or not getattr(realtime_cfg, "adapters", None):
             return {}, ()
 
-        enabled_specs = [spec for spec in realtime_cfg.adapters if spec.enabled]
-        if not enabled_specs:
+        indexed_specs: list[tuple[int, int, RealtimeAdapterSpec]] = []
+        for index, spec in enumerate(realtime_cfg.adapters):
+            if not spec.enabled:
+                continue
+            name = spec.name.strip()
+            if not name:
+                continue
+            indexed_specs.append((int(spec.priority), index, spec))
+        if not indexed_specs:
             return {}, ()
 
-        enabled_specs.sort(key=lambda spec: (spec.priority, spec.name.lower()))
+        indexed_specs.sort(key=lambda item: (item[0], item[1]))
         mapping: Dict[str, RealtimeAdapterSpec] = {}
         order: list[str] = []
-        for spec in enabled_specs:
-            mapping[spec.name.lower()] = spec
-            order.append(spec.name)
+        seen: set[str] = set()
+        for _, _, spec in indexed_specs:
+            normalized_name = spec.name.strip().lower()
+            if normalized_name in seen:
+                continue
+            seen.add(normalized_name)
+            mapping[normalized_name] = spec
+            order.append(spec.name.strip())
         return mapping, tuple(order)
 
     def _record_success(self, name: str) -> None:

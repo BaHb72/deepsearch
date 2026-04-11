@@ -208,6 +208,7 @@ worker/
 .python-version
 .agent/
 .agents/
+.codex/
 /tmpclaude-*-cwd
 /tmp_cmd_output.txt
 /package-lock.json

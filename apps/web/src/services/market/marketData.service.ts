@@ -12,6 +12,7 @@ import {
     type AuctionQualityResponse,
     type ConceptFlowResponse,
     type ConceptFlowPeriod,
+    type IndexConceptPulseResponse,
     type RealtimeSourceStatus,
     type DataSourceSwitchResponse,
 } from '@/api/marketDataLive'
@@ -55,6 +56,14 @@ export interface ConceptFlowParams {
     period?: ConceptFlowPeriod
     limit?: number
     source?: string | null
+}
+
+export interface IndexConceptPulseParams {
+    source?: string | null
+    board_limit?: number
+    event_limit?: number
+    candidate_limit?: number
+    threshold?: number
 }
 
 export interface FetchAllMarketDataParams {
@@ -127,6 +136,13 @@ export const marketDataService = {
      */
     async getConceptFlow(params?: ConceptFlowParams): Promise<ConceptFlowResponse> {
         return marketDataLiveApi.getConceptFlow(params)
+    },
+
+    /**
+     * 获取上证指数分时上的概念启动事件与高质量个股
+     */
+    async getIndexConceptPulse(params?: IndexConceptPulseParams): Promise<IndexConceptPulseResponse> {
+        return marketDataLiveApi.getIndexConceptPulse(params)
     },
 
     /**

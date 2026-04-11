@@ -14,6 +14,10 @@ export const marketQueryKeys = {
     conceptStrength: <T extends object | undefined>(params?: T) =>
         [...marketQueryKeys.all, 'conceptStrength', params] as const,
 
+    // 指数分时概念启动
+    indexConceptPulse: <T extends object | undefined>(params?: T) =>
+        [...marketQueryKeys.all, 'indexConceptPulse', params] as const,
+
     // 板块概览
     boardOverview: <T extends object | undefined>(params?: T) =>
         [...marketQueryKeys.all, 'boardOverview', params] as const,

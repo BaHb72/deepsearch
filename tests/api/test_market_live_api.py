@@ -16,6 +16,7 @@ from apps.api.api.endpoints.market_data import live_api
     "path",
     [
         "/api/market/live/strength",
+        "/api/market/live/index-concept-pulse",
         "/api/market/live/board-overview",
         "/api/market/live/board-drivers",
         "/api/market/live/order-imbalance",
@@ -176,6 +177,37 @@ def test_auto_fallback_sources_keeps_amazingdata_before_akshare_in_no_trade():
     )
 
     assert sources == ["amazingdata", "miniqmt", "akshare"]
+
+
+def test_configured_adapter_names_follow_priority_order():
+    settings = SimpleNamespace(
+        data_sources=SimpleNamespace(
+            realtime=SimpleNamespace(
+                adapters=(
+                    SimpleNamespace(name="akshare", enabled=True, priority=3),
+                    SimpleNamespace(name="amazingdata", enabled=True, priority=1),
+                    SimpleNamespace(name="miniqmt", enabled=True, priority=2),
+                )
+            )
+        )
+    )
+
+    names = live_api._configured_adapter_names(settings)
+
+    assert names == ["amazingdata", "miniqmt", "akshare"]
+
+
+def test_enabled_adapter_names_uses_fallback_order_when_realtime_adapters_missing():
+    settings = SimpleNamespace(
+        data_sources=SimpleNamespace(
+            realtime=SimpleNamespace(adapters=()),
+            fallback_order=("miniqmt", "amazingdata", "akshare"),
+        )
+    )
+
+    names = live_api._enabled_adapter_names(settings)
+
+    assert names == ["miniqmt", "amazingdata", "akshare"]
 
 
 @pytest.mark.asyncio
