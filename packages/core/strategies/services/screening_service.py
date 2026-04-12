@@ -397,27 +397,27 @@ class ScreeningService:
 
         try:
             short_period = max(2, int(float(short_period_raw)))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             short_period = 5
         try:
             long_period = max(short_period + 1, int(float(long_period_raw)))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             long_period = max(short_period + 1, 20)
         try:
             ma_signal_strength = max(0.0, min(1.0, float(ma_signal_strength_raw)))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             ma_signal_strength = 0.5
         try:
             deviation_scale = max(0.1, min(20.0, float(deviation_scale_raw)))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             deviation_scale = 5.0
         try:
             ma_weight = max(0.0, min(1.0, float(ma_weight_raw)))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             ma_weight = 0.5
         try:
             deviation_weight = max(0.0, min(1.0, float(deviation_weight_raw)))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             deviation_weight = 0.5
 
         # 当 entry_threshold 提供时，优先用于归一化偏离强度。
@@ -427,7 +427,7 @@ class ScreeningService:
                 entry_threshold = float(entry_threshold_raw)
                 if entry_threshold > 0:
                     deviation_scale = max(0.1, min(20.0, 0.5 / entry_threshold))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass
 
         if df is None or len(df) < long_period:

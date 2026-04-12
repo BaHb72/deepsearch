@@ -717,8 +717,8 @@ def extract_technical_metrics(
         }
 
     sorted_rows = sorted(kline_rows, key=_sort_key_by_date, reverse=True)
-    closes = [_pick_number(row, "close", "last", "price") for row in sorted_rows]
-    closes = [item for item in closes if item is not None and item > 0]
+    raw_closes = [_pick_number(row, "close", "last", "price") for row in sorted_rows]
+    closes: list[float] = [item for item in raw_closes if item is not None and item > 0]
     if not closes:
         return {
             "return_5d": None,

@@ -200,13 +200,11 @@ async def run_migration(migrate_data: bool = True) -> bool:
 
                                 insert_sql = cast(
                                     Executable,
-                                    text(
-                                        """
+                                    text("""
                                                   INSERT INTO module_source_configs
                                                       (module_name, primary_source, fallback_sources, category)
                                                   VALUES (:module_name, :primary, :fallback::jsonb, :category)
-                                                  """
-                                    ),
+                                                  """),
                                 )
 
                                 await db_session.execute(

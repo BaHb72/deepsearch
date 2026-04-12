@@ -1,376 +1,273 @@
 # encoding:utf-8
 """
-AmazingData 登录/退出进程探测脚本。
+AmazingData 真实登录与只读接口探测脚本。
 
-用于验证指定凭据在登录与退出阶段是否引发 worker 进程崩溃，并尝试捕获 SystemExit 迹象。
+探测在独立子进程中执行，用于隔离 AmazingData/TGW SDK 可能触发的 stdout 输出、
+SystemExit 或进程退出行为。脚本只输出脱敏后的阶段结果，不输出密码或 SDK 原始登录明细。
 """
 
 from __future__ import annotations
 
 import argparse
-import asyncio
 import json
-import multiprocessing as mp
-import pickle
-import queue
+import os
 import subprocess
 import sys
-import time
-from typing import Any, Dict, List, Optional
+import tempfile
+from pathlib import Path
+from typing import Any
 
-from loguru import logger
+import yaml
 
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_adapter import (
-    AmazingDataProcessAdapter,
-)
-from deepsearch.infrastructure.providers.implementations.amazingdata.amazingdata_process_pool import (
-    get_global_pool,
-)
-from deepsearch.ports.amazingdata_process import AmazingDataLoginRequest, AmazingDataLogoutRequest
-
-DEFAULT_USERNAME = "212200038719"
-DEFAULT_PASSWORD = "212200038719@2025"
-DEFAULT_HOST = "101.230.159.234"
-DEFAULT_PORT = 8600
+DEFAULT_CONFIG_PATH = Path("packages/core/config/settings.dev.yaml")
+DEFAULT_SECURITY_TYPE = "EXTRA_STOCK_A_SH_SZ"
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="检测 AmazingData 登录、退出对 worker 进程的影响")
-    parser.add_argument("--username", default=DEFAULT_USERNAME, help="登录用户名")
-    parser.add_argument("--password", default=DEFAULT_PASSWORD, help="登录密码")
-    parser.add_argument("--host", default=DEFAULT_HOST, help="数据源主机地址")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="数据源端口")
-    parser.add_argument("--login-timeout", type=float, default=10.0, help="登录超时时间（秒）")
-    parser.add_argument("--logout-timeout", type=float, default=5.0, help="退出超时时间（秒）")
+    parser = argparse.ArgumentParser(description="探测 AmazingData 登录和只读基础接口")
     parser.add_argument(
-        "--exit-wait",
+        "--config",
+        default=str(DEFAULT_CONFIG_PATH),
+        help="配置文件路径，默认 packages/core/config/settings.dev.yaml",
+    )
+    parser.add_argument("--username", default=os.getenv("AMAZINGDATA_USERNAME"))
+    parser.add_argument("--password", default=os.getenv("AMAZINGDATA_PASSWORD"))
+    parser.add_argument("--host", default=os.getenv("AMAZINGDATA_HOST"))
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.getenv("AMAZINGDATA_PORT", "0") or "0"),
+    )
+    parser.add_argument(
+        "--security-type",
+        default=os.getenv("AMAZINGDATA_SECURITY_TYPE", DEFAULT_SECURITY_TYPE),
+        help="BaseData.get_code_list 的 security_type 参数",
+    )
+    parser.add_argument(
+        "--timeout",
         type=float,
-        default=5.0,
-        help="等待 worker 在退出后完全结束的最长时间（秒）",
+        default=float(os.getenv("AMAZINGDATA_PROBE_TIMEOUT", "90")),
+        help="子进程探测超时时间（秒）",
     )
     parser.add_argument(
         "--python-interpreter",
-        help="可选，指定 AmazingData SDK 所需的 Python 解释器路径（例如 3.13）",
+        default=sys.executable,
+        help="执行子进程探测的 Python 解释器，默认当前解释器",
     )
     parser.add_argument(
-        "--worker-env",
-        action="append",
-        default=[],
-        help="以 KEY=VALUE 形式提供 worker 进程的额外环境变量，可重复使用该参数",
-    )
-    parser.add_argument(
-        "--auto-cleanup",
+        "--require-rows",
         action="store_true",
-        help="启用进程池自动清理，默认关闭以便脚本主动回收",
+        help="要求 get_code_list 至少返回一行；默认只验证接口可返回",
     )
-    parser.add_argument(
-        "--cleanup-delay",
-        type=float,
-        default=60.0,
-        help="启用自动清理时的延迟秒数，默认 60 秒",
-    )
-    parser.add_argument(
-        "--datasource-id",
-        help="可选，自定义 datasource_id，若不提供则自动生成唯一 ID",
-    )
-    parser.add_argument(
-        "--startup-timeout",
-        type=float,
-        default=10.0,
-        help="worker 启动超时时间（秒）",
-    )
-    parser.add_argument("--log-level", default="INFO", help="日志级别，例如 INFO/DEBUG")
     return parser.parse_args()
 
 
-def configure_logger(level: str) -> None:
-    logger.remove()
-    logger.add(
-        sys.stdout,
-        level=level.upper(),
-        format="[{time:YYYY-MM-DD HH:mm:ss}] [{level}] {message}",
-    )
+def _load_config_credentials(config_path: Path) -> dict[str, Any]:
+    if not config_path.exists():
+        return {}
 
+    settings = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    try:
+        provider = settings["data_sources"]["providers"]["amazingdata"]
+        connection = provider["config"]["connection"]
+    except KeyError, TypeError:
+        return {}
 
-def parse_worker_env(items: List[str]) -> Dict[str, str]:
-    env: Dict[str, str] = {}
-    for item in items:
-        key_value = item.split("=", 1)
-        if len(key_value) != 2:
-            raise ValueError(f"无法解析 worker-env 参数: {item}")
-        key, value = key_value[0].strip(), key_value[1].strip()
-        if not key:
-            raise ValueError(f"worker-env 键不能为空: {item}")
-        env[key] = value
-    return env
-
-
-def build_proxy_config(args: argparse.Namespace) -> Dict[str, Any]:
-    config: Dict[str, Any] = {}
-    if args.python_interpreter:
-        config["python_executable"] = args.python_interpreter
-    if args.worker_env:
-        config["worker_env"] = dict(args.worker_env)
-    if args.startup_timeout:
-        config["startup_timeout"] = max(float(args.startup_timeout), 1.0)
-    return config
-
-
-def snapshot_worker_state(proxy: Any, *, include_stats: bool = False) -> Dict[str, Any]:
-    process = getattr(proxy, "worker_process", None)
-    state: Dict[str, Any] = {
-        "alive": bool(proxy.is_worker_alive()),
-        "pid": getattr(process, "pid", None),
-        "process_type": None,
-        "exit_code": None,
-    }
-    if isinstance(process, mp.Process):
-        state["process_type"] = "multiprocessing"
-        state["exit_code"] = process.exitcode
-    elif isinstance(process, subprocess.Popen):
-        state["process_type"] = "subprocess"
-        state["exit_code"] = process.poll()
-    elif process is None:
-        state["process_type"] = None
-    else:
-        state["process_type"] = type(process).__name__
-        exit_code = getattr(process, "exitcode", None)
-        if exit_code is None and hasattr(process, "poll"):
-            exit_code = process.poll()
-        state["exit_code"] = exit_code
-    if include_stats:
-        try:
-            state["stats"] = proxy.get_stats()
-        except Exception as exc:
-            state["stats_error"] = str(exc)
-    return state
-
-
-def tag_events(stage: str, events: List[Dict[str, Any]], source: str) -> List[Dict[str, Any]]:
-    for event in events:
-        event.setdefault("stage", stage)
-        event.setdefault("source", source)
-    return events
-
-
-def collect_system_exit_events(proxy: Any, attempts: int = 5) -> List[Dict[str, Any]]:
-    response_queue = getattr(proxy, "response_queue", None)
-    if response_queue is None:
-        return []
-
-    events: List[Dict[str, Any]] = []
-    for _ in range(max(attempts, 1)):
-        try:
-            raw = response_queue.get(timeout=0.01)
-        except queue.Empty:
-            break
-        except Exception as exc:
-            events.append({"error": f"读取响应队列失败: {exc}"})
-            break
-
-        try:
-            payload: Dict[str, Any] = pickle.loads(raw)
-        except Exception as exc:
-            events.append({"error": f"解析响应载荷失败: {exc}"})
-            continue
-
-        if payload.get("error_type") == "SystemExit":
-            events.append(
-                {
-                    "request_id": payload.get("request_id"),
-                    "error": payload.get("error"),
-                    "timestamp": payload.get("timestamp"),
-                }
-            )
-        else:
-            try:
-                response_queue.put(raw)
-            except Exception as exc:
-                events.append({"error": f"回填非 SystemExit 响应失败: {exc}"})
-            break
-
-    return events
-
-
-async def wait_for_process_exit(proxy: Any, timeout: float) -> Dict[str, Any]:
-    start = time.time()
-    interval = 0.2
-    while proxy.is_worker_alive() and (time.time() - start) < timeout:
-        await asyncio.sleep(interval)
-    elapsed = time.time() - start
-    state = snapshot_worker_state(proxy, include_stats=True)
-    state["wait_elapsed"] = elapsed
-    state["wait_timeout"] = timeout
-    state["terminated_in_time"] = not state.get("alive", False)
-    return state
-
-
-def build_summary(
-    report: Dict[str, Any],
-    events: List[Dict[str, Any]],
-    last_crash: Optional[str],
-) -> Dict[str, Any]:
-    stages = report.get("stages", {})
-    login_info = report.get("login", {})
-    logout_info = report.get("logout", {})
-
-    after_login = stages.get("after_login", {})
-    after_wait = stages.get("after_wait", {})
-
-    summary: Dict[str, Any] = {
-        "login_success": bool(login_info.get("success")),
-        "worker_alive_after_login": bool(after_login.get("alive")),
-        "logout_success": bool(logout_info.get("success")),
-        "worker_alive_after_logout_wait": bool(after_wait.get("alive")),
-        "logout_exit_code": after_wait.get("exit_code"),
-        "terminated_in_time": after_wait.get("terminated_in_time"),
-        "wait_elapsed": after_wait.get("wait_elapsed"),
+    return {
+        "username": connection.get("username"),
+        "password": connection.get("password"),
+        "host": connection.get("host"),
+        "port": connection.get("port"),
+        "enabled": provider.get("enabled"),
     }
 
-    summary["login_crash_detected"] = (
-        not summary["login_success"] or not summary["worker_alive_after_login"]
+
+def _resolve_credentials(args: argparse.Namespace) -> dict[str, Any]:
+    config_path = Path(args.config)
+    config_values = _load_config_credentials(config_path)
+    return {
+        "config_path": str(config_path),
+        "enabled": bool(config_values.get("enabled")),
+        "username": args.username or config_values.get("username") or "",
+        "password": args.password or config_values.get("password") or "",
+        "host": args.host or config_values.get("host") or "",
+        "port": args.port or int(config_values.get("port") or 0),
+    }
+
+
+def _child_code() -> str:
+    return r"""
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Any
+
+
+stage_path = Path(os.environ["DEEPSEARCH_PROBE_STAGE"])
+
+
+def write(stage: str, **data: Any) -> None:
+    existing = []
+    if stage_path.exists():
+        try:
+            existing = json.loads(stage_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = []
+    existing.append({"stage": stage, **data})
+    stage_path.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+try:
+    username = os.environ.get("DEEPSEARCH_AD_USERNAME", "").strip()
+    password = os.environ.get("DEEPSEARCH_AD_PASSWORD", "").strip()
+    host = os.environ.get("DEEPSEARCH_AD_HOST", "").strip()
+    port = int(os.environ.get("DEEPSEARCH_AD_PORT", "0") or "0")
+    security_type = os.environ.get("DEEPSEARCH_AD_SECURITY_TYPE", "EXTRA_STOCK_A_SH_SZ")
+    write(
+        "config_loaded",
+        username_present=bool(username),
+        password_present=bool(password),
+        host_present=bool(host),
+        port=port,
     )
 
-    logout_crash = not summary["logout_success"] or summary["worker_alive_after_logout_wait"]
-    exit_code = summary["logout_exit_code"]
-    if exit_code not in (None, 0):
-        logout_crash = True
-    if last_crash:
-        logout_crash = True
-        summary["last_crash_reason"] = last_crash
-    summary["logout_crash_detected"] = logout_crash
+    import AmazingData as ad
 
-    system_exit_detected = bool(events)
-    summary["system_exit_detected"] = system_exit_detected
-    if system_exit_detected:
-        summary["system_exit_events"] = events
-
-    return summary
-
-
-async def execute_probe(args: argparse.Namespace) -> Dict[str, Any]:
-    pool = get_global_pool()
-    proxy_config = build_proxy_config(args)
-    cleanup_delay = max(args.cleanup_delay, 1.0)
-    datasource_id = (
-        args.datasource_id
-        or f"probe::{args.username}@{args.host}:{args.port}:{int(time.time() * 1000)}"
+    write(
+        "sdk_imported",
+        sdk_version=getattr(ad, "__version__", None),
+        has_login=callable(getattr(ad, "login", None)),
+        has_base_data=callable(getattr(ad, "BaseData", None)),
+        has_market_data=callable(getattr(ad, "MarketData", None)),
+        has_info_data=callable(getattr(ad, "InfoData", None)),
     )
 
-    proxy = await asyncio.to_thread(
-        pool.get_or_create,
-        datasource_id,
-        args.auto_cleanup,
-        cleanup_delay,
-        proxy_config,
-    )
-    adapter = AmazingDataProcessAdapter(proxy)
+    login_result = ad.login(username=username, password=password, host=host, port=port)
+    login_success = bool(login_result or login_result == 0)
+    write("login_returned", login_success=login_success)
+    if not login_success:
+        raise RuntimeError("AmazingData login failed")
 
-    report: Dict[str, Any] = {
-        "datasource_id": datasource_id,
-        "target": {
-            "username": args.username,
-            "host": args.host,
-            "port": args.port,
+    base = ad.BaseData()
+    info = ad.InfoData()
+    write("instances_created", base=type(base).__name__, info=type(info).__name__)
+
+    payload = base.get_code_list(security_type=security_type)
+    rows = int(getattr(payload, "shape", [0])[0]) if payload is not None else 0
+    write("get_code_list_returned", rows=rows, payload_type=type(payload).__name__)
+except BaseException as exc:
+    write("error", error_type=type(exc).__name__, error=str(exc)[:300])
+    raise
+"""
+
+
+def _build_missing_credentials_report(credentials: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": "skipped_missing_credentials",
+        "config": {
+            "path": credentials["config_path"],
+            "enabled": credentials["enabled"],
+            "username_present": bool(credentials["username"]),
+            "password_present": bool(credentials["password"]),
+            "host_present": bool(credentials["host"]),
+            "port": credentials["port"],
         },
-        "stages": {},
     }
 
-    system_exit_events: List[Dict[str, Any]] = []
+
+def run_probe(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    credentials = _resolve_credentials(args)
+    if not all(
+        [
+            credentials["username"],
+            credentials["password"],
+            credentials["host"],
+            credentials["port"],
+        ]
+    ):
+        return 2, _build_missing_credentials_report(credentials)
+
+    stage_file = Path(tempfile.gettempdir()) / "deepsearch_amazingdata_probe_stage.json"
+    stage_file.unlink(missing_ok=True)
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "DEEPSEARCH_PROBE_STAGE": str(stage_file),
+            "DEEPSEARCH_AD_USERNAME": str(credentials["username"]),
+            "DEEPSEARCH_AD_PASSWORD": str(credentials["password"]),
+            "DEEPSEARCH_AD_HOST": str(credentials["host"]),
+            "DEEPSEARCH_AD_PORT": str(credentials["port"]),
+            "DEEPSEARCH_AD_SECURITY_TYPE": str(args.security_type),
+        }
+    )
 
     try:
-        report["stages"]["initial"] = snapshot_worker_state(proxy)
-
-        if not await adapter.ensure_started():
-            report["error"] = "worker 启动失败"
-            return report
-
-        report["stages"]["after_start"] = snapshot_worker_state(proxy)
-
-        login_request = AmazingDataLoginRequest(
-            username=args.username,
-            password=args.password,
-            host=args.host,
-            port=args.port,
-            timeout=max(args.login_timeout, 1.0),
+        completed = subprocess.run(
+            [args.python_interpreter, "-c", _child_code()],
+            cwd=Path.cwd(),
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=max(float(args.timeout), 1.0),
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
-        login_result = await adapter.login(login_request)
-        report["login"] = {
-            "success": login_result.success,
-            "error": login_result.error,
-            "error_type": login_result.error_type,
-            "metadata": dict(login_result.metadata) if login_result.metadata else None,
+    except subprocess.TimeoutExpired:
+        stages = _read_stages(stage_file)
+        return 1, {
+            "status": "timeout",
+            "timeout_seconds": args.timeout,
+            "stages": stages,
         }
-        if login_result.error_type == "SystemExit":
-            system_exit_events.append(
-                {"stage": "login", "source": "result", "error": login_result.error}
-            )
 
-        report["stages"]["after_login"] = snapshot_worker_state(proxy)
+    stages = _read_stages(stage_file)
+    stage_file.unlink(missing_ok=True)
 
-        queue_events = collect_system_exit_events(proxy)
-        if queue_events:
-            system_exit_events.extend(tag_events("login", queue_events, "queue"))
+    report: dict[str, Any] = {
+        "status": _resolve_status(completed.returncode, stages, args.require_rows),
+        "returncode": completed.returncode,
+        "sdk_output_captured": bool(completed.stdout),
+        "sdk_error_output_captured": bool(completed.stderr),
+        "stages": stages,
+    }
+    exit_code = 0 if report["status"] == "ok" else 1
+    return exit_code, report
 
-        logout_request = AmazingDataLogoutRequest(
-            username=args.username,
-            timeout=max(args.logout_timeout, 1.0),
-        )
-        logout_result = await adapter.logout(logout_request)
-        report["logout"] = {
-            "success": logout_result.success,
-            "error": logout_result.error,
-            "error_type": logout_result.error_type,
-            "metadata": dict(logout_result.metadata) if logout_result.metadata else None,
-        }
-        if logout_result.error_type == "SystemExit":
-            system_exit_events.append(
-                {"stage": "logout", "source": "result", "error": logout_result.error}
-            )
 
-        report["stages"]["after_logout"] = snapshot_worker_state(proxy)
+def _read_stages(stage_file: Path) -> list[dict[str, Any]]:
+    if not stage_file.exists():
+        return []
+    try:
+        payload = json.loads(stage_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    return []
 
-        queue_events = collect_system_exit_events(proxy)
-        if queue_events:
-            system_exit_events.extend(tag_events("logout", queue_events, "queue"))
 
-        report["stages"]["after_wait"] = await wait_for_process_exit(proxy, args.exit_wait)
-
-        stats_after = report["stages"]["after_wait"].get("stats", {})
-        last_crash: Optional[str] = None
-        if isinstance(stats_after, dict):
-            last_crash = stats_after.get("last_crash_reason")
-
-        report["summary"] = build_summary(report, system_exit_events, last_crash)
-        return report
-    finally:
-        try:
-            await asyncio.to_thread(pool.stop, datasource_id, True, False)
-        except Exception as exc:
-            logger.warning(f"清理进程 {datasource_id} 失败: {exc}")
+def _resolve_status(returncode: int, stages: list[dict[str, Any]], require_rows: bool) -> str:
+    if not stages:
+        return "missing_stage_report"
+    last = stages[-1]
+    if last.get("stage") == "get_code_list_returned":
+        if require_rows and int(last.get("rows") or 0) <= 0:
+            return "empty_result"
+        return "ok"
+    if returncode == 0:
+        return "early_exit"
+    return "failed"
 
 
 def main() -> None:
     args = parse_args()
-    try:
-        worker_env = parse_worker_env(args.worker_env)
-    except ValueError as exc:
-        print(f"参数错误: {exc}", file=sys.stderr)
-        sys.exit(2)
-
-    args.worker_env = worker_env
-    configure_logger(args.log_level)
-
-    try:
-        report = asyncio.run(execute_probe(args))
-    except KeyboardInterrupt:
-        logger.warning("探测被手动终止")
-        sys.exit(130)
-    except Exception as exc:
-        logger.exception(f"探测过程中出现异常: {exc}")
-        sys.exit(1)
-
+    exit_code, report = run_probe(args)
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":

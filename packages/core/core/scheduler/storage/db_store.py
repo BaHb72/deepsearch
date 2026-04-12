@@ -121,13 +121,11 @@ class DBStore:
                     # 批量插入/更新
                     for record in records:
                         conn.execute(
-                            text(
-                                """
+                            text("""
                                 INSERT OR REPLACE INTO cache_stock_info
                                 (symbol, name, pinyin, sector, updated_at)
                                 VALUES (:symbol, :name, :pinyin, :sector, :updated_at)
-                            """
-                            ),
+                            """),
                             {
                                 "symbol": record.get("symbol", ""),
                                 "name": record.get("name", ""),
@@ -141,13 +139,11 @@ class DBStore:
                 # 其他任务使用通用元数据表
                 with engine.connect() as conn:
                     conn.execute(
-                        text(
-                            """
+                        text("""
                             INSERT OR REPLACE INTO cache_metadata
                             (cache_key, data_json, data_count, last_refresh)
                             VALUES (:key, :data, :count, :time)
-                        """
-                        ),
+                        """),
                         {
                             "key": task_name,
                             "data": json.dumps(records, ensure_ascii=False),

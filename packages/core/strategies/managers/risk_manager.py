@@ -36,7 +36,7 @@ def _coerce_float(value: Any, default: float = 0.0) -> float:
     """Safely convert arbitrary values to float."""
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return default
 
 

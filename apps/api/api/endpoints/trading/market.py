@@ -137,7 +137,7 @@ def _infer_latency(statistics: dict[str, Any]) -> float:
         try:
             if value is not None:
                 return float(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             continue
     return 0.0
 

@@ -474,7 +474,7 @@ def _deserialize_connection_payload(payload: Mapping[str, Any]) -> Optional[Data
         if data.get("port") is not None:
             try:
                 data["port"] = int(data["port"])
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 data["port"] = 0
 
         for field_name in ("created_at", "updated_at", "last_test_time"):
@@ -1603,5 +1603,5 @@ def register_database_connection_monitor(app: FastAPI) -> None:
     async def _shutdown() -> None:
         await stop_database_connection_monitor()
 
-    app.add_event_handler("startup", _startup)
-    app.add_event_handler("shutdown", _shutdown)
+    app.state.database_connection_monitor_startup = _startup
+    app.state.database_connection_monitor_shutdown = _shutdown

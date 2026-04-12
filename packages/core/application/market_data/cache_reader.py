@@ -268,7 +268,7 @@ class MarketDataCacheReader:
         ttl_value: int | None
         try:
             ttl_value = int(ttl_raw) if ttl_raw is not None else None
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             ttl_value = None
 
         return self.CacheEnvelope(

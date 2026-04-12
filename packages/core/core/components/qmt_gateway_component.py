@@ -233,13 +233,13 @@ class QMTGatewayComponent(AsyncComponent):
             def safe_float(value, default=0.0):
                 try:
                     return float(value) if value is not None else default
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     return default
 
             def safe_int(value, default=0):
                 try:
                     return int(value) if value is not None else default
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     return default
 
             # 创建TickData对象（安全处理）

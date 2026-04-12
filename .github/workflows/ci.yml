@@ -7,7 +7,7 @@ on:
     branches: [ main, dev, master ]
 
 env:
-  PYTHON_VERSION: "3.13"
+  PYTHON_VERSION: "3.14"
   UV_VERSION: "0.5.0"
   NODE_VERSION: "20"
 
@@ -59,7 +59,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.14"]
 
     services:
       postgres:
@@ -121,7 +121,7 @@ jobs:
           pytest tests/integration -v
 
       - name: Upload coverage
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml

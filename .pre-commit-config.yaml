@@ -6,10 +6,10 @@
 repos:
   # Python代码格式化
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 26.3.1
     hooks:
       - id: black
-        language_version: python3.13
+        language_version: python3.14
         args: [--line-length=100]
 
   # Import排序
@@ -21,19 +21,19 @@ repos:
 
   # Python代码检查 (ruff 替代 flake8，更快更现代)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.15.10
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix, --ignore=E402]
 
   # 类型检查
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.13.0
+    rev: v1.20.0
     hooks:
       - id: mypy
         args: [--config-file=pyproject.toml, --follow-imports=silent]
         additional_dependencies: [types-PyYAML, types-redis, types-requests, types-pytz, httpx]
-        exclude: ^(tests|docs|tools|typings|scripts|apps/api)/
+        exclude: ^(tests|docs|tools|typings|scripts|apps/api)/|^setup\.py$
 
   # 通用文件格式检查
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -46,6 +46,7 @@ repos:
       - id: check-toml          # TOML语法检查
       - id: check-added-large-files  # 防止添加大文件
         args: [--maxkb=5000]
+        exclude: ^packages/(AmazingData-1\.1\.0-cp314-none-any\.whl|tgw-1\.0\.8\.6-py3-none-any\.whl)$
       - id: check-merge-conflict     # 检查合并冲突标记
       - id: debug-statements         # 检查调试语句
       - id: mixed-line-ending       # 统一行结束符
@@ -76,7 +77,7 @@ repos:
 
 # 全局配置
 default_language_version:
-  python: python3.13
+  python: python3.14
 
 exclude: |
   (?x)^(

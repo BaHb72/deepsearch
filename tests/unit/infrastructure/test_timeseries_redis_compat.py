@@ -1,26 +1,50 @@
-"""Compatibility shim tests for RedisTimeSeriesStorage."""
+"""RedisTimeSeriesStorage redis-py native client tests."""
 
-import importlib
-import sys
+from __future__ import annotations
 
-import redis
+from typing import Any
+
+from core.infrastructure.persistence import timeseries
 
 
-def test_timeseries_import_patches_redis_compat() -> None:
-    module_name = "core.infrastructure.persistence.timeseries"
-    sys.modules.pop(module_name, None)
+class FakeTimeSeriesClient:
+    pass
 
-    sys.modules.pop("redis._compat", None)
-    sys.modules.pop("redistimeseries.client", None)
-    if hasattr(redis, "_compat"):
-        delattr(redis, "_compat")
 
-    module = importlib.import_module(module_name)
-    compat_module = sys.modules.get("redis._compat")
+class FakeRedis:
+    last_instance: "FakeRedis | None" = None
 
-    assert compat_module is not None
-    assert getattr(redis, "_compat", None) is compat_module
-    assert hasattr(module, "_ensure_redis_compat")
+    def __init__(self, **kwargs: Any) -> None:
+        self.kwargs = kwargs
+        self.ts_client = FakeTimeSeriesClient()
+        self.ping_called = False
+        self.ts_called = False
+        FakeRedis.last_instance = self
 
-    redistimeseries_module = importlib.import_module("redistimeseries.client")
-    assert redistimeseries_module is not None
+    def ping(self) -> bool:
+        self.ping_called = True
+        return True
+
+    def ts(self) -> FakeTimeSeriesClient:
+        self.ts_called = True
+        return self.ts_client
+
+
+def test_timeseries_storage_uses_redis_py_native_ts(monkeypatch: Any) -> None:
+    monkeypatch.setattr(timeseries.redis, "Redis", FakeRedis)
+
+    storage = timeseries.RedisTimeSeriesStorage(
+        host="127.0.0.1",
+        port=6379,
+        db=15,
+        key_prefix="test:timeseries:",
+        retention_ms=1_000,
+        duplicate_policy="last",
+    )
+
+    redis_client = FakeRedis.last_instance
+    assert redis_client is not None
+    assert redis_client.ping_called is True
+    assert redis_client.ts_called is True
+    assert storage.redis_client is redis_client
+    assert storage.ts_client is redis_client.ts_client

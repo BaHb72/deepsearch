@@ -296,7 +296,7 @@ class RetryHandler:
         def _as_int(value: Any) -> Optional[int]:
             try:
                 return int(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return None
 
         for attribute_path in _ERROR_ATTRIBUTE_PATHS:

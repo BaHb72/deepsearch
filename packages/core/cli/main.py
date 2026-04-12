@@ -1019,7 +1019,7 @@ def check_amazingdata(
                             for item in actor_result:
                                 try:
                                     normalized.append(int(item))
-                                except (TypeError, ValueError):
+                                except TypeError, ValueError:
                                     continue
                             return normalized
                         return actor_result

@@ -4,6 +4,7 @@
 
 用于验证测试连接功能是否正常工作
 """
+
 import sys
 
 sys.path.insert(0, "D:\\Stock\\code\\deepsearch")

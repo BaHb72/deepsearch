@@ -394,7 +394,7 @@ class DaskSchedulerManager:
         try:
             with socket.create_connection((self._host, self._port), timeout=timeout):
                 return True
-        except (OSError, socket.timeout):
+        except OSError, socket.timeout:
             return False
 
     async def _start_local_scheduler(self) -> bool:

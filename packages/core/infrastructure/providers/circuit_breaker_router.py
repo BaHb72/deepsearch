@@ -282,7 +282,7 @@ class CircuitBreakerRouter:
             self._refresh_task.cancel()
             try:
                 await asyncio.wait_for(self._refresh_task, timeout=5)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except asyncio.CancelledError, asyncio.TimeoutError:
                 pass
 
     async def _background_refresh_loop(self) -> None:

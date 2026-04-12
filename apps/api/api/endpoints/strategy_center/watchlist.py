@@ -57,7 +57,7 @@ async def get_db_session():
     # 尝试获取数据库组件（支持 override 和 component_manager 两种路径）
     try:
         component = context.get_component("database")
-    except (RuntimeError, ValueError):
+    except RuntimeError, ValueError:
         # get_component 会在 _component_manager 未设置且无 override 时抛出异常
         raise HTTPException(status_code=503, detail="服务尚未完全启动，请稍后重试")
 
@@ -209,7 +209,7 @@ async def add_to_watchlist(
                 if name and isinstance(name, str):
                     try:
                         stock_name = name.encode("latin1").decode("gbk")
-                    except (UnicodeDecodeError, UnicodeEncodeError):
+                    except UnicodeDecodeError, UnicodeEncodeError:
                         stock_name = name
         except ImportError:
             logger.warning("xtquant SDK not available, using symbol as name")

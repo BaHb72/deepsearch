@@ -326,7 +326,7 @@ class DataProviderFactory:
         try:
             with socket.create_connection((scheduler_host, scheduler_port), timeout=3):
                 pass
-        except (OSError, socket.timeout):
+        except OSError, socket.timeout:
             return False, f"Dask Scheduler 不可达 ({scheduler_host}:{scheduler_port})"
 
         # 检查是否有可用的 Worker（特别是带 WIN 资源的）

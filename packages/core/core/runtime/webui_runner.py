@@ -141,7 +141,7 @@ class WebUIRunner:
             self._task.cancel()
             try:
                 await asyncio.wait_for(asyncio.shield(self._task), timeout=5.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except asyncio.CancelledError, asyncio.TimeoutError:
                 pass
 
         self._task = None

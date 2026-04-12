@@ -249,7 +249,7 @@ class DeepSearchLiveData(bt.DataBase):
             if self._loop:
                 try:
                     self._loop.run_until_complete(asyncio.wait_for(self._stream_task, timeout=5))
-                except (asyncio.CancelledError, asyncio.TimeoutError):
+                except asyncio.CancelledError, asyncio.TimeoutError:
                     pass
 
         self.is_live = False

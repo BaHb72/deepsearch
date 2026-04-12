@@ -19,7 +19,9 @@ from pydantic import BaseModel, ValidationError
 
 # Windows 兼容性：设置事件循环策略
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    selector_policy = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
+    if selector_policy is not None:
+        asyncio.set_event_loop_policy(selector_policy())
 
 router = APIRouter()
 

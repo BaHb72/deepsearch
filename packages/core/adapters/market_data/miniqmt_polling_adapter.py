@@ -84,14 +84,14 @@ def _to_decimal(value: Any) -> Decimal:
         if isinstance(value, Decimal):
             return value
         return Decimal(str(value))
-    except (InvalidOperation, ValueError, TypeError):
+    except InvalidOperation, ValueError, TypeError:
         return Decimal("0")
 
 
 def _to_int(value: Any) -> int:
     try:
         return int(float(value))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
 
 

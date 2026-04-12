@@ -70,9 +70,9 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
     ],
-    python_requires=">=3.13",
+    python_requires=">=3.14,<3.15",
     install_requires=install_requires,
     extras_require=extras_require,
     entry_points={

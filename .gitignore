@@ -201,11 +201,12 @@ packages/**/*.duckdb
 packages/**/node_modules/
 # 大型 wheel 文件（通过 uv.sources 本地引用）
 packages/*.whl
+!packages/AmazingData-1.1.0-cp314-none-any.whl
+!packages/tgw-1.0.8.6-py3-none-any.whl
 
 # ==================== Project Automation ====================
 runtime/interpreters/
 worker/
-.python-version
 .agent/
 .agents/
 .codex/

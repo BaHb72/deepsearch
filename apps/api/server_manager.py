@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import sys
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, cast
+from typing import TYPE_CHECKING, Any, AsyncIterator, Optional, TypeAlias, cast
 
 from core.observability import get_logger
 from starlette.types import ASGIApp
@@ -19,7 +19,7 @@ from uvicorn.server import Server
 from apps.api.api.models import WebServerConfig
 
 if TYPE_CHECKING:
-    from asyncio import AbstractEventLoopPolicy as WindowsEventLoopPolicyBase
+    WindowsEventLoopPolicyBase: TypeAlias = asyncio._WindowsSelectorEventLoopPolicy
 elif hasattr(asyncio, "WindowsSelectorEventLoopPolicy"):
     # 必须使用 SelectorEventLoop，Tornado/Dask 不兼容 ProactorEventLoop
     WindowsEventLoopPolicyBase = asyncio.WindowsSelectorEventLoopPolicy
@@ -296,7 +296,7 @@ class GracefulShutdownServer(Server):
         # 调用父类关闭
         try:
             await super().shutdown(sockets)
-        except (asyncio.CancelledError, RuntimeError, GeneratorExit):
+        except asyncio.CancelledError, RuntimeError, GeneratorExit:
             # 这些是正常的关闭异常
             pass
 
@@ -304,7 +304,7 @@ class GracefulShutdownServer(Server):
         """运行服务器"""
         try:
             await super().serve(sockets)
-        except (asyncio.CancelledError, KeyboardInterrupt):
+        except asyncio.CancelledError, KeyboardInterrupt:
             # 正常退出
             pass
         except Exception as e:

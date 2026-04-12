@@ -485,7 +485,7 @@ async def _get_amazingdata_provider_optional_compat(request: Request | None = No
             if param.kind
             in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
         )
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         arity = 0
 
     if arity == 0:
@@ -504,7 +504,7 @@ async def _fetch_quote_from_amazingdata(
         return [], "capability_realtime_quote_not_supported"
 
     current_date = int(datetime.now().strftime("%Y%m%d"))
-    call_specs = [
+    call_specs: list[tuple[str, tuple[Any, ...], dict[str, Any]]] = [
         ("get_realtime_quote", (), {"code_list": symbol_list}),
         ("get_realtime_quote", (symbol_list,), {}),
         ("get_realtime_quotes", (symbol_list,), {}),
@@ -2287,7 +2287,7 @@ async def get_sector_stocks_with_names(
                 if name and isinstance(name, str):
                     try:
                         name = name.encode("latin1").decode("gbk")
-                    except (UnicodeDecodeError, UnicodeEncodeError):
+                    except UnicodeDecodeError, UnicodeEncodeError:
                         pass
 
                 result.append(

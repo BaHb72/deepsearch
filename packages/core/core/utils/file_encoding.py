@@ -87,7 +87,7 @@ class EncodingDetector:
                 try:
                     raw_data.decode(encoding)
                     return encoding
-                except (UnicodeDecodeError, LookupError):
+                except UnicodeDecodeError, LookupError:
                     continue
 
         except Exception as e:

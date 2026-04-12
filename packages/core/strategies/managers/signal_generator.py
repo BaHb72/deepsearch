@@ -40,7 +40,7 @@ def _as_optional_float(value: Any) -> Optional[float]:
 
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

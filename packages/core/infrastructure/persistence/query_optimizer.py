@@ -387,25 +387,21 @@ class QueryOptimizer:
         try:
             # 查询数据库的索引信息
             if engine.dialect.name == "postgresql":
-                query = text(
-                    """
+                query = text("""
                     SELECT 1 FROM pg_indexes
                     WHERE tablename = :table
                     AND indexdef LIKE :column
-                """
-                )
+                """)
                 with engine.connect() as conn:
                     result = conn.execute(query, {"table": table, "column": f"%{column}%"})
                     return result.fetchone() is not None
 
             elif engine.dialect.name == "mysql":
-                query = text(
-                    """
+                query = text("""
                     SELECT 1 FROM information_schema.statistics
                     WHERE table_name = :table
                     AND column_name = :column
-                """
-                )
+                """)
                 with engine.connect() as conn:
                     result = conn.execute(query, {"table": table, "column": column})
                     return result.fetchone() is not None

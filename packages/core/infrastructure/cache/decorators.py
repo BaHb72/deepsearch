@@ -41,11 +41,9 @@ def make_cache_key(prefix: str, *args, **kwargs) -> str:
         if isinstance(v, (str, int, float, bool)):
             key_parts.append(f"{k}={v}")
         else:
-            key_parts.append(
-                f"{k}={hashlib.md5(
+            key_parts.append(f"{k}={hashlib.md5(
                 json.dumps(v, sort_keys=True, default=str).encode()
-            ).hexdigest()[:8]}"
-            )
+            ).hexdigest()[:8]}")
 
     return ":".join(key_parts)
 

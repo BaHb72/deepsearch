@@ -322,7 +322,7 @@ class TradingSessionGuard:
                 continue
             try:
                 normalized.add(int(digits))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
         return normalized
 

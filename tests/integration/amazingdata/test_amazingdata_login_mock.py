@@ -297,20 +297,19 @@ class AmazingDataLoginSimulator:
         if successful_servers:
             best = successful_servers[0]
             logger.info("建议在配置文件中使用以下设置:")
-            logger.info(
-                f"""
-amazingdata:
-  enabled: true
-  connection:
-    username: '{self.username}'
-    password: '****'  # 请使用实际密码
-    host: {best['host']}
-    port: {best['port']}
-    timeout: 10
-    heartbeat_interval: 60
-    auto_reconnect: true
-            """
+            config_suggestion = (
+                "amazingdata:\n"
+                "  enabled: true\n"
+                "  connection:\n"
+                f"    username: '{self.username}'\n"
+                "    password: '****'  # 请使用实际密码\n"
+                f"    host: {best['host']}\n"
+                f"    port: {best['port']}\n"
+                "    timeout: 10\n"
+                "    heartbeat_interval: 60\n"
+                "    auto_reconnect: true"
             )
+            logger.info(config_suggestion)
         else:
             logger.warning("当前没有可用的服务器，建议:")
             logger.warning("1. 检查网络连接是否正常")

@@ -279,6 +279,7 @@ class ChartService:
             candidates.append({"symbol": normalized, "name": normalized, "pinyin": ""})
 
         if raw.isdigit() and len(raw) == 6:
+            exchanges: tuple[str, ...]
             if raw.startswith(("8", "4")):
                 exchanges = ("BJ", "SZ", "SH")
             elif raw.startswith(("6", "9", "5")):
@@ -378,19 +379,21 @@ class ChartService:
 
             manager = get_data_source_manager()
             stock_result = await asyncio.wait_for(manager.get_stock_list(limit=None), timeout=4.5)
-            raw_items: List[Dict[str, Any]] = []
+            manager_raw_items: List[Dict[str, Any]] = []
             source_name = "manager"
 
             if isinstance(stock_result, StockListFetchResult):
                 source_name = stock_result.source or "manager"
                 if stock_result.legacy:
-                    raw_items = [dict(item) for item in stock_result.legacy]
+                    manager_raw_items = [dict(item) for item in stock_result.legacy]
                 else:
-                    raw_items = [dict(record.as_mapping()) for record in stock_result.records]
+                    manager_raw_items = [
+                        dict(record.as_mapping()) for record in stock_result.records
+                    ]
             elif isinstance(stock_result, list):
-                raw_items = [dict(item) for item in stock_result if isinstance(item, dict)]
+                manager_raw_items = [dict(item) for item in stock_result if isinstance(item, dict)]
 
-            _merge(self._normalize_stock_items(raw_items), source_name)
+            _merge(self._normalize_stock_items(manager_raw_items), source_name)
         except Exception as exc:
             logger.debug(f"DataSourceManager 股票列表回退失败: {exc!r}")
 

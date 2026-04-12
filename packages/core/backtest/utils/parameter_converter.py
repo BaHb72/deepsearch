@@ -138,7 +138,7 @@ class ParameterConverter:
             for typ in candidate_types:
                 try:
                     return cls._convert_single_type(value, typ)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     continue
 
             type_names: List[str] = [typ.__name__ for typ in candidate_types]

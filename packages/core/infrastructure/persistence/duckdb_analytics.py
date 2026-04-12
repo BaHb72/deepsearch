@@ -71,8 +71,7 @@ class DuckDBAnalytics:
 
         try:
             # 创建历史K线表
-            self.conn.execute(
-                """
+            self.conn.execute("""
                               CREATE TABLE IF NOT EXISTS kline_history
                               (
                                   symbol
@@ -116,12 +115,10 @@ class DuckDBAnalytics:
                                   time
                               )
                                   )
-                              """
-            )
+                              """)
 
             # 创建Tick归档表
-            self.conn.execute(
-                """
+            self.conn.execute("""
                               CREATE TABLE IF NOT EXISTS tick_archive
                               (
                                   symbol
@@ -162,12 +159,10 @@ class DuckDBAnalytics:
                                   time
                               )
                                   )
-                              """
-            )
+                              """)
 
             # 创建技术指标表
-            self.conn.execute(
-                """
+            self.conn.execute("""
                               CREATE TABLE IF NOT EXISTS indicators
                               (
                                   symbol
@@ -196,12 +191,10 @@ class DuckDBAnalytics:
                                   indicator_name
                               )
                                   )
-                              """
-            )
+                              """)
 
             # 创建回测结果表
-            self.conn.execute(
-                """
+            self.conn.execute("""
                               CREATE TABLE IF NOT EXISTS backtest_results
                               (
                                   strategy_id
@@ -247,12 +240,10 @@ class DuckDBAnalytics:
                                   run_time
                               )
                                   )
-                              """
-            )
+                              """)
 
             # 创建数据同步日志表
-            self.conn.execute(
-                """
+            self.conn.execute("""
                               CREATE TABLE IF NOT EXISTS sync_log
                               (
                                   sync_id
@@ -278,8 +269,7 @@ class DuckDBAnalytics:
                                   error_message
                                   TEXT
                               )
-                              """
-            )
+                              """)
 
             self._schema_initialized = True
             logger.info("DuckDB 模式初始化完成")
@@ -447,13 +437,11 @@ class DuckDBAnalytics:
         """
 
         def _export():
-            self.conn.execute(
-                f"""
+            self.conn.execute(f"""
                 COPY {table_name}
                 TO '{output_path}'
                 (FORMAT PARQUET, COMPRESSION 'SNAPPY')
-            """
-            )
+            """)
 
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(self._executor, _export)

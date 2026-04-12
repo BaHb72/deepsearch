@@ -496,7 +496,7 @@ class ProcessManager:
                         self.logger.info(f"清理孤儿进程: PID={child.pid} ({child.name()})")
                         child.terminate()
                         child.wait(timeout=2)
-                except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+                except psutil.NoSuchProcess, psutil.TimeoutExpired:
                     try:
                         child.kill()
                     except Exception as e:

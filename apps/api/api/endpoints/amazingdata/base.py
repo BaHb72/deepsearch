@@ -416,7 +416,7 @@ def normalize_date_int(value: object) -> Optional[int]:
     if isinstance(value, float):
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return None
     if isinstance(value, (pd.Timestamp, datetime)):
         actual = value.to_pydatetime() if isinstance(value, pd.Timestamp) else value

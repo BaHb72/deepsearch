@@ -736,7 +736,7 @@ class RealtimeDataOrchestrator:
             return value
         try:
             return int(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
     async def probe_adapters(self) -> Dict[str, Dict[str, Any]]:

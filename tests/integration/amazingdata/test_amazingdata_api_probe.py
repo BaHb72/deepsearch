@@ -549,7 +549,7 @@ def _discover_methods(name: str, obj: object) -> None:
         try:
             sig = inspect.signature(func)
             params = ", ".join(str(p) for p in sig.parameters.values())
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             params = "?"
         print(f"    - {m}({params})")
 

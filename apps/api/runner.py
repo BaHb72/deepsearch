@@ -254,9 +254,9 @@ class WebUIRunner:
                     self.logger.warning("终止前端进程超时，尝试强制关闭")
                     try:
                         self.frontend_process.kill()
-                    except (OSError, ProcessLookupError):
+                    except OSError, ProcessLookupError:
                         self.logger.debug("强制关闭前端进程失败，可能已退出", exc_info=True)
-                except (OSError, ProcessLookupError):
+                except OSError, ProcessLookupError:
                     self.logger.debug("前端进程可能已经结束", exc_info=True)
                 self.frontend_process = None
                 self.logger.info("前端服务已停止")

@@ -710,7 +710,7 @@ class BacktraderStrategyAdapter:
 
                     try:
                         size = float(strategy_order.get("size", 0.0))
-                    except (TypeError, ValueError):
+                    except TypeError, ValueError:
                         size = 0.0
                     if size <= 0:
                         self._reject_local_order(
@@ -725,7 +725,7 @@ class BacktraderStrategyAdapter:
                     price_value = strategy_order.get("price")
                     try:
                         price = float(price_value) if price_value is not None else None
-                    except (TypeError, ValueError):
+                    except TypeError, ValueError:
                         price = None
 
                     blocked_reason = self._check_a_share_constraints(

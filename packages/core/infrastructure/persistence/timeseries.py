@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
-import sys
 import time
-from types import ModuleType
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, Union, cast
+from typing import Any, Dict, List, Optional, Protocol, Union, cast
 
 import redis
 from core.config.models import RedisConfig
@@ -12,41 +10,34 @@ from core.event.engine.engine import Event
 from core.observability import get_logger
 from redis.client import Redis
 
-if TYPE_CHECKING:
-    from redistimeseries.client import Client as RedisTSClientType
-else:
-    RedisTSClientType = Any  # type: ignore[assignment]
+
+class RedisTSClientType(Protocol):
+    """Subset of redis-py's TimeSeries client used by this storage."""
+
+    def info(self, key: str) -> Any: ...
+
+    def create(
+        self,
+        key: str,
+        retention_msecs: Optional[int] = None,
+        labels: Optional[Dict[str, str]] = None,
+        duplicate_policy: Optional[str] = None,
+    ) -> Any: ...
+
+    def add(self, key: str, timestamp: int, value: int) -> Any: ...
+
+    def range(
+        self,
+        key: str,
+        from_time: Union[str, int],
+        to_time: Union[str, int],
+        count: Optional[int] = None,
+    ) -> List[tuple[int, Any]]: ...
 
 
-def _ensure_redis_compat() -> None:
-    """Ensure redis._compat exists for redistimeseries imports."""
-    if "redis._compat" in sys.modules:
-        compat_module = cast(ModuleType, sys.modules["redis._compat"])
-    else:
-        compat_module = ModuleType("redis._compat")
+class RedisClientWithTS(Protocol):
+    def ts(self) -> RedisTSClientType: ...
 
-        def nativestr(value: Any) -> Any:
-            if isinstance(value, memoryview):
-                value = value.tobytes()
-            if isinstance(value, bytes):
-                return value.decode("utf-8", "replace")
-            return value
-
-        setattr(compat_module, "nativestr", nativestr)
-        setattr(compat_module, "__all__", ["nativestr"])
-        sys.modules["redis._compat"] = compat_module
-
-    setattr(redis, "_compat", compat_module)
-
-
-def _load_ts_client_class():
-    _ensure_redis_compat()
-    from redistimeseries.client import Client
-
-    return Client
-
-
-RedisTSClientClass: Type[RedisTSClientType] = _load_ts_client_class()
 
 # ==============================================================================
 # Constants
@@ -169,8 +160,8 @@ class RedisTimeSeriesStorage:
             # 测试连接
             self.redis_client.ping()
 
-            # 创建 RedisTimeSeries 客户端
-            self.ts_client = cast(RedisTSClientType, RedisTSClientClass(self.redis_client))
+            # 创建 redis-py 原生 RedisTimeSeries 客户端
+            self.ts_client = cast(RedisClientWithTS, self.redis_client).ts()
             self._connected = True
 
             logger.info(f"RedisTimeSeries 存储初始化完成: {self.host}:{self.port}/{self.db}")

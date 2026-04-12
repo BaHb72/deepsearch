@@ -2,7 +2,7 @@
 
 DeepSearch 是一个高性能量化交易事件系统，采用 Monorepo v2 架构，专注于实时行情处理、策略编排与智能诊断。
 
-系统基于六边形架构设计，后端使用 Python 3.13 + FastAPI 构建，前端采用 React 19，集成依赖注入、多级缓存、Dask 混合计算与完整的可观测性能力。
+系统基于六边形架构设计，后端使用 Python 3.14 + FastAPI 构建，前端采用 React 19，集成依赖注入、多级缓存、Dask 混合计算与完整的可观测性能力。
 
 ## 核心特性
 
@@ -94,22 +94,24 @@ deepsearch/
 
 | 层级 | 技术 | 版本 | 说明 |
 |------|------|------|------|
-| **运行时** | Python 3.13 | >=3.13,<3.14 | MappedAsDataclass 支持 |
+| **运行时** | Python 3.14 | >=3.14,<3.15 | MappedAsDataclass 支持 |
 | **包管理** | UV | 官方推荐 | 快速依赖解析 |
-| **后端框架** | FastAPI + Uvicorn | 0.128.0+ | 异步 ASGI 服务器 |
-| **ORM** | SQLAlchemy 2.0 | 2.0.44+ | MappedAsDataclass 迁移完成 |
-| **异步数据库** | asyncpg | 0.30.0+ | PostgreSQL 异步驱动 |
-| **缓存** | Redis + TTLCache | 6.4.0+ | 三级缓存（L1+L2+L3） |
-| **分布式计算** | Dask | 2024.1.0+ | 混合 Windows/Docker 架构 |
+| **后端框架** | FastAPI + Uvicorn | 0.135.3+ / 0.44.0+ | 异步 ASGI 服务器 |
+| **ORM** | SQLAlchemy 2.0 | 2.0.49+ | MappedAsDataclass 迁移完成 |
+| **异步数据库** | asyncpg | 0.31.0+ | PostgreSQL 异步驱动 |
+| **缓存** | Redis + TTLCache | 7.2.0+ | 三级缓存（L1+L2+L3） |
+| **分布式计算** | Dask | 2026.3.0+ | 混合 Windows/Docker 架构 |
 | **依赖注入** | dependency-injector | 4.48.3+ | 声明式 DI |
 | **前端框架** | React | 19.2.3 | 最新版 |
 | **UI 组件** | Ant Design Pro | 2.8.10 | 企业级 UI 组件 |
 | **状态管理** | Zustand | 5.0.8 | 轻量级替代 Redux |
 | **图表库** | ECharts + Lightweight Charts | 5.6 + 5.1 | 实时 K 线图表 |
 | **类型检查** | mypy + Pyright | 1.0+ | 100% 合规（32 错误已修复） |
-| **数据源** | AmazingData | 1.0.28 | 默认数据源（主链路） |
-|  | TGW (MiniQMT) | 1.0.8.5 | 本地 SDK 回退路径 |
-|  | AkShare | 1.18.25 | 备用数据源（代理模式） |
+| **数据源** | AmazingData | 1.1.0 | 默认数据源（主链路） |
+|  | TGW (MiniQMT) | 1.0.8.6 | 本地 SDK 回退路径 |
+|  | AkShare | 1.18.54+ | 备用数据源（代理模式） |
+
+> MiniQMT 的 `xtquant` 最新公开包 `250516.1.1` 仍声明 `Python <3.14`，因此不再作为 Python 3.14 主环境的直接依赖安装；相关适配器保留运行时可选导入，待上游发布兼容版本后再恢复锁定。
 
 ## 核心能力
 
@@ -210,7 +212,7 @@ cd deepsearch
 # 2. 安装 UV 包管理器
 python -m pip install --upgrade uv
 
-# 3. 创建虚拟环境（Python 3.13）
+# 3. 创建虚拟环境（Python 3.14）
 uv venv --python (Get-Content .python-version)
 .\.venv\Scripts\Activate.ps1
 
@@ -403,7 +405,7 @@ chore: 升级 SQLAlchemy 至 2.0.44
 | 变化项 | 旧版 | Monorepo v2（当前） |
 |--------|------|---------------------|
 | **默认数据源** | AmazingData 优先 | AmazingData 默认（回退顺序见 `data_sources.yaml`） |
-| **Python 版本** | 3.12 | 3.13 |
+| **Python 版本** | 3.12 | 3.14 |
 | **SQLAlchemy** | 1.4 | 2.0 (MappedAsDataclass) |
 | **React 版本** | 18.x | 19.2.3 |
 | **消息总线** | ZeroMQ | inmem（内存总线） |

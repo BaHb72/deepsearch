@@ -394,7 +394,7 @@ class DataProviderRegistry:
                     if "port" in data:
                         try:
                             data["port"] = int(data["port"])
-                        except (ValueError, TypeError):
+                        except ValueError, TypeError:
                             pass  # Let Pydantic handle validation error if conversion fails
 
                     candidate = SettingsAmazingDataConnectionConfig.model_validate(data)

@@ -357,7 +357,7 @@ class ConnectionPool(Generic[TConn]):
             try:
                 # 使用更短的超时时间等待任务完成
                 await asyncio.wait_for(self._maintenance_task, timeout=0.5)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except asyncio.CancelledError, asyncio.TimeoutError:
                 pass
 
         # 关闭所有连接

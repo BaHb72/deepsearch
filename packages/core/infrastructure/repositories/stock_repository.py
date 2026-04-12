@@ -248,7 +248,7 @@ class PostgreSQLStockRepository(IStockRepository):
                 if isinstance(value, str):
                     numeric = float(value)
                     return Price(Decimal(numeric))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 return None
             return None
 

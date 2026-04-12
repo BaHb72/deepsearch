@@ -164,13 +164,11 @@ class DatabaseService(DatabaseServiceProtocol):
                     # 检查是否已经是超表
                     check_sql = cast(
                         TextClause,
-                        text(
-                            """
+                        text("""
                             SELECT EXISTS (SELECT 1
                                            FROM timescaledb_information.hypertables
                                            WHERE hypertable_name = :table_name);
-                            """
-                        ),
+                            """),
                     )
                     result = await conn.execute(
                         self._as_executable(check_sql), {"table_name": table_name}
@@ -189,11 +187,9 @@ class DatabaseService(DatabaseServiceProtocol):
                         # 设置分区间隔（7天一个分区）
                         interval_sql = cast(
                             TextClause,
-                            text(
-                                f"""
+                            text(f"""
                                 SELECT set_chunk_time_interval('{table_name}', INTERVAL '7 days');
-                            """
-                            ),
+                            """),
                         )
                         await conn.execute(self._as_executable(interval_sql))
                     else:
@@ -217,13 +213,11 @@ class DatabaseService(DatabaseServiceProtocol):
             # 检查视图是否存在
             check_sql = cast(
                 TextClause,
-                text(
-                    """
+                text("""
                     SELECT EXISTS (SELECT 1
                                    FROM timescaledb_information.continuous_aggregates
                                    WHERE view_name = 'market_5min_agg');
-                    """
-                ),
+                    """),
             )
             result = await conn.execute(self._as_executable(check_sql))
             exists = result.scalar()
@@ -231,8 +225,7 @@ class DatabaseService(DatabaseServiceProtocol):
             if not exists:
                 create_agg_sql = cast(
                     TextClause,
-                    text(
-                        """
+                    text("""
                         CREATE MATERIALIZED VIEW market_5min_agg
                         WITH (timescaledb.continuous) AS
                         SELECT
@@ -246,22 +239,19 @@ class DatabaseService(DatabaseServiceProtocol):
                             sum(turnover) as turnover
                         FROM market_1min
                         GROUP BY time_bucket('5 minutes', time), symbol;
-                    """
-                    ),
+                    """),
                 )
                 await conn.execute(self._as_executable(create_agg_sql))
 
                 # 添加刷新策略
                 policy_sql = cast(
                     TextClause,
-                    text(
-                        """
+                    text("""
                         SELECT add_continuous_aggregate_policy('market_5min_agg',
                             start_offset => INTERVAL '1 hour',
                             end_offset => INTERVAL '1 minute',
                             schedule_interval => INTERVAL '5 minutes');
-                    """
-                    ),
+                    """),
                 )
                 await conn.execute(self._as_executable(policy_sql))
 

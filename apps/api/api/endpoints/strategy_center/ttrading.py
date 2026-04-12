@@ -235,7 +235,7 @@ def _get_positional_arity(func: Any) -> int:
     """返回可调用对象的位置参数个数（仅统计 POSITIONAL_*）。"""
     try:
         signature = inspect.signature(func)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 0
     return sum(
         1
@@ -1046,7 +1046,7 @@ def _as_optional_float(value: Any) -> Optional[float]:
         return None
     try:
         parsed = float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     if pd.isna(parsed):
         return None

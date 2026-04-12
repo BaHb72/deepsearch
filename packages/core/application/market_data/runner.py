@@ -58,7 +58,7 @@ class MarketDataStreamingRunner:
         # 带超时等待
         try:
             await asyncio.wait_for(self._task, timeout=timeout)
-        except (asyncio.TimeoutError, asyncio.CancelledError):
+        except asyncio.TimeoutError, asyncio.CancelledError:
             pass
         finally:
             self._task = None

@@ -512,7 +512,7 @@ class DaskWorkerManager:
         try:
             with socket.create_connection((self._parsed_host, self._parsed_port), timeout=3):
                 return True
-        except (OSError, socket.timeout):
+        except OSError, socket.timeout:
             self._logger.warning(f"Dask Scheduler 不可达 ({self._parsed_host}:{self._parsed_port})")
             return False
 
@@ -1173,7 +1173,7 @@ class DaskWorkerManager:
                         loop.run_in_executor(None, lambda p=info.process: p.wait(timeout=timeout)),  # type: ignore[misc]
                         timeout=timeout + 1.0,
                     )
-                except (subprocess.TimeoutExpired, asyncio.TimeoutError):
+                except subprocess.TimeoutExpired, asyncio.TimeoutError:
                     self._logger.warning(f"Worker {info.name} 未响应，强制终止")
                     info.process.kill()
                     # kill 后也用异步等待，避免阻塞

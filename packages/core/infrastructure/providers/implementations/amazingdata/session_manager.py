@@ -45,7 +45,7 @@ class _InterProcessFileLock:
             else:
                 msvcrt.locking(self._fd, msvcrt.LK_NBLCK, 1)
             return True
-        except (OSError, IOError):
+        except OSError, IOError:
             if self._fd is not None:
                 os.close(self._fd)
                 self._fd = None
@@ -58,7 +58,7 @@ class _InterProcessFileLock:
         if self._fd is not None:
             try:
                 msvcrt.locking(self._fd, msvcrt.LK_UNLCK, 1)
-            except (OSError, IOError):
+            except OSError, IOError:
                 pass
             finally:
                 os.close(self._fd)

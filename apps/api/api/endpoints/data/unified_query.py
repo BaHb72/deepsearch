@@ -599,7 +599,7 @@ async def _run_capability_call(
         limit_raw = params.get("limit", params.get("count", 100))
         try:
             limit = int(limit_raw or 100)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             limit = 100
         symbol_candidates = _stock_symbol_candidates(symbol)
 
@@ -733,8 +733,10 @@ async def _run_capability_call(
         if not symbol:
             return [], "missing_symbol"
 
-        start_date = _normalize_date_digits(params.get("startDate") or params.get("start_date"))
-        end_date = _normalize_date_digits(params.get("endDate") or params.get("end_date"))
+        capital_start_date = _normalize_date_digits(
+            params.get("startDate") or params.get("start_date")
+        )
+        capital_end_date = _normalize_date_digits(params.get("endDate") or params.get("end_date"))
         period = str(params.get("period", "1d"))
 
         symbol_candidates = _stock_symbol_candidates(symbol)
@@ -744,8 +746,8 @@ async def _run_capability_call(
                 "get_capital_flow",
                 symbol=candidate,
                 period=period,
-                start_date=start_date,
-                end_date=end_date,
+                start_date=capital_start_date,
+                end_date=capital_end_date,
             )
             rows = _coerce_rows(payload)
             if rows:

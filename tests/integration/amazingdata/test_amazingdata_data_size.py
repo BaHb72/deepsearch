@@ -31,8 +31,7 @@ def test_amazingdata_data_size_manual_subprocess() -> None:
     if not username or not password:
         pytest.skip("缺少 AMAZINGDATA_USERNAME/AMAZINGDATA_PASSWORD，跳过手动真实测试")
 
-    probe_code = textwrap.dedent(
-        """
+    probe_code = textwrap.dedent("""
         import json
         import time
 
@@ -82,8 +81,7 @@ def test_amazingdata_data_size_manual_subprocess() -> None:
             "calendar_len": None if calendar is None else len(calendar),
         }
         print(json.dumps(payload, ensure_ascii=False))
-        """
-    ).format(username=username, password=password, host=host, port=port)
+        """).format(username=username, password=password, host=host, port=port)
 
     completed = subprocess.run(
         [sys.executable, "-c", probe_code],

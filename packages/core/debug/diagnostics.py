@@ -95,7 +95,7 @@ class DiagnosticLogger:
                 # 尝试直接序列化
                 json.dumps(value)
                 result[key] = value
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 # 如果失败，转换为字符串
                 result[key] = str(value)
                 # 对于对象，尝试获取更多信息

@@ -278,7 +278,7 @@ class AmazingDataQueryManager:
                 continue
             try:
                 return int(candidate)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
         return default
 

@@ -362,7 +362,7 @@ class AkShareAdapter(IAkShareProvider):
         for d in dates:
             try:
                 result.append(int(d))
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 continue
         return result if result else None
 

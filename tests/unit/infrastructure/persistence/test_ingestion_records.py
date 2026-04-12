@@ -121,13 +121,11 @@ async def test_load_respects_expiration(sqlite_db_service: SQLiteDatabaseService
     # 将 expires_at/ completed_at 回退，模拟过期快照
     async with sqlite_db_service.transaction() as session:
         await session.execute(
-            text(
-                """
+            text("""
                 UPDATE ingestion_jobs
                 SET expires_at = :expired_at, completed_at = :completed_at
                 WHERE id = :job_id
-                """
-            ),
+                """),
             {
                 "expired_at": datetime.now(timezone.utc) - timedelta(minutes=5),
                 "completed_at": datetime.now(timezone.utc) - timedelta(minutes=5),

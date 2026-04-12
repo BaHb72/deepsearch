@@ -2421,7 +2421,7 @@ class DataSourceManager:
 
         try:
             config.priority = int(priority)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             logger.warning(f"无效的优先级: {priority}")
             return False
 

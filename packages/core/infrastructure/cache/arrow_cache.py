@@ -187,7 +187,7 @@ class ArrowCacheManager:
             try:
                 data = json.loads(self.index_path.read_text(encoding="utf-8"))
                 return data if isinstance(data, dict) else {}
-            except (json.JSONDecodeError, OSError):
+            except json.JSONDecodeError, OSError:
                 return {}
         return {}
 

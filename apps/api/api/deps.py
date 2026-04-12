@@ -41,7 +41,7 @@ async def get_database_component() -> "DatabaseComponent":
         # 尝试获取数据库组件（支持 override 和 component_manager 两种路径）
         try:
             component = context.get_component("database")
-        except (RuntimeError, ValueError):
+        except RuntimeError, ValueError:
             # get_component 会在 _component_manager 未设置且无 override 时抛出异常
             raise HTTPException(status_code=503, detail="服务尚未完全启动，请稍后重试")
 
@@ -128,7 +128,7 @@ async def get_optional_ingestion_service() -> Optional["DataSourceIngestionServi
         # 尝试获取数据库组件（支持 override 和 component_manager 两种路径）
         try:
             component = context.get_component("database")
-        except (RuntimeError, ValueError):
+        except RuntimeError, ValueError:
             return None
 
         if not isinstance(component, DatabaseComponent) or not component.is_connected():

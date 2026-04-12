@@ -794,7 +794,7 @@ class LoggerManager:
             return
         try:
             stream.write(message)
-        except (OSError, ValueError):
+        except OSError, ValueError:
             # During process teardown, stderr may already be closed.
             return
 

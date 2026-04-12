@@ -488,7 +488,7 @@ class UnifiedBacktraderAdapter:
         # 安全获取日期范围，处理边界情况
         try:
             date_range = f"{df.index[0]} to {df.index[-1]}" if len(df) > 0 else "N/A"
-        except (IndexError, KeyError):
+        except IndexError, KeyError:
             date_range = "N/A"
 
         validation_result["stats"] = {

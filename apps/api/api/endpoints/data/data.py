@@ -734,13 +734,11 @@ async def get_symbols() -> Dict[str, Any]:
     try:
         analytics_db = get_analytics_db()
         conn = _require_duckdb_connection(analytics_db)
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT DISTINCT symbol
             FROM market_daily
             ORDER BY symbol
-            """
-        ).fetchall()
+            """).fetchall()
         symbols = [row[0] for row in rows]
         return {"count": len(symbols), "symbols": symbols}
     except HTTPException:

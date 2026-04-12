@@ -200,7 +200,7 @@ def _normalize_amazingdata_credentials(raw: Dict[str, Any]) -> Dict[str, str]:
         if key == "port":
             try:
                 normalized[key] = str(int(value))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
         else:
             value_str = str(value).strip()
@@ -1309,12 +1309,12 @@ def update_datasource_status_after_test(datasource_type: str, success: bool, lat
     last_fail_ts_val = entry.get("self_test_last_fail_ts")
     try:
         last_fail_ts = float(str(last_fail_ts_val)) if last_fail_ts_val is not None else 0.0
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         last_fail_ts = 0.0
     fail_count_val = entry.get("self_test_fail_count")
     try:
         failure_count = int(str(fail_count_val)) if fail_count_val is not None else 0
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         failure_count = 0
     if now_ts - last_fail_ts > SELF_TEST_FAILURE_DECAY_SECONDS:
         failure_count = 0

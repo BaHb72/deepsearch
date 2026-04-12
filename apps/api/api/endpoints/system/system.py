@@ -447,7 +447,7 @@ async def get_recent_logs(lines: int = 100, level: str = "INFO") -> Dict[str, An
                     log_level = level_value.upper()
                     if log_level in level_priority and level_priority[log_level] >= min_level:
                         logs.append(log_entry)
-                except (ValueError, KeyError):
+                except ValueError, KeyError:
                     # 如果解析失败，作为原始日志添加
                     logs.append(
                         {

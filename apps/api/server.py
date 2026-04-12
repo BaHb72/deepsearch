@@ -47,7 +47,9 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 # Windows 兼容性：psycopg3 需要 SelectorEventLoop
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    selector_policy = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
+    if selector_policy is not None:
+        asyncio.set_event_loop_policy(selector_policy())
 
 # 记录模块导入
 log_diagnostic(
@@ -901,9 +903,27 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"定时 GC 任务启动失败（非致命）: {e}")
 
+    # 启动数据库连接监控。FastAPI 0.135 已移除 app.add_event_handler，
+    # 由数据库管理路由在 app.state 上注册 lifespan 钩子。
+    database_monitor_startup = getattr(app.state, "database_connection_monitor_startup", None)
+    if callable(database_monitor_startup):
+        try:
+            await database_monitor_startup()
+            logger.info("数据库连接监控已启动")
+        except Exception as e:
+            logger.warning(f"数据库连接监控启动失败（非致命）: {e}")
+
     yield  # 应用运行中
 
     # === SHUTDOWN ===
+    database_monitor_shutdown = getattr(app.state, "database_connection_monitor_shutdown", None)
+    if callable(database_monitor_shutdown):
+        try:
+            await database_monitor_shutdown()
+            logger.info("数据库连接监控已停止")
+        except Exception as e:
+            logger.warning(f"数据库连接监控停止失败: {e}")
+
     # 取消 Dask 后台初始化任务（如果还在运行）
     dask_init_task = getattr(app.state, "dask_init_task", None)
     if dask_init_task is not None and not dask_init_task.done():

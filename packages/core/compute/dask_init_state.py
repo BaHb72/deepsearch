@@ -13,6 +13,7 @@ Dask 初始化状态管理模块
 from __future__ import annotations
 
 import asyncio
+import inspect
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -502,11 +503,13 @@ class DaskInitStateManager:
                     actor_ready_wait,
                 )
                 try:
-                    close_async = getattr(redis_client, "aclose", None)
-                    if callable(close_async):
-                        await close_async()
-                    else:
-                        redis_client.close()
+                    close_method = getattr(redis_client, "aclose", None) or getattr(
+                        redis_client, "close", None
+                    )
+                    if callable(close_method):
+                        close_result = close_method()
+                        if inspect.isawaitable(close_result):
+                            await close_result
                 except Exception as close_exc:
                     self._logger.debug("关闭 AmazingData Redis 客户端失败: {}", close_exc)
                 self._amazingdata_ready_event.set()

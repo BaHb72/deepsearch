@@ -97,8 +97,7 @@ class AnalyticsDB:
             raise RuntimeError("未连接到数据库")
 
         # 创建日线数据表
-        self.conn.execute(
-            """
+        self.conn.execute("""
                           CREATE TABLE IF NOT EXISTS market_daily
                           (
                               date
@@ -166,12 +165,10 @@ class AnalyticsDB:
                               date
                           )
                               )
-                          """
-        )
+                          """)
 
         # 创建因子数据表
-        self.conn.execute(
-            """
+        self.conn.execute("""
                           CREATE TABLE IF NOT EXISTS factor_data
                           (
                               date
@@ -196,12 +193,10 @@ class AnalyticsDB:
                               factor_name
                           )
                               )
-                          """
-        )
+                          """)
 
         # 创建指标数据表
-        self.conn.execute(
-            """
+        self.conn.execute("""
                           CREATE TABLE IF NOT EXISTS indicator_data
                           (
                               date
@@ -228,8 +223,7 @@ class AnalyticsDB:
                               indicator_name
                           )
                               )
-                          """
-        )
+                          """)
 
         self.logger.info("DuckDB 架构初始化完成")
 
@@ -372,11 +366,9 @@ class AnalyticsDB:
         if not self.conn:
             raise RuntimeError("未连接到数据库")
 
-        self.conn.execute(
-            f"""
+        self.conn.execute(f"""
             COPY {table_name} TO '{output_path}' (FORMAT PARQUET, COMPRESSION 'SNAPPY')
-        """
-        )
+        """)
 
         self.logger.info(f"导出 {table_name} 到 {output_path}")
 
@@ -408,12 +400,10 @@ class AnalyticsDB:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"File not found: {file_path}")
 
-        self.conn.execute(
-            f"""
+        self.conn.execute(f"""
             INSERT OR REPLACE INTO {table_name}
             SELECT * FROM read_parquet('{file_path}')
-        """
-        )
+        """)
 
         # 计算新增记录数
         after_row = self.conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()
@@ -437,12 +427,10 @@ class AnalyticsDB:
             stats[f"{table}_count"] = int(row[0]) if row and row[0] is not None else 0
 
         # 获取日线数据的时间范围
-        date_range_row = self.conn.execute(
-            """
+        date_range_row = self.conn.execute("""
                                        SELECT MIN(date) as min_date, MAX(date) as max_date
                                        FROM market_daily
-                                       """
-        ).fetchone()
+                                       """).fetchone()
 
         if date_range_row and date_range_row[0] and date_range_row[1]:
             stats["date_range"] = {
@@ -451,12 +439,10 @@ class AnalyticsDB:
             }
 
         # 获取股票数量
-        symbol_row = self.conn.execute(
-            """
+        symbol_row = self.conn.execute("""
                                          SELECT COUNT(DISTINCT symbol)
                                          FROM market_daily
-                                         """
-        ).fetchone()
+                                         """).fetchone()
         stats["symbol_count"] = (
             int(symbol_row[0]) if symbol_row and symbol_row[0] is not None else 0
         )

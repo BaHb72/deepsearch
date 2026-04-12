@@ -286,19 +286,19 @@ class MomentumStrategy(BaseStrategy):
     def _safe_float(value: Any, *, default: float) -> float:
         try:
             return float(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
     @staticmethod
     def _as_float(value: Any, *, default: float) -> float:
         try:
             return float(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
     @staticmethod
     def _as_int(value: Any, *, default: int) -> int:
         try:
             return int(float(value))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default

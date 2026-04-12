@@ -9,6 +9,7 @@
 
 运行方式：uv run pytest tests/verify_stock_list_routing.py -v
 """
+
 import asyncio
 import sys
 

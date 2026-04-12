@@ -1139,7 +1139,7 @@ def _safe_float(value: Any) -> float | None:
         return None
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -1321,7 +1321,8 @@ def _extract_records(payload: Any) -> list[dict[str, Any]]:
 
 def _json_response_payload(response: JSONResponse) -> dict[str, Any]:
     try:
-        return json.loads(response.body.decode("utf-8"))
+        body = getattr(response, "body", b"")
+        return json.loads(body.decode("utf-8"))
     except Exception:
         return {}
 
@@ -1372,6 +1373,8 @@ def _parse_market_datetime(value: Any) -> datetime | None:
                     continue
         if parsed is None:
             return None
+    if parsed is None:
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=_MARKET_TZ)
     return parsed.astimezone(_MARKET_TZ)

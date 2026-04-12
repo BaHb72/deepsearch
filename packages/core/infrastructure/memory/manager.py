@@ -73,7 +73,7 @@ class MemoryManager:
 
             try:
                 open_files = len(process.open_files())  # type: ignore[attr-defined]
-            except (psutil.AccessDenied, psutil.NoSuchProcess):
+            except psutil.AccessDenied, psutil.NoSuchProcess:
                 open_files = -1
 
             return {
@@ -141,7 +141,7 @@ class MemoryManager:
                             "threads": pinfo.get("num_threads", 0),
                         }
                     )
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                except psutil.NoSuchProcess, psutil.AccessDenied:
                     continue
 
             return sorted(processes, key=lambda x: x["rss_mb"], reverse=True)

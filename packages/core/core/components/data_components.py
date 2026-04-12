@@ -721,7 +721,7 @@ class CacheComponent(AsyncComponent[Any]):
                 continue
             try:
                 option_map[int(option)] = value
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 continue
 
         if not option_map:

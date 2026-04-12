@@ -226,8 +226,7 @@ class DataSyncService:
             return
 
         try:
-            self._analytics_db.conn.execute(
-                """
+            self._analytics_db.conn.execute("""
                 CREATE TABLE IF NOT EXISTS stock_info
                 (
                     symbol
@@ -241,8 +240,7 @@ class DataSyncService:
                     sector
                     VARCHAR
                 )
-                """
-            )
+                """)
             await self._analytics_db.import_from_dataframe(
                 stock_info, "stock_info", if_exists="replace"
             )

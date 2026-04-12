@@ -31,6 +31,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import uuid
 from datetime import datetime
@@ -612,7 +613,13 @@ class AmazingDataDaskAdapter:
         """停止 Adapter，清理 Redis 连接"""
         if self._redis:
             try:
-                await self._redis.close()  # type: ignore[func-returns-value]
+                close_method = getattr(self._redis, "aclose", None) or getattr(
+                    self._redis, "close", None
+                )
+                if callable(close_method):
+                    close_result = close_method()
+                    if inspect.isawaitable(close_result):
+                        await close_result
             except Exception as e:
                 logger.warning("[AmazingData/Dask] 关闭 Redis 连接失败: {}", e)
         self._initialized = False
@@ -1144,14 +1151,14 @@ class AmazingDataDaskAdapter:
     def _to_number(value: Any, default: float = 0.0) -> float:
         try:
             return float(value)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
     @staticmethod
     def _to_int(value: Any, default: int = 0) -> int:
         try:
             return int(float(value))
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
     @staticmethod
