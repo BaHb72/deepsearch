@@ -3,15 +3,15 @@
  * 封装数据源相关的 API 调用和业务逻辑
  */
 
-import { dataSourceAPI } from '@/api/dataSource'
-import type {
-    DataSource,
-    DataSourceStatusReport,
-    DataSourceMonitor,
-    DataSourceMetrics,
-    SourceCapabilitiesResponse,
-    CapabilityMatrix,
-    IngestionJob,
+import {
+    type CapabilityMatrix,
+    type DataSource,
+    type DataSourceMetrics,
+    type DataSourceMonitor,
+    type DataSourceStatusReport,
+    type IngestionJob,
+    type SourceCapabilitiesResponse,
+    dataSourceAPI,
 } from '@/api/dataSource'
 
 // ============ 类型导出 ============

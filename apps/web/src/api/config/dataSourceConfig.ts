@@ -4,12 +4,12 @@
 
 import request from '@/api/request'
 import {
+    type DataSourceTestResult,
+    buildDataSourceConfigPayload,
     extractData,
     logApiResponse,
     resolveDataSourceId,
-    buildDataSourceConfigPayload,
 } from './utils'
-import type { DataSourceTestResult } from './utils'
 
 // ============ 类型定义 ============
 

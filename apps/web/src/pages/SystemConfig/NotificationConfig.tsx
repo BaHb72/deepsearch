@@ -520,7 +520,7 @@ const NotificationConfig: React.FC = () => {
               </Typography.Text>
               {barkServers.length === 0 ? (
                 <Typography.Text type="secondary" style={{ fontStyle: 'italic' }}>
-                  暂无 Bark 服务器配置，点击"添加服务器"开始配置
+                  暂无 Bark 服务器配置，点击“添加服务器”开始配置
                 </Typography.Text>
               ) : (
                 <Table

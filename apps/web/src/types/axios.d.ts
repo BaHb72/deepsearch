@@ -1,11 +1,11 @@
 import type {RequestMetadata} from '@/api/core/types'
 
 declare module 'axios' {
-    interface AxiosRequestConfig<D = any> {
+    interface AxiosRequestConfig<_D = any> {
         metadata?: RequestMetadata
     }
 
-    interface InternalAxiosRequestConfig<D = any> {
+    interface InternalAxiosRequestConfig<_D = any> {
         metadata?: RequestMetadata
     }
 }

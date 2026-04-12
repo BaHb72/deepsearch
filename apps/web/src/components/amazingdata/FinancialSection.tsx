@@ -36,7 +36,7 @@ export const FinancialSection: React.FC<FinancialSectionProps> = ({
             ])
             setBalanceData(balance.data?.data || null)
             setIncomeData(income.data?.data || null)
-        } catch (err) {
+        } catch {
             message.error('获取财务数据失败')
         } finally {
             setLoading(false)

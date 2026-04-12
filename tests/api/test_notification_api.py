@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import Dict
 
 import pytest
@@ -10,7 +11,7 @@ from core.infrastructure.notifications import NotificationQuotaGuard, Notificati
 
 from apps.api.api.endpoints.notifications import push as notification_push
 
-CONFIG_PATH = ensure_env_config_file("dev")
+CONFIG_PATH = ensure_env_config_file(os.getenv("APP__ENV", "dev"))
 
 
 def _refresh_notification_service() -> None:

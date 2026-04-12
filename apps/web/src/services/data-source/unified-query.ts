@@ -3,8 +3,7 @@
  * - 已覆盖 capability 走后端 /v1/data/query
  * - 未覆盖 capability 由上层回退到 legacy adapters
  */
-import type { UnifiedQueryAttempt } from '@/api/unifiedData'
-import { unifiedDataApi } from '@/api/unifiedData'
+import { unifiedDataApi, type UnifiedQueryAttempt } from '@/api/unifiedData'
 import type {
     ColumnDef,
     DataCapability,

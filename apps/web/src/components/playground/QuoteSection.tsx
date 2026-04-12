@@ -6,8 +6,11 @@ import React from 'react'
 import { Button, Space, Statistic, Row, Col, Empty, Spin, Alert } from 'antd'
 import { ReloadOutlined, RiseOutlined, FallOutlined } from '@ant-design/icons'
 import { ProCard } from '@ant-design/pro-components'
-import type { DataSourceType, CoreQuoteData } from '@/services/data-source'
-import { useRichDataSource } from '@/services/data-source'
+import {
+    type CoreQuoteData,
+    type DataSourceType,
+    useRichDataSource,
+} from '@/services/data-source'
 import { DataSourceBadge } from '@/components/common/DataSourceBadge'
 import { ExtendedFieldsPanel } from '@/components/common/ExtendedFieldsPanel'
 

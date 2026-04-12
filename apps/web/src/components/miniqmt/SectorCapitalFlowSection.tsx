@@ -70,7 +70,7 @@ export const SectorCapitalFlowSection: React.FC<SectorCapitalFlowSectionProps> =
                 message.warning((res as any).message || '未获取到数据')
                 setData([])
             }
-        } catch (err) {
+        } catch {
             message.error('获取板块资金流向失败')
             setData([])
         } finally {

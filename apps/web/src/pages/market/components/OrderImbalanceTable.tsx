@@ -1,7 +1,6 @@
 import React from 'react'
 import {theme, Typography} from 'antd'
-import type {ProColumns} from '@ant-design/pro-components'
-import {ProTable} from '@ant-design/pro-components'
+import {ProTable, type ProColumns} from '@ant-design/pro-components'
 import type {OrderImbalanceItem} from '@/api/marketDataLive'
 import ModuleSourceSelector from './ModuleSourceSelector'
 import {formatNumber, formatTime} from '../utils'

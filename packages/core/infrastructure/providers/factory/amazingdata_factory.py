@@ -8,9 +8,7 @@ from loguru import logger
 
 from ..exceptions import ConfigValidationError, ProviderCreationError
 from ..implementations.amazingdata.amazingdata_optimized import OptimizedAmazingDataProvider
-from ..implementations.amazingdata.config import (
-    ensure_amazingdata_provider_config,
-)
+from ..implementations.amazingdata.config import ensure_amazingdata_provider_config
 from .base import ProviderFactoryStrategy
 
 

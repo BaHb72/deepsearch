@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, MouseEventParams, UTCTimestamp, AreaSeries } from 'lightweight-charts';
+import { createChart, ColorType, IChartApi, ISeriesApi, MouseEventParams, AreaSeries } from 'lightweight-charts';
 import { Spin } from 'antd';
 import { strategyCenterAPI } from '../../api/strategy-center';
 

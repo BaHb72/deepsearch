@@ -112,15 +112,16 @@ const PositionSizer: React.FC<PositionSizerProps> = ({
                 // 固定比例：当前持仓 × 比例
                 return Math.max(100, Math.floor(currentQty * settings.fixedRatio / 100 / 100) * 100);
 
-            case 'atr':
+            case 'atr': {
                 // ATR 动态：风险金额 ÷ (ATR × 倍数)
                 // 简化：使用价格波动的2%作为ATR估算
                 const estimatedATR = currentPrice * 0.02;
                 const riskPerShare = estimatedATR * settings.atrMultiplier;
                 const qty = Math.floor(settings.riskAmount / riskPerShare / 100) * 100;
                 return Math.max(100, qty);
+            }
 
-            case 'kelly':
+            case 'kelly': {
                 // 凯利公式：需要胜率和赔率
                 // 简化版：假设胜率55%，赔率1.5
                 const winRate = 0.55;
@@ -128,6 +129,7 @@ const PositionSizer: React.FC<PositionSizerProps> = ({
                 const kellyRatio = (winRate * odds - (1 - winRate)) / odds;
                 const safeRatio = kellyRatio * 0.4;  // 使用40%凯利
                 return Math.max(100, Math.floor(currentQty * safeRatio / 100) * 100);
+            }
 
             default:
                 return 100;

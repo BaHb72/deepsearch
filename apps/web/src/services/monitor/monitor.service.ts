@@ -3,15 +3,15 @@
  * 封装系统监控相关的 API 调用
  */
 
-import { monitorAPI } from '@/api/monitor'
-import type {
-    MonitorDashboardResponse,
-    MonitorRealtimeMetrics,
-    MonitorHealthResponse,
-    MonitorSlowEventsResponse,
-    MonitorHistoricalResponse,
-    MonitorEventsSummary,
-    EventSystemOverviewResponse,
+import {
+    type EventSystemOverviewResponse,
+    type MonitorDashboardResponse,
+    type MonitorEventsSummary,
+    type MonitorHealthResponse,
+    type MonitorHistoricalResponse,
+    type MonitorRealtimeMetrics,
+    type MonitorSlowEventsResponse,
+    monitorAPI,
 } from '@/api/monitor'
 
 // ============ 类型导出 ============

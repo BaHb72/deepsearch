@@ -79,7 +79,7 @@ export const KlineSection: React.FC<KlineSectionProps> = ({
                 setSource(payload?.source)
                 setFallbackReason(payload?.fallback_reason)
             }
-        } catch (err) {
+        } catch {
             message.error('获取K线数据失败')
             setKlineData([])
             setSource(undefined)

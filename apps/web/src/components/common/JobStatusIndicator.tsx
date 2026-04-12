@@ -62,7 +62,7 @@ const JobStatusIndicator: React.FC = () => {
             await dataSourceAPI.triggerPrefetchJob(true)
             message.success('已触发后台同步任务')
             fetchJobs()
-        } catch (error) {
+        } catch {
             message.error('触发失败')
         } finally {
             setLoading(false)
@@ -78,7 +78,7 @@ const JobStatusIndicator: React.FC = () => {
             await dataSourceAPI.cancelJob(jobId)
             message.success('已取消任务')
             fetchJobs()
-        } catch (error) {
+        } catch {
             message.error('取消失败')
         }
     }

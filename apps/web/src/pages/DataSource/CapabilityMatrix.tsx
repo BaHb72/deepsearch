@@ -9,8 +9,12 @@ import {
     CloudOutlined, DesktopOutlined
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { dataSourceAPI } from '../../api/dataSource';
-import type { CapabilityMatrix as CapabilityMatrixData, SourceMatrixInfo, CategoryInfo } from '../../api/dataSource';
+import {
+    type CapabilityMatrix as CapabilityMatrixData,
+    type CategoryInfo,
+    type SourceMatrixInfo,
+    dataSourceAPI,
+} from '../../api/dataSource';
 
 const { Text } = Typography;
 

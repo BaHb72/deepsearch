@@ -8,8 +8,12 @@ import { ReloadOutlined, ThunderboltOutlined, SwapOutlined } from '@ant-design/i
 import { ProCard } from '@ant-design/pro-components'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs from 'dayjs'
-import type { DataSourceType, CoreDragonTigerData, CoreBlockTradingData } from '@/services/data-source'
-import { useRichDataSource } from '@/services/data-source'
+import {
+    type CoreBlockTradingData,
+    type CoreDragonTigerData,
+    type DataSourceType,
+    useRichDataSource,
+} from '@/services/data-source'
 import { DataSourceBadge } from '@/components/common/DataSourceBadge'
 import { ExtendedFieldsPanel } from '@/components/common/ExtendedFieldsPanel'
 

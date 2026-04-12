@@ -171,7 +171,7 @@ const ModuleSourceConfig: React.FC = () => {
             message.success('配置已重新加载')
             await loadModules()
             setPendingChanges({})
-        } catch (error) {
+        } catch {
             message.error('重新加载失败')
         }
     }

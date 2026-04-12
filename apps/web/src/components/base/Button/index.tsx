@@ -1,5 +1,11 @@
-import type {AnchorHTMLAttributes, ButtonHTMLAttributes, MouseEvent, ReactNode,} from 'react'
-import {forwardRef, memo} from 'react'
+import {
+    forwardRef,
+    memo,
+    type AnchorHTMLAttributes,
+    type ButtonHTMLAttributes,
+    type MouseEvent,
+    type ReactNode,
+} from 'react'
 import classNames from 'classnames'
 
 import './index.scss'

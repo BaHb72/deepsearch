@@ -3,8 +3,7 @@
  */
 
 import request from '@/api/request'
-import { extractData, logApiResponse, normalizeTestResult } from './utils'
-import type { TestResult } from './utils'
+import { type TestResult, extractData, logApiResponse, normalizeTestResult } from './utils'
 
 // ============ 类型定义 ============
 

@@ -393,7 +393,7 @@ const EventSystem = () => {
         async (options: { showSuccess?: boolean } = {}) => {
             try {
                 const response = await monitorAPI.getEventSystemOverview()
-                // @ts-ignore
+                // @ts-expect-error 后端响应类型兼容历史直接返回 payload 的形态
                 const data = response.data || response
 
                 setEventMetrics(data.eventMetrics ?? null)

@@ -34,7 +34,7 @@ export const EtfSection: React.FC<EtfSectionProps> = ({
             } else {
                 message.warning('未获取到数据')
             }
-        } catch (err) {
+        } catch {
             message.error('获取ETF PCF数据失败')
         } finally {
             setLoading(false)

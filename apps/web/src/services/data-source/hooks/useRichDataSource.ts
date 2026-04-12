@@ -3,8 +3,7 @@
  * 返回 RichDataResponse 格式，保留完整信息
  */
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { DataSourceAdapter } from '../types'
-import type { DataCapability, DataSourceType } from '../types'
+import type { DataCapability, DataSourceAdapter, DataSourceType } from '../types'
 import type {
     RichDataResponse,
     CoreData,

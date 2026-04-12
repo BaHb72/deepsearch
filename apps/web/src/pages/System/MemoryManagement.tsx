@@ -180,7 +180,7 @@ const CacheManagementCard: React.FC = () => {
                 message.success(checked ? '缓存已启用' : '缓存已禁用');
                 fetchCacheConfig();
             }
-        } catch (e) {
+        } catch {
             message.error('更新配置失败');
         } finally {
             setSavingConfig(false);
@@ -201,7 +201,7 @@ const CacheManagementCard: React.FC = () => {
                 message.success(`TTL 已更新为 ${editTtl} 秒`);
                 fetchCacheConfig();
             }
-        } catch (e) {
+        } catch {
             message.error('更新 TTL 失败');
         } finally {
             setSavingConfig(false);
@@ -217,7 +217,7 @@ const CacheManagementCard: React.FC = () => {
                 message.success(`已清除所有缓存: ${data.total_cleared} 条目`);
                 fetchCacheStats();
             }
-        } catch (e) {
+        } catch {
             message.error('清除缓存失败');
         } finally {
             setClearingAll(false);
@@ -233,7 +233,7 @@ const CacheManagementCard: React.FC = () => {
                 message.success(`已清除 ${namespace} 缓存: ${data.cleared} 条目`);
                 fetchCacheStats();
             }
-        } catch (e) {
+        } catch {
             message.error(`清除 ${namespace} 缓存失败`);
         } finally {
             setClearingNamespace(null);
@@ -465,7 +465,7 @@ const L2RamBufferCard: React.FC = () => {
                 message.success(checked ? 'RAM 缓冲区已启用' : 'RAM 缓冲区已禁用');
                 fetchStats();
             }
-        } catch (e) {
+        } catch {
             message.error('更新配置失败');
         } finally {
             setSaving(false);
@@ -496,7 +496,7 @@ const L2RamBufferCard: React.FC = () => {
                 message.success('配置已保存');
                 fetchStats();
             }
-        } catch (e) {
+        } catch {
             message.error('保存配置失败');
         } finally {
             setSaving(false);
@@ -519,7 +519,7 @@ const L2RamBufferCard: React.FC = () => {
                 setPinInput('');
                 fetchStats();
             }
-        } catch (e) {
+        } catch {
             message.error('钉住失败');
         } finally {
             setPinning(false);
@@ -534,7 +534,7 @@ const L2RamBufferCard: React.FC = () => {
                 message.success(`已取消钉住 ${code}`);
                 fetchStats();
             }
-        } catch (e) {
+        } catch {
             message.error('取消钉住失败');
         }
     };
@@ -547,7 +547,7 @@ const L2RamBufferCard: React.FC = () => {
                 message.success(data.message);
                 fetchStats();
             }
-        } catch (e) {
+        } catch {
             message.error('清空失败');
         }
     };
@@ -826,7 +826,7 @@ const MemoryManagement: React.FC = () => {
             } else {
                 message.error('GC 执行失败');
             }
-        } catch (e) {
+        } catch {
             message.error('GC 请求失败');
         } finally {
             setGcLoading(false);
@@ -843,7 +843,7 @@ const MemoryManagement: React.FC = () => {
                 message.success(data.message);
                 await loadStats();
             }
-        } catch (e) {
+        } catch {
             message.error('操作失败');
         }
     };
@@ -865,7 +865,7 @@ const MemoryManagement: React.FC = () => {
                 message.success('配置已更新');
                 await loadStats();
             }
-        } catch (e) {
+        } catch {
             message.error('更新配置失败');
         }
     };
@@ -882,7 +882,7 @@ const MemoryManagement: React.FC = () => {
             } else {
                 message.warning(data.message);
             }
-        } catch (e) {
+        } catch {
             message.error('启动追踪失败');
         } finally {
             setTraceLoading(false);
@@ -896,7 +896,7 @@ const MemoryManagement: React.FC = () => {
             const data = await res.json();
             message.info(data.message);
             await loadTraceStatus();
-        } catch (e) {
+        } catch {
             message.error('停止追踪失败');
         } finally {
             setTraceLoading(false);
@@ -913,7 +913,7 @@ const MemoryManagement: React.FC = () => {
             } else {
                 message.warning(data.message);
             }
-        } catch (e) {
+        } catch {
             message.error('拍摄快照失败');
         }
     };

@@ -70,7 +70,7 @@ export const RealtimeQuoteSection: React.FC<RealtimeQuoteSectionProps> = ({
                 setSource(payload?.source)
                 setFallbackReason(payload?.fallback_reason)
             }
-        } catch (err) {
+        } catch {
             message.error('获取实时行情失败')
             setQuoteData([])
             setSource(undefined)

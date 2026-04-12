@@ -1,7 +1,5 @@
-import React from 'react'
+import React, { type Key } from 'react'
 import type { ModuleLog } from '@/types/systemConfig'
-import type { SystemModule } from '@/api/config/modules'
-import type { Key } from 'react'
 import type { ColumnsType } from 'antd/es/table'
 import {
   Badge,
@@ -34,6 +32,7 @@ import {
 } from '@ant-design/icons'
 import { useAsyncData } from '@/hooks'
 import {
+  type SystemModule,
   batchModuleOperation,
   fetchModuleLogs,
   fetchSystemModules,

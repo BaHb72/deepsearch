@@ -703,7 +703,7 @@ const DataSourceForm = ({ initialValues, onSubmit, onTestSuccess }: DataSourceFo
                       dask-scheduler --port 8786
                     </code>
                     <p style={{ marginBottom: 0, color: '#666' }}>
-                      如果尚未配置 Dask 环境，建议先使用"本地模式"。
+                      如果尚未配置 Dask 环境，建议先使用“本地模式”。
                     </p>
                   </div>
                 }

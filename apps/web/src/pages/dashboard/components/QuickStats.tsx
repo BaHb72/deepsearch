@@ -1,6 +1,5 @@
-import React from 'react'
+import React, { type ReactNode } from 'react'
 import { Card, Col, Row, Statistic, Typography } from 'antd'
-import type { ReactNode } from 'react'
 
 const { Text } = Typography
 

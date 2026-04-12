@@ -58,7 +58,7 @@ export const SectorListSection: React.FC<SectorListSectionProps> = ({
                 message.warning('未获取到板块数据')
                 setSectors([])
             }
-        } catch (err) {
+        } catch {
             message.error('获取板块列表失败')
             setSectors([])
         } finally {
@@ -86,7 +86,7 @@ export const SectorListSection: React.FC<SectorListSectionProps> = ({
                 message.warning('未获取到成分股数据')
                 setStocks([])
             }
-        } catch (err) {
+        } catch {
             message.error('获取成分股失败')
             setStocks([])
         } finally {

@@ -94,6 +94,7 @@ config/.crypto_key
 .crypto_key
 deepsearch/config/database_connections.*.yaml
 deepsearch/config/data_sources.yaml
+apps/config/database_connections.test.yaml
 
 !deepsearch/config/settings.template.yaml
 !deepsearch/config/settings.dev.yaml.example

@@ -634,7 +634,7 @@ export const useDatabaseStore = create<DatabaseState>()(
 
           set(draft => {
             draft.loading = false
-            // @ts-ignore - immer/zustand deep type instantiation limit
+            // @ts-expect-error immer/zustand deep type instantiation limit
             draft.error = fetchConnectionsError
           })
 

@@ -5,17 +5,14 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { message } from 'antd'
 import {
+    type NotificationConfigResponse,
+    type NotificationConfigUpdatePayload,
+    type NotificationQuotasResponse,
+    type NotificationSendPayload,
     fetchNotificationConfig,
-    updateNotificationConfig,
-    sendNotification,
     fetchNotificationQuotas,
     resetNotificationQuotas,
-} from '@/api/notifications'
-import type {
-    NotificationConfigResponse,
-    NotificationConfigUpdatePayload,
-    NotificationSendPayload,
-    NotificationQuotasResponse,
+    updateNotificationConfig,
 } from '@/api/notifications'
 
 // ============ Query Keys ============

@@ -36,7 +36,7 @@ export const ShareholderSection: React.FC<ShareholderSectionProps> = ({
             ])
             setHolderData(holder.data?.data || null)
             setHolderNumData(holderNum.data?.data || null)
-        } catch (err) {
+        } catch {
             message.error('获取股东数据失败')
         } finally {
             setLoading(false)

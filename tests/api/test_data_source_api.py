@@ -1,9 +1,28 @@
 """数据源API接口测试"""
 
+import os
 import sys
 from types import ModuleType
 
 import pytest
+from core.config import reload_config
+from core.config.loader import ensure_env_config_file
+from core.constants import YAML_ENCODING
+from core.infrastructure.providers.managers import data_source_manager as manager_module
+
+CONFIG_PATH = ensure_env_config_file(os.getenv("APP__ENV", "dev"))
+
+
+@pytest.fixture(scope="module", autouse=True)
+def restore_data_source_config_file():
+    """恢复数据源配置测试对环境配置文件和管理器单例的修改。"""
+
+    backup_text = CONFIG_PATH.read_text(encoding=YAML_ENCODING)
+    yield
+    CONFIG_PATH.write_text(backup_text, encoding=YAML_ENCODING)
+    reload_config()
+    manager_module._data_source_manager = None
+    manager_module.DataSourceManager.reset_instance()
 
 
 class TestDataSourceAPI:

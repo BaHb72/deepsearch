@@ -7,8 +7,12 @@ import { Button, Space, Select, Alert } from 'antd'
 import { ReloadOutlined, LineChartOutlined, TableOutlined } from '@ant-design/icons'
 import { ProCard } from '@ant-design/pro-components'
 import ReactECharts from 'echarts-for-react'
-import type { DataSourceType, CoreKlineData } from '@/services/data-source'
-import { useRichDataSource, DataTable } from '@/services/data-source'
+import {
+    DataTable,
+    type CoreKlineData,
+    type DataSourceType,
+    useRichDataSource,
+} from '@/services/data-source'
 import { DataSourceBadge } from '@/components/common/DataSourceBadge'
 import { ExtendedFieldsPanel } from '@/components/common/ExtendedFieldsPanel'
 

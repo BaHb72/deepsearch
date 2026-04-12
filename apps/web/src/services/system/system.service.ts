@@ -3,8 +3,7 @@
  * 封装系统状态相关的 API 调用
  */
 
-import { systemAPI } from '@/api/system'
-import type { SystemInfo, SystemHealth } from '@/api/system'
+import { type SystemHealth, type SystemInfo, systemAPI } from '@/api/system'
 
 // ============ 类型导出 ============
 

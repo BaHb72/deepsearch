@@ -29,7 +29,7 @@ export const OptionsSection: React.FC<OptionsSectionProps> = ({
         try {
             const res = await optionApi.getOptionCodeList({ exchange })
             setCodeData(res.data?.data || null)
-        } catch (err) {
+        } catch {
             message.error('获取期权代码列表失败')
         } finally {
             setLoading(false)
@@ -43,7 +43,7 @@ export const OptionsSection: React.FC<OptionsSectionProps> = ({
         try {
             const res = await optionApi.getOptionBasicInfo({ code })
             setInfoData(res.data?.data || null)
-        } catch (err) {
+        } catch {
             message.error('获取期权信息失败')
         } finally {
             setLoading(false)

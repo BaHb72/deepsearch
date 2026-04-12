@@ -38,7 +38,7 @@ export const TradingAnomalySection: React.FC<TradingAnomalySectionProps> = ({
             ])
             setDragonData(dragon.data?.data || null)
             setBlockData(block.data?.data || null)
-        } catch (err) {
+        } catch {
             message.error('获取交易异动数据失败')
         } finally {
             setLoading(false)

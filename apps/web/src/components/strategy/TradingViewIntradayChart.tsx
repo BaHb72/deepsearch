@@ -145,7 +145,6 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
             // 将时间字符串转换为真正的 Unix 时间戳
             // 技巧：直接把北京时间当作 UTC 传给 TradingView，这样显示的就是北京时间
-            let timestamp: number;
             const dateStr = d.date || new Date().toISOString().split('T')[0];
             const timeStr = d.time || '09:30';
 
@@ -163,7 +162,7 @@ const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
             // 使用 Date.UTC 构建 UTC 时间戳，但传入的是北京时间
             // 这样 TradingView 显示的 UTC 时间就是北京时间
-            timestamp = Date.UTC(year, month, day, hours, minutes, seconds) / 1000;
+            const timestamp = Date.UTC(year, month, day, hours, minutes, seconds) / 1000;
 
             return {
                 time: timestamp as UTCTimestamp,

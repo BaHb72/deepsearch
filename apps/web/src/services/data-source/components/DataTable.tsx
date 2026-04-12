@@ -3,8 +3,7 @@
  * 基于数据源插槽架构，自动选择数据源获取数据
  */
 import React from 'react'
-import { Table, Empty, Alert } from 'antd'
-import type { TableProps } from 'antd'
+import { Table, Empty, Alert, type TableProps } from 'antd'
 import { useDataSource } from '../hooks/useDataSource'
 import type { DataCapability, DataSourceType, DataSourceParams, ColumnDef } from '../types'
 

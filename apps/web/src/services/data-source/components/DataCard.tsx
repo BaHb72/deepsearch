@@ -5,8 +5,7 @@
 import React, { useCallback } from 'react'
 import { Card, Button, Space, Tag, Tooltip } from 'antd'
 import { ReloadOutlined, DatabaseOutlined } from '@ant-design/icons'
-import { DataTable } from './DataTable'
-import type { DataTableProps } from './DataTable'
+import { DataTable, type DataTableProps } from './DataTable'
 import type { DataSourceType } from '../types'
 import { useDataSource } from '../hooks/useDataSource'
 

@@ -5,8 +5,12 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Select, Space } from 'antd'
 import { DatabaseOutlined } from '@ant-design/icons'
-import type { DataSourceType, DataCapability } from '@/services/data-source'
-import { getAdaptersForCapability, getAllAdapters } from '@/services/data-source'
+import {
+    type DataCapability,
+    type DataSourceType,
+    getAdaptersForCapability,
+    getAllAdapters,
+} from '@/services/data-source'
 import {
     getAllCapabilitySources,
     getSourcesForCapability,
