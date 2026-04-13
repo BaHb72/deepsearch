@@ -50,16 +50,41 @@ const sessionStorageMock = {
 }
 global.sessionStorage = sessionStorageMock as any
 
+// jsdom does not implement pseudo-element getComputedStyle; rc-table may call it.
+const originalGetComputedStyle = window.getComputedStyle.bind(window)
+Object.defineProperty(window, 'getComputedStyle', {
+  writable: true,
+  value: (element: Element, pseudoElement?: string | null) => {
+    if (pseudoElement) {
+      return originalGetComputedStyle(element)
+    }
+    return originalGetComputedStyle(element, pseudoElement)
+  },
+})
+
 // Suppress console errors in tests
 const originalError = console.error
+const ignoredConsoleErrorMessages = [
+  'Warning: ReactDOM.render',
+  'Warning: useLayoutEffect',
+  'Not implemented: HTMLFormElement.submit',
+  'Not implemented: window.getComputedStyle(elt, pseudoElt)',
+]
+
+const toConsoleMessage = (value: unknown): string => {
+  if (value instanceof Error) {
+    return value.message
+  }
+  if (typeof value === 'string') {
+    return value
+  }
+  return ''
+}
+
 beforeAll(() => {
-  console.error = (...args: any[]) => {
-    if (
-      typeof args[0] === 'string' &&
-      (args[0].includes('Warning: ReactDOM.render') ||
-       args[0].includes('Warning: useLayoutEffect') ||
-       args[0].includes('Not implemented: HTMLFormElement.submit'))
-    ) {
+  console.error = (...args: unknown[]) => {
+    const firstMessage = toConsoleMessage(args[0])
+    if (ignoredConsoleErrorMessages.some(message => firstMessage.includes(message))) {
       return
     }
     originalError.call(console, ...args)

@@ -3,8 +3,8 @@ UnifiedDataFeed 集成测试。
 
 这些测试需要实际的数据源连接，使用 Mock 无法完全验证。
 运行前需要确保:
-1. APP__ENV=dev
-2. MiniQMT/AmazingData 服务可用（或使用 skip markers）
+1. 默认 APP__ENV=test
+2. MiniQMT/AmazingData 真实环境测试需显式使用 external/manual markers 开启
 """
 
 from datetime import datetime
@@ -191,20 +191,30 @@ class TestConfigLoading:
         not pytest.importorskip("core.config", reason="Config module not available"),
         reason="Config module required",
     )
-    def test_load_capability_routing_from_config(self):
+    def test_load_capability_routing_from_config(self, monkeypatch):
         """测试从配置文件加载 capability_routing"""
         import os
 
-        os.environ["APP__ENV"] = "dev"
+        from core.config import get_config, reload_config
 
-        from core.config import get_config
+        original_env = os.getenv("APP__ENV")
+        monkeypatch.setenv("APP__ENV", "test")
+        reload_config()
+        try:
+            config = get_config()
+            cr = config.capability_routing
 
-        config = get_config()
-        cr = config.capability_routing
-
-        if cr is not None:
-            assert "miniqmt" in cr.capabilities or "amazingdata" in cr.capabilities
-            assert cr.routing.kline is not None
+            assert cr is not None
+            assert cr.routing is not None
+            if cr.capabilities:
+                assert "miniqmt" in cr.capabilities or "amazingdata" in cr.capabilities
+                assert cr.routing.kline is not None
+        finally:
+            if original_env is None:
+                monkeypatch.delenv("APP__ENV", raising=False)
+            else:
+                monkeypatch.setenv("APP__ENV", original_env)
+            reload_config()
 
     def test_parse_yaml_capability_spec(self):
         """测试解析 YAML 格式的能力声明"""

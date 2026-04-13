@@ -216,21 +216,27 @@ python -m pip install --upgrade uv
 uv venv --python (Get-Content .python-version)
 .\.venv\Scripts\Activate.ps1
 
-# 4. 安装依赖（包含开发工具）
+# 4. 放置本地 SDK wheel（不进入 Git）
+# 以下文件需从内部制品来源放入 packages/：
+#   - packages/AmazingData-1.1.0-cp314-none-any.whl
+#   - packages/tgw-1.0.8.6-py3-none-any.whl
+python scripts/check_local_wheels.py
+
+# 5. 安装依赖（包含开发工具）
 uv sync --all-extras --dev
 
-# 5. 配置环境
+# 6. 配置环境
 # 复制配置模板
 cp packages/core/config/settings.template.yaml packages/core/config/settings.dev.yaml
 # 根据环境修改以下配置文件：
 #   - settings.dev.yaml: 数据源优先级、日志级别、性能参数
 #   - infrastructure.dev.yaml: 数据库连接、Redis 地址、Dask Scheduler 地址
 
-# 6. 启动依赖服务（Docker Compose）
+# 7. 启动依赖服务（Docker Compose）
 docker-compose up -d
 # 启动：PostgreSQL（端口 5432）、Redis（端口 6379）、Dask Scheduler（端口 8786）
 
-# 7. 安装前端依赖
+# 8. 安装前端依赖
 cd apps/web && npm install && cd ../..
 ```
 
@@ -335,20 +341,35 @@ dask:
 ### 代码质量检查
 
 ```powershell
-# 一键检查（推荐）
+# 一键检查（推荐，自动使用 APP__ENV=test）
+uv run python scripts/run_all_tests.py --quick
+
+# 完整本地检查（默认跳过 external/manual 集成测试）
 uv run python scripts/run_all_tests.py
 
+# 本地 SDK wheel 校验
+uv run python scripts/check_local_wheels.py
+
 # 单元测试（串行，默认可执行）
-uv run pytest tests/unit
+$env:APP__ENV = "test"
+uv run pytest tests/unit --no-cov -q -m "not slow"
 
 # 单元测试（并行，需要安装 pytest-xdist）
 uv run pytest tests/unit -n auto
 
-# 集成测试
-uv run pytest tests/integration
+# 默认集成测试（只运行非外部、非手动用例）
+uv run pytest tests/integration --no-cov -q -m "integration and not external and not manual" --timeout=300
 
 # API 测试
-uv run pytest tests/api
+uv run pytest tests/api --no-cov -q
+
+# 真实 SDK / 外部集成测试（需要本机 SDK、凭据或外部服务）
+uv run pytest tests/integration --no-cov -q -m "external" --include-external --include-manual --timeout=1200
+
+# run_all_tests.py 也支持显式开启外部或手动集成测试
+uv run python scripts/run_all_tests.py --include-external
+uv run python scripts/run_all_tests.py --include-manual
+uv run python scripts/run_all_tests.py --suite-timeout 1200
 
 # 类型检查（100% 合规）
 uv run mypy packages/core
@@ -358,7 +379,32 @@ uv run ruff check packages/core apps
 
 # 代码格式化
 uv run black packages/core apps
+
+# 前端检查
+cd apps/web
+npx eslint . --ext .js,.jsx,.ts,.tsx
+npm test -- --runInBand
+npm run build:react
+cd ../..
 ```
+
+> Vite 构建如仍出现大 chunk 警告，应首先确认超大 chunk 是否为明确命名的 vendor chunk
+>（如 `react-vendor`、`antd-vendor`、`charts-vendor`），不要通过提高阈值掩盖匿名业务 chunk 问题。
+
+### 本地 SDK wheel 管理
+
+`packages/AmazingData-1.1.0-cp314-none-any.whl` 与
+`packages/tgw-1.0.8.6-py3-none-any.whl` 是本地 SDK 依赖文件，只由 `pyproject.toml`
+的 `uv.sources` 引用，不再进入 Git 索引。干净克隆后需先从内部制品来源放置这两个文件，
+再执行依赖安装。
+
+```powershell
+python scripts/check_local_wheels.py
+uv sync --all-extras --dev
+uv run python scripts/check_local_wheels.py
+```
+
+已推送历史中的大文件属于遗留风险；当前策略不重写 Git 历史、不启用 Git LFS，后续如需彻底清理需单独安排历史改写或制品化迁移。
 
 ### 提交规范
 

@@ -29,6 +29,53 @@ const createReactHtmlPlugin = () => ({
   }
 })
 
+const resolveVendorChunk = id => {
+  const normalizedId = id.replace(/\\/g, '/')
+  const nodeModuleIndex = normalizedId.lastIndexOf('/node_modules/')
+  if (nodeModuleIndex === -1) {
+    return undefined
+  }
+
+  const packageId = normalizedId.slice(nodeModuleIndex + '/node_modules/'.length)
+  if (packageId.startsWith('react/') || packageId.startsWith('react-dom/')) {
+    return 'react-vendor'
+  }
+  if (packageId.startsWith('react-router-dom/')) {
+    return 'router-vendor'
+  }
+  if (packageId.startsWith('zustand/') || packageId.startsWith('immer/')) {
+    return 'state-vendor'
+  }
+  if (packageId.startsWith('@tanstack/react-query/')) {
+    return 'query-vendor'
+  }
+  if (
+    packageId.startsWith('@ant-design/charts/') ||
+    packageId.startsWith('@antv/') ||
+    packageId.startsWith('echarts/') ||
+    packageId.startsWith('echarts-for-react/') ||
+    packageId.startsWith('lightweight-charts/')
+  ) {
+    return 'charts-vendor'
+  }
+  if (
+    packageId.startsWith('antd/') ||
+    packageId.startsWith('@ant-design/') ||
+    packageId.startsWith('@rc-component/') ||
+    packageId.startsWith('rc-')
+  ) {
+    return 'antd-vendor'
+  }
+  if (
+    packageId.startsWith('axios/') ||
+    packageId.startsWith('dayjs/') ||
+    packageId.startsWith('lodash-es/')
+  ) {
+    return 'utils-vendor'
+  }
+  return undefined
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -72,13 +119,7 @@ export default defineConfig({
     rollupOptions: {
       input: path.resolve(__dirname, 'index-react.html'),
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'router': ['react-router-dom'],
-          'state': ['zustand', 'immer'],
-          'ui': ['antd', '@ant-design/icons'],
-          'utils': ['axios', 'dayjs', 'lodash-es']
-        }
+        manualChunks: resolveVendorChunk
       }
     }
   },
